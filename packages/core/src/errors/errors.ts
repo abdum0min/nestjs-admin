@@ -68,3 +68,34 @@ export class AdapterError extends NestAdminError {
     super(message, options)
   }
 }
+
+/**
+ * No authenticated identity was presented with the request.
+ *
+ * Raised by the host application's admin auth implementation, never by Core
+ * itself - Core has no notion of a request, a header or a session, and must
+ * not acquire one. It exists here so the transport layer can map it without
+ * knowing which framework produced it.
+ *
+ * The default message is deliberately uninformative. An authentication failure
+ * must not reveal whether a credential was absent, malformed, expired or
+ * simply wrong.
+ */
+export class UnauthorizedError extends NestAdminError {
+  constructor(message = 'Authentication is required to access the admin API.') {
+    super(message)
+  }
+}
+
+/**
+ * An identity was established, but it is not permitted to do this.
+ *
+ * Deliberately distinct from {@link UnauthorizedError}: collapsing the two
+ * leaves a client unable to tell "log in" from "you cannot do this", and
+ * pushes that guesswork into every consumer.
+ */
+export class ForbiddenError extends NestAdminError {
+  constructor(message = 'You do not have permission to access the admin API.') {
+    super(message)
+  }
+}

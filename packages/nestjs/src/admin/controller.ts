@@ -31,8 +31,10 @@ import {
   Post,
   Query,
   UseFilters,
+  UseGuards,
 } from '@nestjs/common'
 
+import { AdminAuthGuard } from '../auth/guard.js'
 import { AdminExceptionFilter } from '../http/exception.filter.js'
 import { success, successPage, type SuccessResponse } from '../http/response.js'
 import type { RawQuery } from '../http/query-parser.js'
@@ -40,6 +42,10 @@ import type { MetadataDto } from './metadata.dto.js'
 import { AdminService } from './service.js'
 
 @Controller('admin')
+// Guards at controller scope cover every handler below, including `meta`.
+// Applied here rather than as an APP_GUARD so the host application's own
+// routes keep their own authentication - see auth/guard.ts.
+@UseGuards(AdminAuthGuard)
 @UseFilters(AdminExceptionFilter)
 export class AdminController {
   constructor(private readonly service: AdminService) {}

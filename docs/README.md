@@ -15,3 +15,4 @@ Phase reports with full experimental evidence live in [../reports/](../reports/)
 | [002-prisma-metadata-spike.md](../reports/002-prisma-metadata-spike.md) | How Prisma model metadata is obtained, and the rejected alternatives |
 | [003-prisma-adapter.md](../reports/003-prisma-adapter.md)               | The Prisma adapter and generic CRUD                                  |
 | [004-http-api.md](../reports/004-http-api.md)                           | The generic admin HTTP API                                           |
+| [005-authentication.md](../reports/005-authentication.md)               | The authentication boundary and 401/403 semantics                    |

@@ -12,10 +12,12 @@
 import {
   AdapterError,
   FieldNotFoundError,
+  ForbiddenError,
   InvalidQueryError,
   ModelNotFoundError,
   NestAdminError,
   RecordNotFoundError,
+  UnauthorizedError,
 } from '@nest-admin/core'
 import {
   Catch,
@@ -55,6 +57,24 @@ const INTERNAL: MappedError = {
  * unrecognised becomes the generic 500 above, and the real error is logged.
  */
 function mapError(error: unknown): MappedError {
+  // Auth first. No `details` on either: echoing anything about why a request
+  // was refused hands a prober information it did not have.
+  if (error instanceof UnauthorizedError) {
+    return {
+      status: HttpStatus.UNAUTHORIZED,
+      code: 'UNAUTHORIZED',
+      message: error.message,
+    }
+  }
+
+  if (error instanceof ForbiddenError) {
+    return {
+      status: HttpStatus.FORBIDDEN,
+      code: 'FORBIDDEN',
+      message: error.message,
+    }
+  }
+
   if (error instanceof ModelNotFoundError) {
     return {
       status: HttpStatus.NOT_FOUND,

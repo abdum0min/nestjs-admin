@@ -32,8 +32,10 @@ export type { NestAdminConfig, ResourceSelection } from './config/config.js'
 export {
   AdapterError,
   FieldNotFoundError,
+  ForbiddenError,
   InvalidQueryError,
   ModelNotFoundError,
   NestAdminError,
   RecordNotFoundError,
+  UnauthorizedError,
 } from './errors/errors.js'

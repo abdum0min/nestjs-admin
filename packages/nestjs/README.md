@@ -14,10 +14,52 @@ import { PrismaClient } from './generated/prisma/client'
 const prisma = new PrismaClient({ adapter: /* your driver adapter */ })
 
 @Module({
-  imports: [AdminModule.forRoot({ adapter: new PrismaAdapter({ client: prisma }) })],
+  imports: [
+    AdminModule.forRoot({
+      adapter: new PrismaAdapter({ client: prisma }),
+      auth: {
+        authorize(context) {
+          const request = context.switchToHttp().getRequest()
+          if (!request.user) throw new UnauthorizedError()
+          if (!request.user.isStaff) throw new ForbiddenError()
+        },
+      },
+    }),
+  ],
 })
 export class AppModule {}
 ```
+
+## Authentication
+
+`auth` is **required**. The admin exposes every record and, through
+`/admin/meta`, the whole schema, so it is never public by default. Nest Admin
+does not authenticate anyone - your application already has identity, and a
+second one would be a new attack surface. You supply the decision:
+
+| Outcome                   | How                          | HTTP |
+| ------------------------- | ---------------------------- | ---: |
+| Allow                     | return (or resolve) normally |  2xx |
+| No identity               | throw `UnauthorizedError`    |  401 |
+| Identity, but not allowed | throw `ForbiddenError`       |  403 |
+| Denied without saying why | return `false`               |  403 |
+
+`authorize` may be sync or async and receives the NestJS `ExecutionContext`, so
+you can read whatever principal your own middleware attached to the request, and
+the `model` route parameter on per-model routes.
+
+If the host's auth code throws anything else, the request is **refused** with a
+generic 500 - a bug in authentication never becomes an accidental allow.
+
+For local development only:
+
+```ts
+import { unsafeAllowAllRequests } from '@nest-admin/nest-admin'
+
+AdminModule.forRoot({ adapter, auth: unsafeAllowAllRequests() })
+```
+
+It makes the entire admin public and logs a warning on every startup.
 
 The application constructs the client and the adapter. The framework never
 does: under Prisma 7 a client is built from a driver adapter, so only the
@@ -75,10 +117,12 @@ so `age:gte:30` reaches the ORM as a number.
 | `ModelNotFoundError`  |    404 | `MODEL_NOT_FOUND`  |
 | `RecordNotFoundError` |    404 | `RECORD_NOT_FOUND` |
 | `FieldNotFoundError`  |    400 | `FIELD_NOT_FOUND`  |
+| `UnauthorizedError`   |    401 | `UNAUTHORIZED`     |
+| `ForbiddenError`      |    403 | `FORBIDDEN`        |
 | `InvalidQueryError`   |    400 | `INVALID_QUERY`    |
 | anything else         |    500 | `INTERNAL_ERROR`   |
 
-Only the four errors above have their message forwarded. Everything else —
+Only the errors above have their message forwarded. Everything else —
 including `AdapterError`, which wraps raw ORM failures containing filesystem
 paths — becomes a generic 500. The real error is logged server-side.
 
@@ -94,6 +138,7 @@ paths — becomes a generic 500. The real error is logged server-side.
 
 ## Not implemented
 
-Serving the admin UI under `/admin`, authentication, authorization, the
-configuration engine, `forRootAsync`, and a configurable base path. See
+Serving the admin UI under `/admin`, resource-level permissions (per-model and
+per-field policy), the configuration engine, `forRootAsync`, and a configurable
+base path. See
 [../../reports/004-http-api.md](../../reports/004-http-api.md).

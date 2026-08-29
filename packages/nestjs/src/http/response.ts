@@ -30,7 +30,13 @@ export interface SuccessResponse<T> {
  * is a compatible change; renaming one is not.
  */
 export type AdminErrorCode =
-  'MODEL_NOT_FOUND' | 'RECORD_NOT_FOUND' | 'FIELD_NOT_FOUND' | 'INVALID_QUERY' | 'INTERNAL_ERROR'
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'MODEL_NOT_FOUND'
+  | 'RECORD_NOT_FOUND'
+  | 'FIELD_NOT_FOUND'
+  | 'INVALID_QUERY'
+  | 'INTERNAL_ERROR'
 
 export interface ErrorResponse {
   readonly success: false

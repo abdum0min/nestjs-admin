@@ -13,6 +13,7 @@ import type { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { unsafeAllowAllRequests } from '../src/auth/contract.js'
 import { createAdminApp } from './app.js'
 import { InMemoryAdapter } from './in-memory-adapter.js'
 
@@ -68,9 +69,9 @@ describe('module wiring', () => {
 
   it('refuses to construct without an adapter', async () => {
     const { AdminModule } = await import('../src/module.js')
-    expect(() => AdminModule.forRoot({ adapter: undefined as never })).toThrow(
-      /requires an `adapter`/,
-    )
+    expect(() =>
+      AdminModule.forRoot({ adapter: undefined as never, auth: unsafeAllowAllRequests() }),
+    ).toThrow(/requires an `adapter`/)
   })
 })
 

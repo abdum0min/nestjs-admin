@@ -1,9 +1,12 @@
 /**
  * Injection tokens.
  *
- * A `Symbol` rather than a string so it cannot collide with a token in the
- * host application, and so it cannot be injected by accident.
+ * Symbols rather than strings so they cannot collide with a token in the host
+ * application, and cannot be injected by accident.
  */
 
 /** The `OrmAdapter` the consuming application supplied to `AdminModule`. */
 export const ADMIN_ADAPTER = Symbol('NEST_ADMIN_ADAPTER')
+
+/** The `AdminAuth` the consuming application supplied to `AdminModule`. */
+export const ADMIN_AUTH = Symbol('NEST_ADMIN_AUTH')

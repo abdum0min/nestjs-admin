@@ -56,13 +56,30 @@ generated client; a bundled copy would have no schema attached to it.
 The NestJS integration and the single package published to npm (see
 publishing.md).
 
-Implemented: `AdminModule.forRoot({ adapter })`, one generic admin controller
-serving every model under `/admin`, HTTP query parsing into Core's
-`ListQuery`, a public metadata DTO, a shared response envelope, and a
-centralised exception filter mapping Core errors to status codes. The full
-contract is in the package README and reports/004-http-api.md.
+Implemented: `AdminModule.forRoot({ adapter, auth })`, one generic admin
+controller serving every model under `/admin`, HTTP query parsing into Core's
+`ListQuery`, a public metadata DTO, a shared response envelope, a centralised
+exception filter mapping Core errors to status codes, and a host-supplied
+authentication boundary protecting every route. The full contract is in the
+package README, reports/004-http-api.md and reports/005-authentication.md.
 
-Not implemented: serving the SPA, authentication, runtime configuration.
+Not implemented: serving the SPA, resource-level permissions, runtime
+configuration.
+
+#### The authentication boundary
+
+```text
+Host application  ──supplies AdminAuth──▶  AdminAuthGuard  (@UseGuards, controller-scoped)
+                                                │  allow / UnauthorizedError / ForbiddenError
+                                                ▼
+                                        AdminController  →  AdminService  →  OrmAdapter
+```
+
+Nest Admin never authenticates anyone. The consuming application already owns
+identity; the framework owns only the decision point. `auth` is a **required**
+module option, so an admin API is never public by accident - the explicit
+`unsafeAllowAllRequests()` escape hatch exists for local development and warns
+at startup.
 
 Its `src/` imports Core only. The Prisma adapter is reachable through the
 `./prisma` subpath, so an application that never uses Prisma never loads Prisma

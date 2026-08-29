@@ -9,6 +9,7 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { UnauthorizedError } from '@nest-admin/core'
 import { PrismaAdapter } from '@nest-admin/prisma'
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import type { INestApplication } from '@nestjs/common'
@@ -168,5 +169,32 @@ describe('security against the real adapter', () => {
       .expect(400)
 
     expect(body.error.code).toBe('FIELD_NOT_FOUND')
+  })
+})
+
+describe('the auth boundary on the real stack', () => {
+  it('protects every route in front of a real database', async () => {
+    // The in-memory suite proves the guard's semantics; this proves it is
+    // actually attached when the real adapter is wired in.
+    const locked = await createAdminApp(new PrismaAdapter({ client, schemaPath: SCHEMA }), {
+      authorize() {
+        throw new UnauthorizedError()
+      },
+    })
+
+    for (const path of ['/admin/meta', '/admin/User', '/admin/User/anything']) {
+      const { body } = await request(locked.getHttpServer()).get(path).expect(401)
+      expect(body.error.code).toBe('UNAUTHORIZED')
+    }
+
+    await request(locked.getHttpServer())
+      .post('/admin/User')
+      .send({ email: 'blocked@example.com', name: 'Blocked' })
+      .expect(401)
+
+    // Nothing was written despite a well-formed payload.
+    expect(await client.user.count({ where: { email: 'blocked@example.com' } })).toBe(0)
+
+    await locked.close()
   })
 })
