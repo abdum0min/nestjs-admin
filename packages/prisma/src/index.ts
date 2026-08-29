@@ -11,3 +11,5 @@
 export { PrismaAdapter, type PrismaAdapterOptions } from './adapter.js'
 
 export { PrismaSchemaInvalidError, PrismaSchemaNotFoundError } from './metadata/read-dmmf.js'
+
+export { PrismaVersionUnsupportedError } from './client/version-gate.js'

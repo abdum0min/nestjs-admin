@@ -53,9 +53,16 @@ generated client; a bundled copy would have no schema attached to it.
 
 ### packages/nestjs
 
-The NestJS integration: `AdminModule`, the admin controllers, the static
-handler for the SPA, runtime configuration. It also happens to be the single
-package published to npm (see publishing.md).
+The NestJS integration and the single package published to npm (see
+publishing.md).
+
+Implemented: `AdminModule.forRoot({ adapter })`, one generic admin controller
+serving every model under `/admin`, HTTP query parsing into Core's
+`ListQuery`, a public metadata DTO, a shared response envelope, and a
+centralised exception filter mapping Core errors to status codes. The full
+contract is in the package README and reports/004-http-api.md.
+
+Not implemented: serving the SPA, authentication, runtime configuration.
 
 Its `src/` imports Core only. The Prisma adapter is reachable through the
 `./prisma` subpath, so an application that never uses Prisma never loads Prisma

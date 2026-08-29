@@ -31,6 +31,26 @@ The mechanism is tsup `noExternal`: see
 
 The package name is a placeholder. The final brand name is undecided.
 
+## Blocker found in Phase 3: the published types do not resolve
+
+The JS bundle is correct - `dist/index.js` and `dist/index.cjs` contain zero
+`@nest-admin/*` imports, so `noExternal` is doing its job. The **type
+declarations are not**: `dist/index.d.ts` still opens with
+
+```ts
+import { OrmAdapter } from '@nest-admin/core'
+export { ... } from '@nest-admin/core'
+```
+
+`@nest-admin/core` is `private: true` and never published, so a consumer would
+install a package whose types cannot resolve.
+
+tsup's `dts.resolve` is the intended fix. An allowlist
+(`dts: { resolve: ['@nest-admin/core'] }`) had no effect, and
+`dts: { resolve: true }` fails the build on decorator syntax. Unresolved -
+must be fixed before the first publish. Options not yet tried: a separate
+`tsc`-based declaration build, or API Extractor.
+
 ## What still has to be built before a first publish
 
 1. **Admin UI assets.** `apps/admin-ui` builds to `apps/admin-ui/dist`. The

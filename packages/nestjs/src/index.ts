@@ -2,18 +2,44 @@
  * `@nest-admin/nest-admin` - the NestJS integration and the single published
  * package.
  *
- * Nothing is implemented yet. When it is, this entrypoint will export:
+ * ```ts
+ * import { AdminModule } from '@nest-admin/nest-admin'
+ * import { PrismaAdapter } from '@nest-admin/nest-admin/prisma'
  *
- *   - `AdminModule.forRoot(...)` / `forRootAsync(...)`
- *   - the admin HTTP controllers backed by the generic CRUD engine
- *   - the static handler serving the built React admin UI under the configured
- *     base path (`/admin` by default)
- *   - runtime configuration wiring
+ * @Module({
+ *   imports: [AdminModule.forRoot({ adapter: new PrismaAdapter({ client: prisma }) })],
+ * })
+ * export class AppModule {}
+ * ```
  *
- * The integration source imports `@nest-admin/core` only. ORM adapters are
- * supplied by the consumer through module options and re-exported from
- * dedicated subpaths (see `./prisma`).
+ * The integration source imports `@nest-admin/core` only - it has no idea
+ * which ORM is underneath. ORM adapters reach consumers through dedicated
+ * subpaths (see `./prisma`).
+ *
+ * Implemented: the admin HTTP API (metadata + generic CRUD).
+ * Not implemented: static serving of the admin UI, authentication, and the
+ * configuration engine.
  */
+
+export { AdminModule, type AdminModuleOptions } from './module.js'
+
+// The HTTP contract. Exported as types so a consumer - and the future admin
+// UI - can type responses without restating the shapes.
+export type {
+  AdminErrorCode,
+  AdminResponse,
+  ErrorResponse,
+  PageMeta,
+  SuccessResponse,
+} from './http/response.js'
+
+export type {
+  FieldDto,
+  FieldKindDto,
+  MetadataDto,
+  ModelDto,
+  RelationDto,
+} from './admin/metadata.dto.js'
 
 // Core contracts are re-exported so consumers of the single public package can
 // type their own adapters and configuration without a second install.
@@ -36,4 +62,11 @@ export type {
   SortRule,
 } from '@nest-admin/core'
 
-export { NestAdminError } from '@nest-admin/core'
+export {
+  AdapterError,
+  FieldNotFoundError,
+  InvalidQueryError,
+  ModelNotFoundError,
+  NestAdminError,
+  RecordNotFoundError,
+} from '@nest-admin/core'

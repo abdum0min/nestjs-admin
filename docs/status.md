@@ -20,7 +20,13 @@ page is the answer.
 | **`PrismaAdapter`**: `getModels`, `list`, `findOne`, `create`, `update`, `delete`                         | `packages/prisma/src/adapter.ts`      |
 | **Dynamic model resolution** against a metadata allowlist                                                 | `packages/prisma/src/client`          |
 | **Pagination, sorting, filtering, search** with validation                                                | `packages/prisma/src/query`           |
-| **71 tests**, integration tests against a real SQLite database                                            | `packages/prisma/test`                |
+| **`AdminModule.forRoot({ adapter })`** - NestJS wiring, no global state                                   | `packages/nestjs/src/module.ts`       |
+| **Generic admin HTTP API**: `GET /admin/meta` + REST CRUD under `/admin/:model`                           | `packages/nestjs/src/admin`           |
+| **HTTP query parsing** into `ListQuery`, with type coercion and validation                                | `packages/nestjs/src/http`            |
+| **Public metadata DTO** + response envelope + centralised error mapping                                   | `packages/nestjs/src/http`            |
+| **Prisma version gate** (fails open when undetectable)                                                    | `packages/prisma/src/client`          |
+| **Import-boundary tests**, mechanically enforced                                                          | `tests/boundaries.test.ts`            |
+| **146 tests**, integration against real SQLite and a real Nest HTTP server                                | `packages/*/test`, `tests/`           |
 | Reference Prisma schema with `User` and `Product`                                                         | `examples/basic/prisma/schema.prisma` |
 | Single-public-package bundling strategy                                                                   | `docs/publishing.md`                  |
 
@@ -28,8 +34,9 @@ page is the answer.
 
 Everything else, specifically:
 
-- `AdminModule`, admin controllers, admin HTTP API
 - Static serving of the SPA under `/admin`
+- A configurable admin base path (fixed at `/admin`)
+- `AdminModule.forRootAsync` for a DI-provided adapter
 - The admin UI: resource list, tables, forms, pagination, search
 - Any UI component in `packages/ui`
 - `nest-admin init` and every other CLI command (no `bin` is declared)
@@ -42,8 +49,13 @@ Everything else, specifically:
 - Custom pages, plugins, multi-tenancy, SaaS features
 - TypeORM, Drizzle and MikroORM adapters
 
-The example project does **not** yet wire the adapter in — there is no
-`AdminModule` to wire it into.
+The example project does **not** yet wire the adapter in. `AdminModule` now
+exists, but wiring the example is deferred until the admin UI gives it
+something to show.
+
+**Known publishing blocker:** the published `.d.ts` still imports its types
+from `@nest-admin/core`, which is private and never published. The JS bundle is
+correct. See [publishing.md](publishing.md).
 
 Nothing has been published to npm.
 

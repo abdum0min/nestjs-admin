@@ -1,0 +1,35 @@
+// Fixture for the end-to-end HTTP suite: a real schema, a real generated
+// client, a real SQLite file. Small on purpose - the adapter's own suite
+// covers metadata breadth; this one proves the whole stack is wired together.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../.generated/client"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  age       Int?
+  active    Boolean  @default(true)
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  posts     Post[]
+}
+
+model Post {
+  id       String @id @default(cuid())
+  title    String
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+}
+
+enum Role {
+  USER
+  ADMIN
+}

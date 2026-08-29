@@ -22,6 +22,7 @@ import {
 } from '@nest-admin/core'
 
 import { resolveDelegate, type PrismaModelDelegate } from './client/delegate.js'
+import { assertSupportedPrismaVersion } from './client/version-gate.js'
 import { readPrismaDmmf } from './metadata/read-dmmf.js'
 import { toModelMetadata } from './metadata/to-metadata.js'
 import { resolvePagination, toFindManyArgs } from './query/to-prisma-args.js'
@@ -74,6 +75,9 @@ export class PrismaAdapter implements OrmAdapter {
 
   async getModels(): Promise<readonly ModelMetadata[]> {
     if (this.#models) return this.#models
+    // Checked before parsing: a version mismatch would otherwise surface as
+    // "Prisma rejected the schema", pointing at the user's valid schema.
+    assertSupportedPrismaVersion(this.#client)
     const dmmf = readPrismaDmmf({
       ...(this.#schemaPath !== undefined ? { schemaPath: this.#schemaPath } : {}),
       ...(this.#cwd !== undefined ? { cwd: this.#cwd } : {}),

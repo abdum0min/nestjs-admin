@@ -51,10 +51,16 @@
   "devDependencies": {
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
+    "@nestjs/platform-express": "catalog:",
+    "@nestjs/testing": "catalog:",
+    "@prisma/adapter-better-sqlite3": "7.10.0",
     "@prisma/client": "catalog:",
     "@swc/core": "^1.16.1",
+    "@types/supertest": "6.0.3",
+    "prisma": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
+    "supertest": "7.1.4",
     "tsup": "catalog:",
     "typescript": "catalog:"
   }

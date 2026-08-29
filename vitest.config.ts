@@ -1,11 +1,22 @@
 import { defineConfig } from 'vitest/config'
 
-// A single root Vitest configuration drives the whole workspace. Each project
-// picks up its own `*.test.ts` files; there are no tests yet, so runs pass
-// with `--passWithNoTests` semantics via `passWithNoTests: true`.
+// A single root Vitest configuration drives the whole workspace. Each package
+// contributes its own project; `architecture` is a root-level project holding
+// the cross-package boundary checks, which by definition cannot live inside
+// any one package.
 export default defineConfig({
   test: {
     passWithNoTests: true,
-    projects: ['packages/*', 'apps/*'],
+    projects: [
+      'packages/*',
+      'apps/*',
+      {
+        test: {
+          name: 'architecture',
+          include: ['tests/**/*.test.ts'],
+          passWithNoTests: false,
+        },
+      },
+    ],
   },
 })
