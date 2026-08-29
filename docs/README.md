@@ -17,3 +17,4 @@ Phase reports with full experimental evidence live in [../reports/](../reports/)
 | [004-http-api.md](../reports/004-http-api.md)                             | The generic admin HTTP API                                           |
 | [005-authentication.md](../reports/005-authentication.md)                 | The authentication boundary and 401/403 semantics                    |
 | [006-resource-authorization.md](../reports/006-resource-authorization.md) | Per-model authorization and metadata filtering                       |
+| [007-admin-ui.md](../reports/007-admin-ui.md)                             | Publishing fix and the metadata-driven admin UI                      |

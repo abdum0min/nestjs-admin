@@ -2,22 +2,37 @@
 
 The admin single-page application: React + TypeScript + Vite.
 
-**Nothing is implemented yet** beyond the app shell.
+Every screen is generic. There is no `UserPage`, no `PostTable`, and no schema
+constant anywhere in `src/` — the UI renders whatever `GET /admin/meta`
+describes, so a model added to the Prisma schema appears without a code change,
+and a model hidden by resource authorization disappears without one.
 
-## How it is delivered
+## Architecture
 
-`vite build` emits static assets into `dist/`. The NestJS integration package
-copies them into its own `dist/` at publish time and serves them under the
-configured base path (`/admin` by default) from the developer's own server.
+```text
+GET /admin/meta
+      │  models, fields, kinds, enums, relations, primary keys
+      ▼
+metadata/       what a field means: editable? sortable? which operators?
+      ▼
+components/     shell · list · record · form   (one set, all models)
+      ▲
+api/            the only place fetch, the envelope and error codes exist
+```
 
-There is deliberately **no separate admin deployment and no Next.js server**.
-The admin lives inside the API the developer already runs.
+The UI depends on the **public HTTP contract only**. `src/api/types.ts` restates
+the wire shapes by hand; nothing here imports `@nest-admin/core`,
+`@nest-admin/prisma` or any ORM type. That is what keeps the app working if the
+server swaps its adapter.
 
-## Contract
+## Routing
 
-The SPA talks to the admin HTTP API only. It receives model metadata and
-records; it has no knowledge of Prisma or any other ORM. That boundary is what
-makes a second ORM adapter a backend-only change.
+Hash-based: `#/User`, `#/User/u1`, `#/User/new`, `#/User/u1/edit`.
+
+Deliberate. The API owns the same path space the app is mounted in —
+`GET /admin/User` is a real endpoint — so a browser route at `/admin/User` would
+be answered by the record controller with JSON. A hash cannot collide, and needs
+no SPA fallback on the server.
 
 ## Development
 
@@ -25,11 +40,44 @@ makes a second ORM adapter a backend-only change.
 pnpm --filter @nest-admin/admin-ui dev
 ```
 
-Runs on `http://localhost:5173/admin/`, proxying `/admin/api` to a NestJS app
-on port 3000.
+Serves `http://localhost:5173/admin/` and proxies API calls to a NestJS app on
+port 3000. The client reads its base URL from `VITE_ADMIN_API_BASE`
+(`.env.development` points it at the dev proxy); in production the default
+`/admin` is same-origin.
 
-## Styling
+## Authentication
 
-Plain CSS for now. Tailwind/shadcn was deliberately not added at the foundation
-stage — it is a decision worth making against real screens, not against an
-empty shell.
+None here, by design. Phase 4 put authentication in the host application, so the
+UI sends `credentials: 'include'` and carries whatever the browser already has.
+It never builds, stores or refreshes a credential. A `401` renders a signed-out
+state and a `403` renders a no-access state; neither is retried.
+
+## Error handling
+
+Screens branch on `error.code` — `UNAUTHORIZED`, `FORBIDDEN`, `MODEL_NOT_FOUND`,
+`RECORD_NOT_FOUND`, `FIELD_NOT_FOUND`, `INVALID_QUERY`, `INTERNAL_ERROR` — never
+on message text. The server's exception filter already guarantees that only the
+4xx codes carry a real message and everything internal is replaced by a generic
+string, so nothing internal can reach the screen.
+
+## Known limitations
+
+- **One filter at a time.** The server combines filters with `AND` only, so a
+  multi-row builder would imply expressiveness the contract does not have.
+- **Relations are read-only.** The API rejects relation writes, so the form does
+  not offer them and the detail view shows a summary rather than a link.
+- **Six columns.** Wide models are truncated in the table; the detail view shows
+  every field.
+- **No optimistic updates and no client cache.** Every screen refetches.
+- **Base path is fixed at `/admin`**, matching the server.
+
+## Tests
+
+```bash
+pnpm --filter @nest-admin/admin-ui test
+```
+
+Vitest with jsdom and Testing Library. `fetch` is mocked; nothing else is. The
+query strings this app generates are additionally replayed against the real
+backend in `packages/nestjs/test/e2e.test.ts`, so a drift between the two
+surfaces there.

@@ -1,0 +1,352 @@
+/**
+ * The generic list screen.
+ *
+ * One component serves every model. Columns, filters, sort options and the row
+ * link all come from the model descriptor the server sent - there is no branch
+ * anywhere on a model or field name.
+ */
+import { useEffect, useState } from 'react'
+
+import { listRecords } from '../api/client.js'
+import type { FilterRule, ModelDescriptor, SortRule } from '../api/types.js'
+import { useAsync } from '../hooks/use-async.js'
+import { href, navigate } from '../hooks/use-route.js'
+import {
+  filterableFields,
+  listColumns,
+  operatorsFor,
+  recordId,
+  sortableFields,
+} from '../metadata/fields.js'
+import { formatCell } from '../metadata/format.js'
+import { Empty, ErrorState, Loading } from './States.jsx'
+
+const PER_PAGE = 25
+
+export function ListView({ model }: { readonly model: ModelDescriptor }) {
+  const [page, setPage] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<SortRule | undefined>(undefined)
+  const [filter, setFilter] = useState<FilterRule | undefined>(undefined)
+
+  // Reset view state when the model changes; a page number or sort field from
+  // the previous model is meaningless here and would produce a 400.
+  useEffect(() => {
+    setPage(1)
+    setSearchInput('')
+    setSearch('')
+    setSort(undefined)
+    setFilter(undefined)
+  }, [model.name])
+
+  // Debounce the search box so typing does not fire a request per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
+
+  const columns = listColumns(model)
+  const sortable = sortableFields(model)
+  const filterable = filterableFields(model)
+
+  const state = useAsync(
+    () =>
+      listRecords(model.name, {
+        page,
+        perPage: PER_PAGE,
+        ...(search ? { search } : {}),
+        ...(sort ? { sort: [sort] } : {}),
+        ...(filter ? { filters: [filter] } : {}),
+      }),
+    [
+      model.name,
+      page,
+      search,
+      sort?.field,
+      sort?.direction,
+      filter?.field,
+      filter?.operator,
+      filter?.value,
+    ],
+  )
+
+  return (
+    <section className="list">
+      <header className="list__header">
+        <h1>{model.name}</h1>
+        <button type="button" onClick={() => navigate({ kind: 'create', model: model.name })}>
+          New {model.name}
+        </button>
+      </header>
+
+      <div className="toolbar">
+        <input
+          type="search"
+          className="toolbar__search"
+          placeholder={`Search ${model.name}…`}
+          aria-label={`Search ${model.name}`}
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+        />
+
+        <SortControl
+          fields={sortable}
+          value={sort}
+          onChange={(next) => {
+            setSort(next)
+            setPage(1)
+          }}
+        />
+      </div>
+
+      <FilterControl
+        fields={filterable}
+        value={filter}
+        onChange={(next) => {
+          setFilter(next)
+          setPage(1)
+        }}
+      />
+
+      {state.loading ? <Loading label={`Loading ${model.name}…`} /> : null}
+      {!state.loading && state.error !== undefined ? (
+        <ErrorState error={state.error} onRetry={state.reload} />
+      ) : null}
+
+      {!state.loading && state.error === undefined && state.data ? (
+        state.data.records.length === 0 ? (
+          <Empty>No {model.name} records match this view.</Empty>
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    {columns.map((column) => (
+                      <th key={column.name} scope="col">
+                        {column.name}
+                      </th>
+                    ))}
+                    <th scope="col" aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.data.records.map((record, index) => {
+                    const id = recordId(model, record)
+                    return (
+                      <tr key={id ?? index}>
+                        {columns.map((column) => (
+                          <td key={column.name}>{formatCell(column, record[column.name])}</td>
+                        ))}
+                        <td className="cell--actions">
+                          {id === undefined ? null : (
+                            <a href={href({ kind: 'detail', model: model.name, id })}>View</a>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination meta={state.data.meta} onPage={setPage} />
+          </>
+        )
+      ) : null}
+    </section>
+  )
+}
+
+function SortControl({
+  fields,
+  value,
+  onChange,
+}: {
+  readonly fields: readonly { name: string }[]
+  readonly value: SortRule | undefined
+  readonly onChange: (next: SortRule | undefined) => void
+}) {
+  if (fields.length === 0) return null
+
+  return (
+    <label className="toolbar__control">
+      <span>Sort</span>
+      <select
+        aria-label="Sort by"
+        value={value ? `${value.field}:${value.direction}` : ''}
+        onChange={(event) => {
+          const raw = event.target.value
+          if (raw === '') return onChange(undefined)
+          const separator = raw.lastIndexOf(':')
+          onChange({
+            field: raw.slice(0, separator),
+            direction: raw.slice(separator + 1) === 'desc' ? 'desc' : 'asc',
+          })
+        }}
+      >
+        <option value="">Default</option>
+        {fields.map((field) => (
+          <optgroup key={field.name} label={field.name}>
+            <option value={`${field.name}:asc`}>{field.name} ascending</option>
+            <option value={`${field.name}:desc`}>{field.name} descending</option>
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+/**
+ * A single filter row.
+ *
+ * One filter rather than a builder: the server combines multiple filters with
+ * AND only, so a multi-row UI would imply an expressiveness the contract does
+ * not have. Field and operator choices both come from metadata, so the UI
+ * cannot compose a query the server will reject.
+ */
+function FilterControl({
+  fields,
+  value,
+  onChange,
+}: {
+  readonly fields: readonly import('../api/types.js').FieldDescriptor[]
+  readonly value: FilterRule | undefined
+  readonly onChange: (next: FilterRule | undefined) => void
+}) {
+  const [field, setField] = useState('')
+  const [operator, setOperator] = useState('')
+  const [text, setText] = useState('')
+
+  if (fields.length === 0) return null
+
+  const selected = fields.find((candidate) => candidate.name === field)
+  const operators = selected ? operatorsFor(selected) : []
+
+  const apply = (nextField: string, nextOperator: string, nextText: string): void => {
+    const target = fields.find((candidate) => candidate.name === nextField)
+    if (!target || nextOperator === '' || nextText === '') return onChange(undefined)
+    onChange({
+      field: nextField,
+      operator: nextOperator as FilterRule['operator'],
+      value: nextText,
+    })
+  }
+
+  return (
+    <div className="filters">
+      <label className="toolbar__control">
+        <span>Filter</span>
+        <select
+          aria-label="Filter field"
+          value={field}
+          onChange={(event) => {
+            const next = event.target.value
+            setField(next)
+            setOperator('')
+            setText('')
+            onChange(undefined)
+          }}
+        >
+          <option value="">None</option>
+          {fields.map((candidate) => (
+            <option key={candidate.name} value={candidate.name}>
+              {candidate.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {selected ? (
+        <>
+          <select
+            aria-label="Filter operator"
+            value={operator}
+            onChange={(event) => {
+              setOperator(event.target.value)
+              apply(field, event.target.value, text)
+            }}
+          >
+            <option value="">Operator</option>
+            {operators.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {candidate}
+              </option>
+            ))}
+          </select>
+
+          {selected.kind === 'enum' && selected.enumValues && operator !== 'in' ? (
+            <select
+              aria-label="Filter value"
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value)
+                apply(field, operator, event.target.value)
+              }}
+            >
+              <option value="">Value</option>
+              {selected.enumValues.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              aria-label="Filter value"
+              type={selected.kind === 'number' ? 'number' : 'text'}
+              placeholder={operator === 'in' ? 'comma,separated' : 'value'}
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value)
+                apply(field, operator, event.target.value)
+              }}
+            />
+          )}
+
+          {value ? (
+            <button
+              type="button"
+              onClick={() => {
+                setField('')
+                setOperator('')
+                setText('')
+                onChange(undefined)
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function Pagination({
+  meta,
+  onPage,
+}: {
+  readonly meta: { readonly total: number; readonly page: number; readonly perPage: number }
+  readonly onPage: (page: number) => void
+}) {
+  const lastPage = Math.max(1, Math.ceil(meta.total / Math.max(1, meta.perPage)))
+
+  return (
+    <nav className="pagination" aria-label="Pagination">
+      <button type="button" disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)}>
+        Previous
+      </button>
+      <span>
+        Page {meta.page} of {lastPage} · {meta.total} total
+      </span>
+      <button type="button" disabled={meta.page >= lastPage} onClick={() => onPage(meta.page + 1)}>
+        Next
+      </button>
+    </nav>
+  )
+}

@@ -242,3 +242,70 @@ describe('resource authorization on the real stack', () => {
     await readOnly.close()
   })
 })
+
+describe('the wire format the admin UI generates', () => {
+  /**
+   * The UI builds query strings itself (apps/admin-ui/src/api/query.ts) and is
+   * tested against mocked responses. These are the exact strings that builder
+   * produces, sent to the real server, so a drift between the two surfaces
+   * here rather than in a browser.
+   */
+  const UI_QUERIES = [
+    '?page=1&perPage=25',
+    '?page=1&perPage=25&search=ada',
+    '?page=1&perPage=25&sort=email%3Aasc',
+    '?sort=email%3Aasc&sort=createdAt%3Adesc',
+    '?filter=age%3Agte%3A18',
+    '?filter=role%3Ain%3AADMIN%2CUSER',
+    '?page=1&perPage=25&search=ada&sort=email%3Aasc&filter=age%3Agte%3A18',
+  ]
+
+  for (const query of UI_QUERIES) {
+    it(`accepts ${decodeURIComponent(query)}`, async () => {
+      const { body } = await http().get(`/admin/User${query}`).expect(200)
+
+      expect(body.success).toBe(true)
+      expect(Array.isArray(body.data)).toBe(true)
+      // The pager reads exactly these three keys.
+      expect(Object.keys(body.meta).sort()).toEqual(['page', 'perPage', 'total'])
+    })
+  }
+
+  it('silently ignores bracket syntax rather than rejecting it', async () => {
+    // FINDING, recorded rather than fixed in this phase. Express parses
+    // `filter[age][gte]=18` into an object; the query parser accepts only
+    // strings, so the filter is dropped and the request succeeds *unfiltered*.
+    //
+    // Our client never emits brackets, so this does not affect the admin UI -
+    // but a third-party caller using bracket syntax would silently receive more
+    // records than it asked for, which is worse than a 400. Changing the Phase 3
+    // parser is out of scope here; see reports/007-admin-ui.md.
+    const all = await http().get('/admin/User').expect(200)
+    const bracketed = await http().get('/admin/User?filter[age][gte]=999').expect(200)
+
+    expect(bracketed.body.meta.total).toBe(all.body.meta.total)
+  })
+
+  it('describes metadata with exactly the keys the UI reads', async () => {
+    const { body } = await http().get('/admin/meta').expect(200)
+    const user = body.data.models.find((m: { name: string }) => m.name === 'User')
+
+    expect(Object.keys(user).sort()).toEqual(['fields', 'name', 'primaryKey'])
+
+    const allowed = new Set([
+      'name',
+      'kind',
+      'isId',
+      'isRequired',
+      'isUnique',
+      'isList',
+      'isGenerated',
+      'defaultValue',
+      'enumValues',
+      'relation',
+    ])
+    for (const field of user.fields) {
+      for (const key of Object.keys(field)) expect(allowed).toContain(key)
+    }
+  })
+})

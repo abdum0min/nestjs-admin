@@ -129,6 +129,17 @@ It talks to the admin HTTP API and receives model metadata plus records. It
 must never learn which ORM is behind that API. That is what makes adding a
 second adapter a backend-only change.
 
+Implemented in Phase 6 and entirely generic: navigation, list, search, sort,
+filter, pagination, create, read, update and delete are one set of components
+driven by `GET /admin/meta`. No model or field name appears in the source, so a
+schema change needs no UI change, and a model hidden by resource authorization
+disappears because it is absent from metadata - the UI does no filtering of its
+own. It restates the wire types by hand rather than importing Core, so the
+dependency runs UI -> HTTP -> NestJS -> Core, never UI -> Core.
+
+Routing is hash-based (`#/User/u1`). The API owns the same path space the app is
+mounted in, so a path route would be answered by the record controller.
+
 ### examples/basic
 
 The reference consumer: a real NestJS + Prisma project with the `User` and

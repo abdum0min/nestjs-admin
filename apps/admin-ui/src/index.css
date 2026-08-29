@@ -1,15 +1,351 @@
+/*
+ * Plain CSS, deliberately.
+ *
+ * This is an internal admin tool: dense, legible, fast to scan. No component
+ * library, no design system, no animation. Adding one would be a dependency
+ * decision better made against real screens than an empty scaffold.
+ */
+
 :root {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #161a22;
+  --muted: #6b7688;
+  --line: #d7dee7;
+  --accent: #2e5aac;
+  --danger: #9e362e;
+
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
   line-height: 1.5;
-  color-scheme: light dark;
+  color: var(--ink);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background: var(--bg);
 }
 
-.shell {
-  max-width: 42rem;
-  margin: 0 auto;
-  padding: 3rem 1.5rem;
+a {
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- shell */
+
+.shell__bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+}
+
+.shell__bar a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.shell__body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: calc(100vh - 49px);
+}
+
+@media (max-width: 700px) {
+  .shell__body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.shell__nav {
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 1rem;
+}
+
+.shell__nav h2 {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}
+
+.shell__nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shell__nav a {
+  display: block;
+  padding: 0.4rem 0.55rem;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.shell__nav a:hover {
+  background: var(--bg);
+}
+
+.shell__nav a[aria-current='page'] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.shell__content {
+  padding: 1.5rem;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- states */
+
+.state {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1.5rem;
+  color: var(--muted);
+}
+
+.state--error {
+  border-left: 3px solid var(--danger);
+  color: var(--ink);
+}
+
+.state h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.state p {
+  margin: 0 0 0.5rem;
+}
+
+.state__detail {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- list */
+
+.list__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.list__header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.toolbar,
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.toolbar__search {
+  flex: 1 1 240px;
+}
+
+.toolbar__control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+input,
+select,
+button {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------- table */
+
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cell--actions {
+  text-align: right;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- record */
+
+.record__back {
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.record__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.record__fields {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.record__field {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.record__field:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 700px) {
+  .record__field {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+
+.record__field dt {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.record__kind {
+  display: block;
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.record__field dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.record__field pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+}
+
+/* ---------------------------------------------------------------- form */
+
+.form {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 640px;
+}
+
+.form__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form__row > span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.form__row--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
 }
