@@ -31,25 +31,49 @@ The mechanism is tsup `noExternal`: see
 
 The package name is a placeholder. The final brand name is undecided.
 
-## Blocker found in Phase 3: the published types do not resolve
+## Resolved in Phase 6: the published types now resolve
 
-The JS bundle is correct - `dist/index.js` and `dist/index.cjs` contain zero
-`@nest-admin/*` imports, so `noExternal` is doing its job. The **type
-declarations are not**: `dist/index.d.ts` still opens with
+The declarations used to open with
 
 ```ts
 import { OrmAdapter } from '@nest-admin/core'
-export { ... } from '@nest-admin/core'
 ```
 
-`@nest-admin/core` is `private: true` and never published, so a consumer would
-install a package whose types cannot resolve.
+which a consumer could not resolve, because `@nest-admin/core` is
+`private: true` and never published. The JS bundle was always correct.
 
-tsup's `dts.resolve` is the intended fix. An allowlist
-(`dts: { resolve: ['@nest-admin/core'] }`) had no effect, and
-`dts: { resolve: true }` fails the build on decorator syntax. Unresolved -
-must be fixed before the first publish. Options not yet tried: a separate
-`tsc`-based declaration build, or API Extractor.
+**Root cause.** tsup automatically treats everything listed in `dependencies`
+and `peerDependencies` as external. `noExternal` overrides that for the **JS**
+bundle, but the declaration build computes its own externals and kept the
+imports in place. `dts.resolve` alone did not help either, because the packages
+were still being externalised before it was consulted.
+
+**Fix — two changes, neither sufficient alone:**
+
+1. `@nest-admin/core` and `@nest-admin/prisma` moved from `dependencies` to
+   `devDependencies` in `packages/nestjs/package.json`. They are bundled at
+   build time, so they are build inputs, not runtime dependencies - this is
+   what they should always have been.
+2. `dts: { resolve: [/^@nest-admin//] }` in `packages/nestjs/tsup.config.ts`,
+   telling the declaration build to follow them rather than leave the imports.
+
+**Verified from a clean build** (`rm -rf dist && pnpm build`):
+
+| Artefact                       | `@nest-admin/*` |                            `@prisma/*` |
+| ------------------------------ | --------------: | -------------------------------------: |
+| `index.js` / `index.cjs`       |               0 |                                      0 |
+| `index.d.ts` / `index.d.cts`   |           **0** |                                      0 |
+| `prisma.js` / `prisma.cjs`     |               0 | 7 (`@prisma/client`, an optional peer) |
+| `prisma.d.ts` / `prisma.d.cts` |           **0** |                  0 (doc comments only) |
+
+`OrmAdapter` and the rest of the Core surface are now inlined into the
+declarations. The only external type import left is `@nestjs/common`, a declared
+peer dependency.
+
+A second bug fell out with it: the published `dependencies` previously declared
+`workspace:*` ranges on those private packages, so an install would have tried
+to resolve packages that do not exist on npm. There is now no `dependencies`
+field at all - only peers.
 
 ## What still has to be built before a first publish
 
@@ -59,10 +83,9 @@ must be fixed before the first publish. Options not yet tried: a separate
 2. **The `bin` entry.** Once the CLI works, `packages/nestjs/package.json`
    gains `"bin": { "nest-admin": "./dist/bin/nest-admin.cjs" }` plus a tsup
    entry that wraps the CLI. Declared only when it does something.
-3. **Workspace protocol.** `dependencies` currently use `workspace:*` pointing
-   at private packages. Because those packages are bundled, they must be
-   removed from the published `dependencies` (via a prepack step or by moving
-   them to `devDependencies`) or install will fail for consumers.
+3. ~~**Workspace protocol.**~~ Done in Phase 6: the bundled workspace packages
+   are `devDependencies`, so the published manifest declares no dependency on
+   an unpublished package.
 4. **A publish guard.** `prepublishOnly` that refuses to run while the name is
    a placeholder.
 5. **Provenance and a changelog.** Decide on release tooling before the first

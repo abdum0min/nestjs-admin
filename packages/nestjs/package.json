@@ -32,10 +32,6 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@nest-admin/core": "workspace:*",
-    "@nest-admin/prisma": "workspace:*"
-  },
   "peerDependencies": {
     "@nestjs/common": ">=10.0.0 <13",
     "@nestjs/core": ">=10.0.0 <13",
@@ -49,6 +45,8 @@
     }
   },
   "devDependencies": {
+    "@nest-admin/core": "workspace:*",
+    "@nest-admin/prisma": "workspace:*",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
     "@nestjs/platform-express": "catalog:",
