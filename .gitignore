@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build artefacts - never committed, produced by `pnpm build`
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Test / coverage output
+coverage/
+.vitest/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Prisma local development database + generated client
+*.db
+*.db-journal
+**/src/generated/
+**/prisma/migrations/dev.db*
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

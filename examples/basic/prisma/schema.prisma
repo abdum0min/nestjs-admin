@@ -1,0 +1,32 @@
+// Reference schema for the Nest Admin example application.
+//
+// These two models are the target of the MVP: once the CRUD engine and the
+// admin UI exist, `User` and `Product` must appear under /admin with list,
+// create, read, update, delete, pagination and basic search - with no
+// hand-written controller, service, table or form.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  // Prisma 7 removed `url` from the schema. The connection URL now lives in
+  // prisma.config.ts, and the runtime client is constructed with a driver
+  // adapter. See ../../docs/architecture.md.
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  name      String
+  price     Float
+  createdAt DateTime @default(now())
+}

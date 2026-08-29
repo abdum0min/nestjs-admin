@@ -1,0 +1,32 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'examples/*'
+
+# Catalogs keep a single version of every shared framework/runtime dependency
+# across the whole workspace. This directly serves the rule "do not bundle
+# duplicate versions of framework/runtime dependencies unnecessarily": React,
+# NestJS and Prisma are declared here once and referenced as `catalog:`.
+catalog:
+  # Language / build toolchain
+  typescript: 5.9.3
+  tsup: 8.5.1
+
+  # NestJS (peer-provided by the consuming application)
+  '@nestjs/common': 12.0.1
+  '@nestjs/core': 12.0.1
+  '@nestjs/platform-express': 12.0.1
+  reflect-metadata: 0.2.2
+  rxjs: 7.8.2
+
+  # Prisma (peer-provided by the consuming application)
+  prisma: 7.10.0
+  '@prisma/client': 7.10.0
+
+  # Admin UI
+  react: 19.2.8
+  react-dom: 19.2.8
+  '@types/react': 19.2.8
+  '@types/react-dom': 19.2.4
+  vite: 8.2.2
+  '@vitejs/plugin-react': 6.1.1
