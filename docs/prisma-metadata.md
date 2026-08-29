@@ -1,107 +1,72 @@
-# Risk: reading model metadata from Prisma 7
+# Decision: how Prisma model metadata is obtained
 
-This is the single largest technical risk to the MVP. It was investigated
-during setup against a real generated client
-(`examples/basic`, Prisma 7.10.0, `prisma-client` generator) and the findings
-are recorded here so the implementation phase does not rediscover them.
+**Status: decided.** Full evidence, experiments and rejected alternatives are in
+[../reports/002-prisma-metadata-spike.md](../reports/002-prisma-metadata-spike.md).
+This page is the summary; the report is the authority.
 
-**Nothing here is implemented.** These are options, not a decision.
+> This document previously recorded a preliminary Phase 0 investigation that
+> recommended `@prisma/internals`. **That recommendation is superseded** — the
+> Phase 1 spike found an identical-output package at 1/19th the size.
 
-## What the MVP needs per field
+## The problem
 
-To render a table and a form generically, the admin needs at minimum:
-which field is the primary key, whether a field is required, unique, a list,
-generated (`@default`, `@updatedAt`), its type, its enum values, and its
-relations.
+Prisma 7 does not expose enough model metadata at runtime to drive an admin
+panel. The structure embedded in the generated client carries only `name`,
+`kind` and `type` per field. It cannot tell you which field is the primary key,
+whether a field is required, whether it is unique, or even whether it is a list
+— so relation cardinality is unrecoverable too. There is no runtime `DMMF` in
+Prisma 7, from either the modern or the legacy generator.
 
-## What Prisma 7 actually exposes
+## The decision
 
-### `runtimeDataModel` - present but private and lossy
+**MVP: `@prisma/get-dmmf`**, called from exactly one module in
+`packages/prisma`.
 
-The generated client embeds a `runtimeDataModel` in
-`internal/class.ts`. For the example schema it contains:
+- Returns complete metadata — verified byte-identical to `@prisma/internals`.
+- 3.9 MB installed, versus 73 MB for `@prisma/internals`.
+- The only route to DMMF that Prisma does not flag "internal use, no SemVer";
+  its README names "creating custom tools" as an intended use.
+- Costs ~70 ms once at startup.
 
-```json
-{
-  "models": {
-    "User": {
-      "fields": [
-        { "name": "id", "kind": "scalar", "type": "String" },
-        { "name": "email", "kind": "scalar", "type": "String" }
-      ]
-    }
-  }
-}
+**Long-term: a custom Prisma generator** that emits metadata during
+`prisma generate`. It uses the consumer's own Prisma version, needs no runtime
+dependency, and does not require `schema.prisma` in production. It is not the
+MVP choice because generator provider resolution by package name failed on the
+Windows environment used for the spike — only an absolute path worked, which
+cannot be committed to a shared schema.
+
+## Why the migration is cheap
+
+Both approaches produce the same `DMMF.Document`. Only _acquisition_ differs:
+
+```text
+  getDmmfViaGetDmmf()        getDmmfFromGeneratedFile()
+  [MVP]                      [long-term]
+           \                /
+        same DMMF.Document shape
+                  |
+        toModelMetadata(dmmf)     <- written once, never rewritten
+                  |
+           ModelMetadata[]        <- Core contract
 ```
 
-Two problems:
+## Rules this places on the codebase
 
-1. **It is not exported.** It lives on a module-private `config` object,
-   reachable only as `(client as any)._runtimeDataModel`.
-2. **It is lossy.** Only `name`, `kind` and `type`. No `isId`, `isRequired`,
-   `isUnique`, `isList`, `hasDefaultValue`, no relation information. Note that
-   `id` above is indistinguishable from `email` - the primary key cannot be
-   determined from it at all.
+1. `@prisma/get-dmmf` may be imported by **exactly one module** in
+   `packages/prisma`. Nothing else, ever. That confinement is what makes the
+   generator migration a one-file change.
+2. Core gains nothing from this decision — no dependency, no Prisma knowledge,
+   no contract change. `OrmAdapter.getModels()` already covers it.
+3. `getDMMF` **resolves with an error object** (`{ type, reason, error }`)
+   instead of throwing. Check for `datamodel` and re-throw a `NestAdminError`
+   carrying the Prisma `P1012` text. Never return empty metadata — an admin with
+   no resources reads as a configuration mistake and costs users hours.
+4. Declare a supported Prisma version range and enforce it at startup. The
+   pinned parser rejects valid schemas from other Prisma majors; this was
+   demonstrated with a Prisma 6 schema.
 
-On its own this is **not sufficient** for the MVP.
+## Related consequence
 
-### `DMMF` - type-only in the new generator
-
-`internal/prismaNamespace.ts` has `export type DMMF = typeof runtime.DMMF`.
-It is a **type**, not a runtime value. The full DMMF is not re-exported by the
-`prisma-client` generator.
-
-### `inlineSchema` - the full schema text is embedded
-
-The same private `config` object carries `inlineSchema`: the complete verbatim
-text of `schema.prisma`. So the information exists at runtime; it is just not
-parsed.
-
-### `@prisma/internals` - has `getDMMF()`, but is not installed
-
-It exposes the full DMMF with every field attribute, but it is **not** a
-transitive dependency of `prisma` 7 (verified: `MODULE_NOT_FOUND`). It is also
-explicitly an internal package with no stability guarantee.
-
-## Options
-
-| Option                                                                      | Gets full metadata?                      | Cost                                                                        |
-| --------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------- |
-| A. `_runtimeDataModel` only                                                 | **No** - cannot identify the primary key | trivial, but insufficient                                                   |
-| B. `@prisma/internals.getDMMF()` on the schema file                         | Yes                                      | extra dependency, explicitly unstable API, needs `schema.prisma` at runtime |
-| C. Parse `inlineSchema` ourselves                                           | Yes                                      | we own a Prisma DSL parser forever                                          |
-| D. Generate metadata at build time via a custom Prisma generator            | Yes                                      | a real generator to maintain; metadata is a build artefact, always in sync  |
-| E. `_runtimeDataModel` + developer-supplied hints in `nest-admin.config.ts` | Partially                                | pushes work onto the developer, against the product premise                 |
-
-## Recommendation for the implementation phase
-
-Start with **B** to get the MVP moving, behind a single narrow function in
-`packages/prisma` - something like `readPrismaMetadata(): ModelMetadata[]` -
-with an explicit supported Prisma version range and a loud, specific failure
-when the shape is not what was expected. Never silently return empty metadata:
-an admin panel with no resources looks like a configuration mistake and will
-cost users hours.
-
-Treat **D** as the likely destination. A metadata generator sidesteps every
-private-API concern, survives Prisma major versions, and matches how Prisma
-itself expects extension. It is more work than the MVP justifies today.
-
-Whichever is chosen, it lives entirely behind `OrmAdapter`. Core, the HTTP
-layer and the admin UI are unaffected by the decision, which is the whole
-point of the seam.
-
-## Related: client construction changed too
-
-Prisma 7 removed `url` from the schema `datasource` block. The URL moves to
-`prisma.config.ts`, and the runtime client is built from a **driver adapter**
-(`new PrismaClient({ adapter: new PrismaBetterSQLite3(...) })`).
-
-Consequence for us: the Nest Admin Prisma adapter must **accept an
-already-constructed `PrismaClient`** from the consuming application and must
-never try to construct one itself. It cannot know the driver adapter, the
-credentials, or the connection strategy. `examples/basic` is configured this
-way.
-
-Second consequence: the word "adapter" now means two unrelated things - a
-Prisma _driver_ adapter and a Nest Admin _ORM_ adapter. Pick different naming
-in the public API.
+Prisma 7 constructs clients from driver adapters, so the Nest Admin Prisma
+adapter must **accept** an already-constructed `PrismaClient` and never build
+one. It cannot know the driver adapter, credentials or connection strategy.

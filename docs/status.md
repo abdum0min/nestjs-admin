@@ -40,8 +40,12 @@ Everything else, specifically:
 
 Nothing has been published to npm.
 
-## Known blocker for the MVP
+## Metadata strategy - decided, not implemented
 
-Prisma 7 does not expose enough model metadata through any public API to
-identify a primary key. See [prisma-metadata.md](prisma-metadata.md). This
-must be settled before the Prisma adapter is written.
+The Prisma metadata question that blocked the MVP is resolved. `@prisma/get-dmmf`
+for the MVP, a custom Prisma generator long-term. See
+[prisma-metadata.md](prisma-metadata.md) and
+[../reports/002-prisma-metadata-spike.md](../reports/002-prisma-metadata-spike.md).
+
+**Nothing from that decision is implemented yet.** No dependency was added, no
+metadata reader exists. That is Phase 2.

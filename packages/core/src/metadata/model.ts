@@ -42,6 +42,14 @@ export interface FieldMetadata {
   /**
    * The value is produced by the database or the ORM (`@default`, `@updatedAt`,
    * autoincrement, ...). Such fields are shown but never edited by the admin.
+   *
+   * NAME COLLISION - read before implementing an adapter. Prisma's DMMF also
+   * has a field called `isGenerated`, and it does NOT mean this. Measured
+   * against Prisma 7.10.0, DMMF reports `isGenerated: false` for
+   * `id String @id @default(cuid())`. Mapping it across directly produces
+   * editable primary keys and forms that ask for values the database supplies.
+   * Derive this instead: `hasDefaultValue || isUpdatedAt`.
+   * See reports/002-prisma-metadata-spike.md.
    */
   readonly isGenerated: boolean
   /** Populated when `kind` is `'enum'`. */

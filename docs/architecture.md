@@ -129,14 +129,13 @@ into the served `index.html` from the NestJS static handler and drive the
 router basename from it; or emit relative asset URLs. The first is more robust
 with client-side routing under nested paths.
 
-### Reading model metadata from Prisma
+### Reading model metadata from Prisma - RESOLVED
 
-The largest technical risk in the MVP, investigated against a real generated
-client during setup. Prisma 7 does not expose the metadata the admin needs
-through any public API: the embedded `runtimeDataModel` is private and too
-lossy to even identify a primary key, and `DMMF` is type-only in the new
-generator. Options and a recommendation are in
-[prisma-metadata.md](prisma-metadata.md). Settle this first.
+Was the largest technical risk. Settled by the Phase 1 spike: metadata comes
+from `@prisma/get-dmmf`, confined to one module in `packages/prisma`, with a
+custom Prisma generator as the long-term successor. Summary in
+[prisma-metadata.md](prisma-metadata.md); full evidence in
+[../reports/002-prisma-metadata-spike.md](../reports/002-prisma-metadata-spike.md).
 
 Related: Prisma 7 builds clients from driver adapters, so the Nest Admin
 Prisma adapter must accept an already-constructed `PrismaClient` and never
