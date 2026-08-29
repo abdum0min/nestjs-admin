@@ -1,0 +1,53 @@
+// Fixture schema for PrismaAdapter integration tests.
+//
+// Deliberately exercises every metadata attribute the adapter must map:
+// an @id with a function default, a @unique, required and optional scalars,
+// a literal boolean default, a literal-default enum, a now() default, an
+// @updatedAt, and a one-to-many relation in both directions.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../.generated/client"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  bio       String?
+  active    Boolean  @default(true)
+  age       Int?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  posts     Post[]
+}
+
+model Product {
+  id    String @id @default(cuid())
+  name  String
+  price Float
+}
+
+// Numeric primary key: proves id coercion, since ids arriving from a URL
+// are strings but an Int @id must be queried with a number.
+model Counter {
+  id    Int    @id @default(autoincrement())
+  label String
+}
+
+model Post {
+  id       String @id @default(cuid())
+  title    String
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+}
+
+enum Role {
+  USER
+  ADMIN
+}

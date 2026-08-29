@@ -1,0 +1,6 @@
+model Article {
+  id       String @id @default(cuid())
+  title    String
+  authorId String
+  author   Author @relation(fields: [authorId], references: [id])
+}

@@ -25,13 +25,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nest-admin/core": "workspace:*"
+    "@nest-admin/core": "workspace:*",
+    "@prisma/get-dmmf": "7.10.0"
   },
   "peerDependencies": {
     "@prisma/client": ">=6.0.0 <9"
   },
   "devDependencies": {
+    "@prisma/adapter-better-sqlite3": "7.10.0",
     "@prisma/client": "catalog:",
+    "@prisma/dmmf": "7.10.0",
+    "prisma": "catalog:",
     "tsup": "catalog:",
     "typescript": "catalog:"
   }

@@ -21,6 +21,8 @@ coverage/
 *.db
 *.db-journal
 **/src/generated/
+# Prisma client + SQLite file generated for the adapter integration tests
+**/test/.generated/
 **/prisma/migrations/dev.db*
 
 # Editors / OS

@@ -40,18 +40,30 @@ export interface FieldMetadata {
   /** The field holds a list of {@link FieldKind} values. */
   readonly isList: boolean
   /**
-   * The value is produced by the database or the ORM (`@default`, `@updatedAt`,
-   * autoincrement, ...). Such fields are shown but never edited by the admin.
+   * The value is produced by the database or the ORM and is not asked of the
+   * user - `@default(cuid())`, `@default(now())`, `@default(autoincrement())`,
+   * `@updatedAt`. Such fields are displayed but not editable.
+   *
+   * This is NOT "has a default". A field with a literal default
+   * (`active Boolean @default(true)`) is an ordinary editable field that
+   * happens to arrive pre-filled; see {@link FieldMetadata.defaultValue}.
    *
    * NAME COLLISION - read before implementing an adapter. Prisma's DMMF also
    * has a field called `isGenerated`, and it does NOT mean this. Measured
    * against Prisma 7.10.0, DMMF reports `isGenerated: false` for
    * `id String @id @default(cuid())`. Mapping it across directly produces
-   * editable primary keys and forms that ask for values the database supplies.
-   * Derive this instead: `hasDefaultValue || isUpdatedAt`.
-   * See reports/002-prisma-metadata-spike.md.
+   * editable primary keys.
+   * See reports/003-prisma-adapter.md for the correct derivation.
    */
   readonly isGenerated: boolean
+  /**
+   * Literal default the admin should pre-fill on create, when the schema
+   * declares one (`@default(true)`, `@default(0)`, `@default("USER")`).
+   *
+   * Absent for generated values: there is no literal to pre-fill for
+   * `@default(now())`, and {@link FieldMetadata.isGenerated} is `true` instead.
+   */
+  readonly defaultValue?: unknown
   /** Populated when `kind` is `'enum'`. */
   readonly enumValues?: readonly string[]
   /** Populated when `kind` is `'relation'`. */

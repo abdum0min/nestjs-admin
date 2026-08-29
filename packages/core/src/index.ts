@@ -29,4 +29,11 @@ export type { OrmAdapter, RecordData, RecordId } from './adapter/orm-adapter.js'
 
 export type { NestAdminConfig, ResourceSelection } from './config/config.js'
 
-export { NestAdminError } from './errors/errors.js'
+export {
+  AdapterError,
+  FieldNotFoundError,
+  InvalidQueryError,
+  ModelNotFoundError,
+  NestAdminError,
+  RecordNotFoundError,
+} from './errors/errors.js'

@@ -1,0 +1,4 @@
+// Intentionally invalid: used to prove schema errors surface Prisma's own
+// validation text instead of a bare TypeError.
+model Broken {
+  id String @id

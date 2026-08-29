@@ -1,0 +1,5 @@
+model Author {
+  id      String    @id @default(cuid())
+  name    String
+  article Article[]
+}

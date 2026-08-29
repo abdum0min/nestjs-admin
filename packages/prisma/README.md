@@ -1,39 +1,70 @@
 # @nest-admin/prisma
 
-Prisma adapter. Internal package — bundled into the single public package.
+The Prisma adapter. Internal package — bundled into the single public package.
 
-**Nothing is implemented yet.** This package currently establishes the
-boundary only.
+Implements Core's `OrmAdapter` against a Prisma Client: model discovery,
+generic CRUD, pagination, sorting, filtering and search.
 
-## Planned responsibility
+## Usage
 
-Implement exactly one thing: `OrmAdapter` from `@nest-admin/core`.
+The consuming application constructs the Prisma Client and hands it over.
+Prisma 7 builds clients from driver adapters, so only the application knows the
+provider, the credentials and the connection strategy — the adapter never calls
+`new PrismaClient()`.
 
-- Read schema metadata via `@prisma/get-dmmf` and map it to `ModelMetadata`
-- Resolve a model name to a Prisma Client delegate
-- Translate `ListQuery` (filters, sort, pagination, search) into `findMany` args
-- Execute create / read / update / delete
+```ts
+import { PrismaAdapter } from '@nest-admin/prisma'
 
-Planned layout:
+const adapter = new PrismaAdapter({ client: prisma })
+
+await adapter.getModels()
+await adapter.list('User', { page: 1, perPage: 25 })
+await adapter.findOne('User', id)
+await adapter.create('User', { email, name })
+await adapter.update('User', id, { name })
+await adapter.delete('User', id)
+```
+
+`schemaPath` may be passed explicitly; otherwise `prisma/schema.prisma`,
+`prisma/schema` and `schema.prisma` are tried in that order. Both a single
+file and a directory of `.prisma` files are supported.
+
+## Layout
 
 ```text
 src/
+  adapter.ts                 PrismaAdapter - implements OrmAdapter
   metadata/
-    read-dmmf.ts     <- the ONLY module allowed to import @prisma/get-dmmf
-    to-metadata.ts   <- DMMF.Document -> ModelMetadata[]
-  adapter.ts         <- implements OrmAdapter
+    read-dmmf.ts             the ONLY module importing @prisma/get-dmmf
+    to-metadata.ts           DMMF -> Core ModelMetadata
+  query/
+    to-prisma-args.ts        ListQuery -> findMany args, with validation
+  client/
+    delegate.ts              dynamic model resolution (the one type escape)
 ```
-
-The generated Prisma Client does NOT expose enough metadata to drive an admin
-panel - it cannot identify a primary key, a required field, or a list. See
-[../../reports/002-prisma-metadata-spike.md](../../reports/002-prisma-metadata-spike.md)
-for the evidence and the rejected alternatives.
 
 ## Rules
 
-- `@prisma/client` is a **peer dependency**. The consuming application owns the
-  generated client; a bundled second copy would have no schema attached to it.
 - This package may import `@nest-admin/core`. Core may never import this one.
-- `@prisma/get-dmmf` may be imported by exactly ONE module (`metadata/read-dmmf.ts`).
-  That confinement is what keeps the future switch to a Prisma generator a
-  one-file change.
+- `@prisma/get-dmmf` may be imported by exactly ONE module
+  (`metadata/read-dmmf.ts`). That confinement is what keeps the future switch
+  to a Prisma generator a one-file change.
+- `@prisma/client` is a **peer dependency**. The consuming application owns the
+  generated client; a bundled second copy would have no schema attached.
+- No DMMF type escapes `metadata/`. Everything downstream sees Core shapes.
+- The public export surface is `PrismaAdapter` plus the two schema errors.
+  Internal helpers stay internal.
+
+## Tests
+
+Integration tests run against a real SQLite database — nothing is mocked. The
+fixture client and database are generated automatically before the suite by
+`test/global-setup.ts`, so no external service and no developer-specific
+configuration is needed.
+
+```bash
+pnpm --filter @nest-admin/prisma exec vitest run
+```
+
+See [../../reports/003-prisma-adapter.md](../../reports/003-prisma-adapter.md)
+for the design decisions and known limitations.
