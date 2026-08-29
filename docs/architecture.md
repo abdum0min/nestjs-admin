@@ -81,6 +81,26 @@ module option, so an admin API is never public by accident - the explicit
 `unsafeAllowAllRequests()` escape hatch exists for local development and warns
 at startup.
 
+#### The resource authorization boundary
+
+```text
+Host application  ──supplies AdminResourceAuth──▶  AdminService  (the single enforcement point)
+                                                        │
+                            ┌───────────────────────────┴───────────────────────────┐
+                            │                                                       │
+                    operation 'metadata'                                   any other operation
+                    denied ⇒ model omitted from                          denied ⇒ 403 FORBIDDEN,
+                    GET /admin/meta                                      adapter never called
+```
+
+Two separate questions, two separate contracts: `AdminAuth` answers _may this
+request enter the admin?_, `AdminResourceAuth` answers _may this principal touch
+this model, for this operation?_. Resource authorization lives in
+`AdminService` rather than in a guard because `/admin/meta` has no `:model`
+segment - route-level checks cannot filter a document. `resourceAuth` is
+optional and defaults to permitting every model, which is not a hole: `auth` is
+still required, so the door is already shut.
+
 Its `src/` imports Core only. The Prisma adapter is reachable through the
 `./prisma` subpath, so an application that never uses Prisma never loads Prisma
 code, and a future `./typeorm` subpath slots in without touching the root

@@ -198,3 +198,47 @@ describe('the auth boundary on the real stack', () => {
     await locked.close()
   })
 })
+
+describe('resource authorization on the real stack', () => {
+  it('filters metadata and blocks CRUD against a real database', async () => {
+    // The in-memory suite proves the semantics; this proves the policy is
+    // actually consulted when the real Prisma adapter is wired in.
+    const restricted = await createAdminApp(
+      new PrismaAdapter({ client, schemaPath: SCHEMA }),
+      undefined,
+      { authorize: ({ model }) => model !== 'Post' },
+    )
+    const http = () => request(restricted.getHttpServer())
+
+    const { body, text } = await http().get('/admin/meta').expect(200)
+    expect(body.data.models.map((m: { name: string }) => m.name)).toEqual(['User'])
+    // Neither the hidden model nor the relation that pointed at it.
+    expect(text).not.toContain('Post')
+    expect(text).not.toContain('posts')
+
+    await http().get('/admin/Post').expect(403)
+    await http().get('/admin/User').expect(200)
+
+    await restricted.close()
+  })
+
+  it('refuses a write to a denied model without touching the database', async () => {
+    const before = await client.user.count()
+
+    const readOnly = await createAdminApp(
+      new PrismaAdapter({ client, schemaPath: SCHEMA }),
+      undefined,
+      { authorize: ({ operation }) => operation !== 'create' },
+    )
+
+    const { body } = await request(readOnly.getHttpServer())
+      .post('/admin/User')
+      .send({ email: 'denied@example.com', name: 'Denied' })
+      .expect(403)
+
+    expect(body.error.code).toBe('FORBIDDEN')
+    expect(await client.user.count()).toBe(before)
+
+    await readOnly.close()
+  })
+})

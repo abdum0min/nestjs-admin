@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
 import { unsafeAllowAllRequests, type AdminAuth } from '../src/auth/contract.js'
+import type { AdminResourceAuth } from '../src/auth/resource.js'
 import { AdminModule } from '../src/module.js'
 
 /**
@@ -13,14 +14,16 @@ import { AdminModule } from '../src/module.js'
  * exercised rather than called directly.
  *
  * `auth` defaults to the open implementation so suites that are not about
- * authentication stay readable. The auth suite passes its own.
+ * authentication stay readable; `resourceAuth` is omitted by default, matching
+ * a consumer who has no per-resource rules. The auth suites pass their own.
  */
 export async function createAdminApp(
   adapter: OrmAdapter,
   auth: AdminAuth = unsafeAllowAllRequests(),
+  resourceAuth?: AdminResourceAuth,
 ): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
-    imports: [AdminModule.forRoot({ adapter, auth })],
+    imports: [AdminModule.forRoot({ adapter, auth, ...(resourceAuth ? { resourceAuth } : {}) })],
   }).compile()
 
   const app = moduleRef.createNestApplication()

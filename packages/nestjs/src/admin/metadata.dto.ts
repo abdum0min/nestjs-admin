@@ -85,12 +85,30 @@ function toFieldDto(field: FieldMetadata): FieldDto {
   }
 }
 
+/**
+ * Build the metadata document from the models that belong in it.
+ *
+ * Relation fields pointing at a model that is **not** in `models` are dropped.
+ * This is a document-coherence rule, not a permission rule - the mapper makes
+ * no authorization decision and does not know one was made. It simply refuses
+ * to emit a reference to something the document does not contain, because a
+ * dangling `targetModel` is not renderable by any client.
+ *
+ * It also closes a real leak. When a caller filters the model list - as
+ * resource authorization does - dropping `Post` while keeping `User.posts`
+ * would still publish the hidden model's name through `relation.targetModel`,
+ * and the relation field's own name along with it.
+ */
 export function toMetadataDto(models: readonly ModelMetadata[]): MetadataDto {
+  const present = new Set(models.map((model) => model.name))
+
   return {
     models: models.map((model) => ({
       name: model.name,
       primaryKey: [...model.primaryKey],
-      fields: model.fields.map(toFieldDto),
+      fields: model.fields
+        .filter((field) => !field.relation || present.has(field.relation.targetModel))
+        .map(toFieldDto),
     })),
   }
 }

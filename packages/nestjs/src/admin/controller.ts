@@ -21,6 +21,7 @@
  * the route-collision note in reports/004-http-api.md.
  */
 import type { RecordData } from '@nest-admin/core'
+import type { ExecutionContext } from '@nestjs/common'
 import {
   Body,
   Controller,
@@ -35,6 +36,7 @@ import {
 } from '@nestjs/common'
 
 import { AdminAuthGuard } from '../auth/guard.js'
+import { AdminContext } from '../http/execution-context.js'
 import { AdminExceptionFilter } from '../http/exception.filter.js'
 import { success, successPage, type SuccessResponse } from '../http/response.js'
 import type { RawQuery } from '../http/query-parser.js'
@@ -57,42 +59,46 @@ export class AdminController {
    * and documented corner.
    */
   @Get('meta')
-  async meta(): Promise<SuccessResponse<MetadataDto>> {
-    return success(await this.service.getMetadata())
+  async meta(@AdminContext() context: ExecutionContext): Promise<SuccessResponse<MetadataDto>> {
+    return success(await this.service.getMetadata(context))
   }
 
   @Get(':model')
   async list(
+    @AdminContext() context: ExecutionContext,
     @Param('model') model: string,
     @Query() query: RawQuery,
   ): Promise<SuccessResponse<readonly RecordData[]>> {
-    const page = await this.service.list(model, query)
+    const page = await this.service.list(context, model, query)
     return successPage(page.data, { total: page.total, page: page.page, perPage: page.perPage })
   }
 
   @Get(':model/:id')
   async findOne(
+    @AdminContext() context: ExecutionContext,
     @Param('model') model: string,
     @Param('id') id: string,
   ): Promise<SuccessResponse<RecordData>> {
-    return success(await this.service.findOne(model, id))
+    return success(await this.service.findOne(context, model, id))
   }
 
   @Post(':model')
   async create(
+    @AdminContext() context: ExecutionContext,
     @Param('model') model: string,
     @Body() body: RecordData,
   ): Promise<SuccessResponse<RecordData>> {
-    return success(await this.service.create(model, body))
+    return success(await this.service.create(context, model, body))
   }
 
   @Patch(':model/:id')
   async update(
+    @AdminContext() context: ExecutionContext,
     @Param('model') model: string,
     @Param('id') id: string,
     @Body() body: RecordData,
   ): Promise<SuccessResponse<RecordData>> {
-    return success(await this.service.update(model, id, body))
+    return success(await this.service.update(context, model, id, body))
   }
 
   /**
@@ -101,10 +107,11 @@ export class AdminController {
    */
   @Delete(':model/:id')
   async remove(
+    @AdminContext() context: ExecutionContext,
     @Param('model') model: string,
     @Param('id') id: string,
   ): Promise<SuccessResponse<null>> {
-    await this.service.delete(model, id)
+    await this.service.delete(context, model, id)
     return success(null)
   }
 }

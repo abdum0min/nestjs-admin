@@ -61,6 +61,45 @@ AdminModule.forRoot({ adapter, auth: unsafeAllowAllRequests() })
 
 It makes the entire admin public and logs a warning on every startup.
 
+## Resource authorization
+
+Optional. Supply `resourceAuth` when some models should be invisible or
+read-only to some principals. Omitting it permits every model - which is not a
+hole, because `auth` already gates entry.
+
+```ts
+AdminModule.forRoot({
+  adapter,
+  auth,
+  resourceAuth: {
+    authorize({ context, model, operation }) {
+      const { user } = context.switchToHttp().getRequest()
+      if (model === 'AuditLog') return user.isAdmin
+      if (operation === 'delete') return user.isAdmin
+      return true
+    },
+  },
+})
+```
+
+`operation` is one of `metadata`, `list`, `read`, `create`, `update`, `delete`.
+Return `true`/nothing to allow; return `false` or throw `ForbiddenError` to
+deny. Sync or async.
+
+The consequence of a denial depends on the operation:
+
+| Operation     | Denied means                                                   |
+| ------------- | -------------------------------------------------------------- |
+| `metadata`    | the model is **omitted** from `GET /admin/meta` - not an error |
+| anything else | `403 FORBIDDEN`, and the ORM adapter is never called           |
+
+A model hidden from metadata also has any relation **pointing at it** removed
+from the models that remain, so its name cannot leak through
+`relation.targetModel`.
+
+Anything else the policy throws is a bug in the host: the request fails with a
+generic 500 and the real error is logged. A failing policy never allows access.
+
 The application constructs the client and the adapter. The framework never
 does: under Prisma 7 a client is built from a driver adapter, so only the
 application knows the provider, credentials and connection strategy.
@@ -138,7 +177,6 @@ paths — becomes a generic 500. The real error is logged server-side.
 
 ## Not implemented
 
-Serving the admin UI under `/admin`, resource-level permissions (per-model and
-per-field policy), the configuration engine, `forRootAsync`, and a configurable
-base path. See
+Serving the admin UI under `/admin`, field-level permissions, the configuration
+engine, `forRootAsync`, and a configurable base path. See
 [../../reports/004-http-api.md](../../reports/004-http-api.md).

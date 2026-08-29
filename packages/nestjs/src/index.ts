@@ -28,6 +28,10 @@ export { AdminModule, type AdminModuleOptions } from './module.js'
 // that calls it is internal - a consumer supplies the decision, not the wiring.
 export { unsafeAllowAllRequests, type AdminAuth } from './auth/contract.js'
 
+// Resource-level authorization: which models a principal may see and act on.
+// The enforcement point is internal; the consumer supplies only the decision.
+export type { AdminOperation, AdminResourceAuth, ResourceAuthorization } from './auth/resource.js'
+
 // The HTTP contract. Exported as types so a consumer - and the future admin
 // UI - can type responses without restating the shapes.
 export type {

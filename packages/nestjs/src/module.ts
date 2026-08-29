@@ -24,8 +24,9 @@ import { AdminController } from './admin/controller.js'
 import { AdminService } from './admin/service.js'
 import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
 import { AdminAuthGuard } from './auth/guard.js'
+import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
 import { AdminExceptionFilter } from './http/exception.filter.js'
-import { ADMIN_ADAPTER, ADMIN_AUTH } from './tokens.js'
+import { ADMIN_ADAPTER, ADMIN_AUTH, ADMIN_RESOURCE_AUTH } from './tokens.js'
 
 export interface AdminModuleOptions {
   /**
@@ -50,6 +51,22 @@ export interface AdminModuleOptions {
    * is explicit at the call site and warns at startup.
    */
   readonly auth: AdminAuth
+
+  /**
+   * Decides which models this principal may see and act on.
+   *
+   * Optional, defaulting to allowing every model. Unlike `auth`, that default
+   * is not a hole: `auth` is required, so the door is already shut, and
+   * omitting this only means everyone admitted sees the whole schema - exactly
+   * the behaviour before the option existed. Requiring it would break every
+   * existing consumer to express a rule most applications do not have.
+   *
+   * Supply it when some models should be invisible or read-only to some
+   * principals. A model denied for `'metadata'` disappears from
+   * `GET /admin/meta`; a model denied for any other operation makes the request
+   * fail with 403 before the ORM adapter is called.
+   */
+  readonly resourceAuth?: AdminResourceAuth
 }
 
 @Module({})
@@ -75,6 +92,14 @@ export class AdminModule {
       )
     }
 
+    if (options.resourceAuth && typeof options.resourceAuth.authorize !== 'function') {
+      throw new Error(
+        'AdminModule.forRoot() was given a `resourceAuth` without an ' +
+          '`authorize(resource)` method. Omit it to allow every model, or ' +
+          'supply an implementation.',
+      )
+    }
+
     warnIfUnsafe(options.auth)
 
     return {
@@ -83,6 +108,9 @@ export class AdminModule {
       providers: [
         { provide: ADMIN_ADAPTER, useValue: options.adapter },
         { provide: ADMIN_AUTH, useValue: options.auth },
+        // Always provided, so injection resolves whether or not the consumer
+        // supplied a policy. The default permits every model.
+        { provide: ADMIN_RESOURCE_AUTH, useValue: options.resourceAuth ?? allowAllResources() },
         AdminService,
         // Provided so Nest can resolve them for `@UseGuards` / `@UseFilters` on
         // the controller. Deliberately not APP_GUARD or APP_FILTER: either
