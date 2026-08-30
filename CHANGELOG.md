@@ -13,6 +13,79 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.5.0
+
+Per-field configuration, and an end to the interface offering buttons that
+always fail.
+
+### Added
+
+- **`models`** — per-model and per-field configuration:
+
+  ```ts
+  models: {
+    User: {
+      label: 'People',
+      displayField: 'email',
+      fields: {
+        passwordHash: { hidden: true },
+        bio: { widget: 'textarea' },
+        createdAt: { readOnly: true },
+        role: { order: 1 },
+      },
+    },
+  }
+  ```
+
+  `label`, `widget` and `order` are presentation, passed to the client. `hidden`
+  and `readOnly` are **enforced**.
+
+- **`hidden` removes a field from the admin entirely.** It is absent from the
+  metadata, rejected in filters and sorts, refused in writes, excluded from
+  free-text search, omitted from the database query, and stripped from every
+  response — including related records and the record a write returns.
+
+  Removing it from the metadata rather than flagging it is what makes that
+  complete: every layer decides what it may do by reading the metadata, so a
+  field that is not there is unreachable without any of them knowing the option
+  exists.
+
+- **`readOnly` fields are shown and refused.** Generated columns already were;
+  this extends it to anything the application marks. A write naming one is a
+  400, so a client that ignores the flag gets an error rather than a surprise.
+
+- **Widgets**: `textarea`, `password`, `email`, `url`, `color`, `json`. A
+  `string` column may be a sentence, a password or a colour and the schema
+  cannot tell them apart.
+
+- **`/admin/meta` reports what the principal may do**, per model, as
+  `can: { list, read, create, update, delete }`. The interface withholds `New`,
+  `Edit`, `Delete` and the relation controls accordingly — closing the gap
+  `reports/009` recorded, where a read-only principal was shown three buttons
+  that all returned 403. It is a description, not the enforcement: every request
+  is still checked when it arrives.
+
+- **`ListQuery.fields`** tells an adapter which fields a query may touch and
+  return. Without it, an adapter reading a schema would still search, sort,
+  filter and fetch a column the application had hidden.
+
+- **Startup refuses a configuration that cannot work.** A name matching no model
+  or field is an error rather than a warning: a typo in `hidden` leaves the real
+  column exposed while the configuration looks protective. Hiding a required
+  field with no default is refused for a different reason — no record could ever
+  be created, and the failure would surface as a database constraint violation
+  far from its cause.
+
+### Changed
+
+- `FieldDto` gained `readOnly`, `label` and `widget`; `ModelDto` gained `label`
+  and `can`. `ModelMetadata` gained an optional `displayField`, so a declared
+  choice travels with the model.
+- Fields and models are ordered by a declared `order` first, then by schema
+  position. Anything unconfigured keeps its relative order.
+
+---
+
 ## 0.4.0
 
 To-many relations. A record's children are visible from it, and can be linked
