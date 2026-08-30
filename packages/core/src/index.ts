@@ -27,6 +27,9 @@ export type {
 
 export type { OrmAdapter, RecordData, RecordId } from './adapter/orm-adapter.js'
 
+export type { ResourceSelection } from './config/resources.js'
+export { selectModels, unknownSelectionNames } from './config/resources.js'
+
 export type { AdminErrorKind } from './errors/errors.js'
 
 export {

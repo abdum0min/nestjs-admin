@@ -12,6 +12,7 @@
  */
 import {
   ForbiddenError,
+  isNestAdminError,
   ModelNotFoundError,
   RecordNotFoundError,
   type ModelMetadata,
@@ -19,20 +20,45 @@ import {
   type Page,
   type RecordData,
   type RecordId,
+  type ResourceSelection,
+  selectModels,
+  unknownSelectionNames,
 } from '@nest-admin/core'
-import { Inject, Injectable, type ExecutionContext } from '@nestjs/common'
+import { Inject, Injectable, type ExecutionContext, type OnModuleInit } from '@nestjs/common'
 
 import type { AdminOperation, AdminResourceAuth } from '../auth/resource.js'
 import { parseListQuery, type RawQuery } from '../http/query-parser.js'
-import { ADMIN_ADAPTER, ADMIN_RESOURCE_AUTH } from '../tokens.js'
+import { ADMIN_ADAPTER, ADMIN_RESOURCE_AUTH, ADMIN_RESOURCES } from '../tokens.js'
 import { toMetadataDto, type MetadataDto } from './metadata.dto.js'
 
 @Injectable()
-export class AdminService {
+export class AdminService implements OnModuleInit {
   constructor(
     @Inject(ADMIN_ADAPTER) private readonly adapter: OrmAdapter,
     @Inject(ADMIN_RESOURCE_AUTH) private readonly resourceAuth: AdminResourceAuth,
+    @Inject(ADMIN_RESOURCES) private readonly resources: ResourceSelection | undefined,
   ) {}
+
+  /**
+   * Fail at boot on a selection that names a model the schema does not have.
+   *
+   * A typo in `exclude` leaves the model exposed - the opposite of what was
+   * asked for, and invisible until someone finds the table in the admin. It
+   * cannot be checked in `forRoot`, because the model list comes from the
+   * adapter and asking for it is asynchronous; this is the first moment it can
+   * be known, and it is still before the first request.
+   */
+  async onModuleInit(): Promise<void> {
+    const unknown = unknownSelectionNames(await this.adapter.getModels(), this.resources)
+    if (unknown.length === 0) return
+
+    const known = (await this.adapter.getModels()).map((model) => model.name)
+    throw new Error(
+      `AdminModule \`resources\` names ${unknown.length === 1 ? 'a model' : 'models'} ` +
+        `that the schema does not have: ${unknown.join(', ')}. ` +
+        `Known models: ${known.join(', ')}.`,
+    )
+  }
 
   /**
    * The public metadata document a frontend renders resources from.
@@ -43,7 +69,7 @@ export class AdminService {
    * it is a description of the schema this principal has.
    */
   async getMetadata(context: ExecutionContext): Promise<MetadataDto> {
-    const models = await this.adapter.getModels()
+    const models = await this.exposedModels()
 
     const visible: ModelMetadata[] = []
     for (const model of models) {
@@ -56,17 +82,18 @@ export class AdminService {
   /**
    * List records.
    *
-   * Authorization runs first, so a denied model never reaches `adapter.list`.
-   * Metadata is resolved second because query parsing is type-directed: only
-   * the schema knows whether `price` should arrive as a number or a string.
+   * Metadata is resolved first - it decides whether the model is part of this
+   * admin at all - and authorization second, so a denied model still never
+   * reaches `adapter.list`. Query parsing needs that metadata anyway: only the
+   * schema knows whether `price` should arrive as a number or a string.
    */
   async list(
     context: ExecutionContext,
     model: string,
     rawQuery: RawQuery,
   ): Promise<Page<RecordData>> {
-    await this.assertAllowed(context, model, 'list')
     const metadata = await this.requireModel(model)
+    await this.assertAllowed(context, model, 'list')
     return this.adapter.list(model, parseListQuery(rawQuery, metadata))
   }
 
@@ -77,6 +104,7 @@ export class AdminService {
    * so it is turned into an error here rather than in the controller.
    */
   async findOne(context: ExecutionContext, model: string, id: RecordId): Promise<RecordData> {
+    await this.requireModel(model)
     await this.assertAllowed(context, model, 'read')
     const record = await this.adapter.findOne(model, id)
     if (record === null) throw new RecordNotFoundError(model, id)
@@ -84,6 +112,7 @@ export class AdminService {
   }
 
   async create(context: ExecutionContext, model: string, data: RecordData): Promise<RecordData> {
+    await this.requireModel(model)
     await this.assertAllowed(context, model, 'create')
     return this.adapter.create(model, data)
   }
@@ -94,11 +123,13 @@ export class AdminService {
     id: RecordId,
     data: RecordData,
   ): Promise<RecordData> {
+    await this.requireModel(model)
     await this.assertAllowed(context, model, 'update')
     return this.adapter.update(model, id, data)
   }
 
   async delete(context: ExecutionContext, model: string, id: RecordId): Promise<void> {
+    await this.requireModel(model)
     await this.assertAllowed(context, model, 'delete')
     await this.adapter.delete(model, id)
   }
@@ -140,21 +171,35 @@ export class AdminService {
       const decision = await this.resourceAuth.authorize({ context, model, operation: 'metadata' })
       return decision !== false
     } catch (error) {
-      if (error instanceof ForbiddenError) return false
+      // Not `instanceof`: the policy is the host application's, and its
+      // `ForbiddenError` may come from a different copy of Core than this one.
+      if (isNestAdminError(error) && error.kind === 'forbidden') return false
       throw error
     }
   }
 
   /**
-   * Resolve a model name to its metadata.
+   * The models this admin exposes, after the configured selection.
    *
-   * The adapter validates model names too, and would reject an unknown name on
-   * its own. The lookup is repeated here only because the query parser needs
-   * the metadata; the error raised is the adapter's own type, so the behaviour
-   * a client sees is identical either way.
+   * Every path goes through here, so an excluded model is absent from the
+   * metadata document and unknown to every route.
    */
+  private async exposedModels(): Promise<readonly ModelMetadata[]> {
+    return selectModels(await this.adapter.getModels(), this.resources)
+  }
+
+  /**
+   * Resolve a model name to its metadata, or fail with 404.
+   *
+   * Called before the policy on every operation, and that order is deliberate.
+   * Whether a model exists is structural - the same answer for everyone - so an
+   * excluded model answers 404 rather than 403, and does so identically for
+   * every principal. Asking the policy first would make a model that is not
+   * part of this admin look like one the caller merely lacks access to.
+   */
+
   private async requireModel(model: string): Promise<ModelMetadata> {
-    const models = await this.adapter.getModels()
+    const models = await this.exposedModels()
     const found = models.find((candidate) => candidate.name === model)
     if (!found) {
       throw new ModelNotFoundError(
