@@ -9,6 +9,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { renderTheme, type AdminTheme } from './theme.js'
+
 /**
  * Where the built UI sits relative to the compiled bundle.
  *
@@ -113,15 +115,29 @@ export const UI_BASE_PLACEHOLDER = '/__nest-admin-base__'
  * characters, so it needs no escaping here - there is nothing in it that can
  * close a script tag or a string literal.
  */
-export function renderShell(mountPath: string, root: string = uiRoot()): Buffer | undefined {
+export function renderShell(
+  mountPath: string,
+  root: string = uiRoot(),
+  theme?: AdminTheme,
+): Buffer | undefined {
   const shell = readIndexHtml(root)
   if (!shell) return undefined
 
-  const html = shell
+  const injected =
+    `  <script>window.__NEST_ADMIN_BASE__ = "${mountPath}"</script>\n` +
+    `  ${renderTheme(theme)}\n  </head>`
+
+  let html = shell
     .toString('utf8')
     .split(`${UI_BASE_PLACEHOLDER}/`)
     .join(`${mountPath}/`)
-    .replace('</head>', `  <script>window.__NEST_ADMIN_BASE__ = "${mountPath}"</script>\n  </head>`)
+    .replace('</head>', injected)
+
+  // Replaced rather than appended: the shell already has a title, and adding a
+  // second would leave two in the document for the browser to choose between.
+  if (theme?.title !== undefined) {
+    html = html.replace(/<title>[^<]*<\/title>/, `<title>${theme.title}</title>`)
+  }
 
   return Buffer.from(html, 'utf8')
 }

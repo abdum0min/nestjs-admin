@@ -41,8 +41,9 @@ import {
   StreamableFile,
 } from '@nestjs/common'
 
-import { ADMIN_MOUNT_PATH, ADMIN_UI_ROOT } from '../tokens.js'
+import { ADMIN_MOUNT_PATH, ADMIN_THEME, ADMIN_UI_ROOT } from '../tokens.js'
 import { contentTypeFor, readAsset, renderShell } from './assets.js'
+import type { AdminTheme } from './theme.js'
 
 // No path here. The module registers this controller under the application's
 // configured mount path through `RouterModule`, so a path on the decorator
@@ -62,6 +63,7 @@ export class AdminUiController {
   constructor(
     @Inject(ADMIN_UI_ROOT) private readonly root: string,
     @Inject(ADMIN_MOUNT_PATH) private readonly mountPath: string,
+    @Inject(ADMIN_THEME) private readonly theme: AdminTheme | undefined,
   ) {}
 
   /**
@@ -73,7 +75,7 @@ export class AdminUiController {
   @Get()
   @Header('Cache-Control', 'no-cache')
   index(): StreamableFile {
-    this.shell ??= renderShell(this.mountPath, this.root)
+    this.shell ??= renderShell(this.mountPath, this.root, this.theme)
     const html = this.shell
     if (!html) {
       throw new NotFoundException(

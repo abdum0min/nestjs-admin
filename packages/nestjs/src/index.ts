@@ -22,6 +22,10 @@
  * and the configuration engine.
  */
 
+export type { AdminAction, AdminActionResult, AdminActionsByModel } from './actions/contract.js'
+
+export type { AdminHookContext, AdminHooks, AdminHooksByModel } from './hooks/contract.js'
+
 export {
   AdminModule,
   type AdminModuleAsyncOptions,
@@ -52,6 +56,7 @@ export type {
   FieldDto,
   FieldKindDto,
   MetadataDto,
+  ActionDto,
   ModelDto,
   RelationDto,
 } from './admin/metadata.dto.js'
@@ -61,11 +66,15 @@ export type {
 export type {
   AdminErrorKind,
   FieldKind,
+  FieldOverride,
+  FieldWidget,
   FieldMetadata,
   FilterOperator,
   FilterRule,
   ListQuery,
   ModelMetadata,
+  ModelOverride,
+  ModelOverrides,
   OrmAdapter,
   Page,
   RecordData,
@@ -89,4 +98,5 @@ export {
   NestAdminError,
   RecordNotFoundError,
   UnauthorizedError,
+  ValidationError,
 } from '@nest-admin/core'

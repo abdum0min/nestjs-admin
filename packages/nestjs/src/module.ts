@@ -34,18 +34,24 @@ import { AdminService } from './admin/service.js'
 import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
 import { AdminAuthGuard } from './auth/guard.js'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
+import type { AdminActionsByModel } from './actions/contract.js'
+import type { AdminHooksByModel } from './hooks/contract.js'
 import { AdminExceptionFilter } from './http/exception.filter.js'
 import { normaliseMountPath } from './mount-path.js'
 import { uiAvailable, uiRoot } from './ui/assets.js'
+import { assertUsableTheme, type AdminTheme } from './ui/theme.js'
 import { AdminUiController } from './ui/controller.js'
 import {
+  ADMIN_ACTIONS,
   ADMIN_ADAPTER,
   ADMIN_AUTH,
+  ADMIN_HOOKS,
   ADMIN_MODELS,
   ADMIN_MOUNT_PATH,
   ADMIN_OPTIONS,
   ADMIN_RESOURCE_AUTH,
   ADMIN_RESOURCES,
+  ADMIN_THEME,
   ADMIN_UI_ROOT,
 } from './tokens.js'
 
@@ -126,6 +132,29 @@ export interface AdminModuleOptions {
   readonly models?: ModelOverrides
 
   /**
+   * Application code that runs around a write, per model.
+   *
+   * Where hashing a password, deriving a slug or writing an audit row goes -
+   * none of which can be inferred from a column type. See `AdminHooks`.
+   */
+  readonly hooks?: AdminHooksByModel
+
+  /**
+   * Buttons the application adds, per model.
+   *
+   * CRUD covers what a schema implies; "publish" and "resend the invitation"
+   * are obvious to the domain and invisible to the database. See `AdminAction`.
+   */
+  readonly actions?: AdminActionsByModel
+
+  /**
+   * Branding the served page applies without a rebuild: an accent colour, a
+   * title, a logo. Structural, because the page is rendered before any
+   * provider exists.
+   */
+  readonly theme?: AdminTheme
+
+  /**
    * Directory holding the built admin UI.
    *
    * Defaults to the copy bundled inside this package, which is what a consumer
@@ -183,7 +212,7 @@ function assertUsableOptions(options: AdminModuleOptions, caller: string): void 
  * Everything except the structural options, which are decided when the module
  * is defined and so cannot come from a provider - see `forRootAsync`.
  */
-export type AdminModuleFactoryOptions = Omit<AdminModuleOptions, 'path' | 'uiRoot'>
+export type AdminModuleFactoryOptions = Omit<AdminModuleOptions, 'path' | 'uiRoot' | 'theme'>
 
 /** Supply options from a class rather than a factory function. */
 export interface AdminModuleOptionsFactory {
@@ -196,6 +225,12 @@ export interface AdminModuleAsyncOptions {
 
   /** @internal As `AdminModuleOptions.uiRoot`. */
   readonly uiRoot?: string
+
+  /**
+   * As `AdminModuleOptions.theme`. Structural, so it is not from the factory:
+   * the shell is rendered from it and no provider exists at that point.
+   */
+  readonly theme?: AdminTheme
 
   /** Modules whose providers the factory needs. */
   readonly imports?: ModuleMetadata['imports']
@@ -237,6 +272,7 @@ function warnIfUiMissing(resolvedUiRoot: string, mountPath: string): void {
 function defineModule(
   mountPath: string,
   resolvedUiRoot: string,
+  theme: AdminTheme | undefined,
   optionProviders: readonly Provider[],
   extraImports: ModuleMetadata['imports'] = [],
 ): DynamicModule {
@@ -259,6 +295,7 @@ function defineModule(
       ...optionProviders,
       { provide: ADMIN_UI_ROOT, useValue: resolvedUiRoot },
       { provide: ADMIN_MOUNT_PATH, useValue: mountPath },
+      { provide: ADMIN_THEME, useValue: theme },
       AdminService,
       // Provided so Nest can resolve them for `@UseGuards` / `@UseFilters` on
       // the controller. Deliberately not APP_GUARD or APP_FILTER: either would
@@ -319,11 +356,14 @@ export class AdminModule {
 
     const resolvedUiRoot = options.uiRoot ?? uiRoot()
     warnIfUiMissing(resolvedUiRoot, mountPath)
+    assertUsableTheme(options.theme)
 
-    return defineModule(mountPath, resolvedUiRoot, [
+    return defineModule(mountPath, resolvedUiRoot, options.theme, [
       { provide: ADMIN_ADAPTER, useValue: options.adapter },
       { provide: ADMIN_RESOURCES, useValue: options.resources },
       { provide: ADMIN_MODELS, useValue: options.models },
+      { provide: ADMIN_HOOKS, useValue: options.hooks },
+      { provide: ADMIN_ACTIONS, useValue: options.actions },
       { provide: ADMIN_AUTH, useValue: options.auth },
       // Always provided, so injection resolves whether or not the consumer
       // supplied a policy. The default permits every model.
@@ -366,6 +406,7 @@ export class AdminModule {
     const mountPath = normaliseMountPath(options.path)
     const resolvedUiRoot = options.uiRoot ?? uiRoot()
     warnIfUiMissing(resolvedUiRoot, mountPath)
+    assertUsableTheme(options.theme)
 
     // Each option provider reads from the single resolved object, so the
     // factory runs once however many of its values are injected.
@@ -377,11 +418,14 @@ export class AdminModule {
     return defineModule(
       mountPath,
       resolvedUiRoot,
+      options.theme,
       [
         ...optionsProviders(options),
         derive(ADMIN_ADAPTER, (resolved) => resolved.adapter),
         derive(ADMIN_RESOURCES, (resolved) => resolved.resources),
         derive(ADMIN_MODELS, (resolved) => resolved.models),
+        derive(ADMIN_HOOKS, (resolved) => resolved.hooks),
+        derive(ADMIN_ACTIONS, (resolved) => resolved.actions),
         derive(ADMIN_AUTH, (resolved) => resolved.auth),
         derive(ADMIN_RESOURCE_AUTH, (resolved) => resolved.resourceAuth ?? allowAllResources()),
       ],
