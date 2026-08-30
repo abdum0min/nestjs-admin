@@ -128,6 +128,43 @@ export function readPrismaDmmf(options: ReadDmmfOptions = {}): DMMF.Document {
   return result
 }
 
+/**
+ * The datasource provider the schema declares - `postgresql`, `sqlite`, and so
+ * on - or `undefined` when it cannot be read.
+ *
+ * Needed because Prisma accepts `mode: 'insensitive'` on some providers and
+ * *throws* on the rest, so a search that ignores capitalisation has to know
+ * which database it is talking to. See `to-prisma-args.ts`.
+ *
+ * ## Why this is read from the text
+ *
+ * The provider is not in the DMMF: `getDMMF` returns the datamodel, and the
+ * datasource block is not part of it. Nor can it be asked of the client -
+ * Prisma 7 builds clients from driver adapters, and what the application passed
+ * is not something this package is allowed to introspect. The declaration is a
+ * fixed one-line form in a file we are already reading, so it is read from
+ * there, and every failure is answered with `undefined` rather than a throw:
+ * an unreadable provider must degrade to the case-sensitive search that was the
+ * behaviour before this existed, never to a broken panel.
+ *
+ * It reads the schema a second time. That happens once, at startup, on a file
+ * of a few kilobytes - cheaper than threading a second return value through
+ * every caller of `readPrismaDmmf`.
+ */
+export function readDatasourceProvider(options: ReadDmmfOptions = {}): string | undefined {
+  try {
+    const files = readSchemaFiles(locateSchema(options.schemaPath, options.cwd ?? process.cwd()))
+    for (const [, content] of files) {
+      const declared = /datasources+w+s*{[^}]*?providers*=s*"([a-z]+)"/i.exec(content)
+      if (declared?.[1] !== undefined) return declared[1].toLowerCase()
+    }
+  } catch {
+    // Unreadable schema. The DMMF read reports that properly; this one is an
+    // optimisation and has nothing useful to add.
+  }
+  return undefined
+}
+
 function isDmmfDocument(value: DMMF.Document | { error: Error }): value is DMMF.Document {
   return 'datamodel' in value
 }

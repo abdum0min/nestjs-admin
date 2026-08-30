@@ -23,9 +23,10 @@ import {
 
 import { resolveDelegate, type PrismaModelDelegate } from './client/delegate.js'
 import { assertSupportedPrismaVersion } from './client/version-gate.js'
-import { readPrismaDmmf } from './metadata/read-dmmf.js'
+import { readDatasourceProvider, readPrismaDmmf } from './metadata/read-dmmf.js'
 import { toModelMetadata } from './metadata/to-metadata.js'
 import { toIncludeClause } from './query/to-include.js'
+import { toConstraintError } from './errors/constraints.js'
 import { toRelatedWhere } from './query/to-related-where.js'
 import { resolvePagination, toFindManyArgs } from './query/to-prisma-args.js'
 
@@ -63,6 +64,13 @@ export class PrismaAdapter implements OrmAdapter {
    */
   #models: readonly ModelMetadata[] | undefined
 
+  /**
+   * Which database this is, so a search can ignore capitalisation the way that
+   * database allows. Read alongside the metadata, and `undefined` when the
+   * schema does not say - see `insensitively` in `to-prisma-args.ts`.
+   */
+  #provider: string | undefined
+
   constructor(options: PrismaAdapterOptions) {
     if (options.client === null || options.client === undefined) {
       throw new AdapterError(
@@ -85,6 +93,10 @@ export class PrismaAdapter implements OrmAdapter {
       ...(this.#cwd !== undefined ? { cwd: this.#cwd } : {}),
     })
     this.#models = toModelMetadata(dmmf)
+    this.#provider = readDatasourceProvider({
+      ...(this.#schemaPath !== undefined ? { schemaPath: this.#schemaPath } : {}),
+      ...(this.#cwd !== undefined ? { cwd: this.#cwd } : {}),
+    })
     return this.#models
   }
 
@@ -96,7 +108,7 @@ export class PrismaAdapter implements OrmAdapter {
     // restricts field lookup, free-text search and relation loading together.
     const metadata = narrowFields(declared, query.fields)
 
-    const args = toFindManyArgs(metadata, query)
+    const args = toFindManyArgs(metadata, query, this.#provider)
     const include = toIncludeClause(metadata, await this.getModels())
     const omit = omitClause(declared, query.fields)
     const withRelations = { ...args, ...(include ? { include } : {}), ...(omit ? { omit } : {}) }
@@ -177,7 +189,7 @@ export class PrismaAdapter implements OrmAdapter {
     const delegate = await this.#delegate(target.name)
 
     const narrowed = narrowFields(target, query.fields)
-    const args = toFindManyArgs(narrowed, query)
+    const args = toFindManyArgs(narrowed, query, this.#provider)
     const combined = args.where ? { AND: [args.where, where] } : where
     const include = toIncludeClause(narrowed, models)
     const omit = omitClause(target, query.fields)
@@ -386,6 +398,12 @@ export class PrismaAdapter implements OrmAdapter {
       if (isPrismaError(cause) && cause.code === PRISMA_RECORD_NOT_FOUND && id !== undefined) {
         throw new RecordNotFoundError(model, id)
       }
+
+      // A refused write is a fact about the request, not a failure of the
+      // database. Reporting it as an internal error is what made a duplicate
+      // email indistinguishable from a dead connection.
+      const constraint = toConstraintError(cause, model)
+      if (constraint) throw constraint
 
       const detail = cause instanceof Error ? cause.message : String(cause)
       throw new AdapterError(`Prisma operation failed for model "${model}": ${detail}`, { cause })

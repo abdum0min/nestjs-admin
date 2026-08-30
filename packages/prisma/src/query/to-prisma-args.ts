@@ -128,6 +128,47 @@ function toPrismaCondition(model: ModelMetadata, rule: FilterRule): Record<strin
 }
 
 /**
+ * Providers where Prisma accepts `mode: 'insensitive'`.
+ *
+ * The list is short because Prisma *throws* on the others rather than ignoring
+ * the option, so being wrong here breaks every search rather than degrading it.
+ *
+ * The omissions are deliberate, not oversights:
+ *
+ * | Provider   | Why nothing is sent                                        |
+ * | ---------- | ---------------------------------------------------------- |
+ * | mysql      | Its default collations end in `_ci`; `LIKE` already ignores case. |
+ * | sqlite     | `LIKE` is case-insensitive for ASCII by default.            |
+ * | sqlserver  | Its default collation is case-insensitive.                  |
+ * | cockroachdb | Prisma documents `mode` for PostgreSQL and MongoDB only.   |
+ *
+ * So on the four below, the option is unnecessary; on CockroachDB it is
+ * unproven, and this is not the place to guess.
+ */
+const INSENSITIVE_MODE_PROVIDERS: ReadonlySet<string> = new Set([
+  'postgresql',
+  'postgres',
+  'mongodb',
+])
+
+/**
+ * The case-insensitivity option for this provider, if it takes one.
+ *
+ * Spread into every string comparison. Returning an object to spread rather
+ * than a boolean to branch on keeps the option out of the query entirely where
+ * it is not supported - Prisma rejects `mode: undefined` as readily as it
+ * rejects `mode: 'insensitive'` on SQLite.
+ */
+export function insensitively(provider: string | undefined): { mode?: 'insensitive' } {
+  return provider !== undefined && INSENSITIVE_MODE_PROVIDERS.has(provider)
+    ? { mode: 'insensitive' }
+    : {}
+}
+
+/** String comparisons, which are the ones capitalisation applies to. */
+const TEXTUAL_OPERATORS: ReadonlySet<string> = new Set(['contains', 'startsWith', 'endsWith'])
+
+/**
  * Free-text search: `contains` across the model's meaningful string fields.
  *
  * Generated string fields are excluded. A `cuid()` or `uuid()` primary key is
@@ -136,14 +177,16 @@ function toPrismaCondition(model: ModelMetadata, rule: FilterRule): Record<strin
  * contain an "e". Looking a record up by its id is an exact-match concern, so
  * it belongs in a filter (`{ field: 'id', operator: 'eq' }`), not in free text.
  *
- * Case sensitivity is deliberately left to the database. Prisma's
- * `mode: 'insensitive'` is PostgreSQL-only and throws on SQLite, so applying it
- * would make behaviour depend on the provider in a way the MVP has not tested.
- * Documented as a known limitation.
+ * Capitalisation is ignored, which needed the provider to say so. Searching
+ * "ada" and getting nothing because the record says "Ada" is the kind of defect
+ * people conclude the search is broken from, and they are not wrong. What it
+ * takes to ignore case differs per database, and on some of them the option
+ * that does it is an error - hence `insensitively`.
  */
 function toSearchCondition(
   model: ModelMetadata,
   term: string,
+  provider: string | undefined,
 ): Record<string, unknown> | undefined {
   // Foreign keys are string columns holding a cuid, so they match the same
   // rule the generated-id exclusion exists for - and they are not generated,
@@ -163,23 +206,32 @@ function toSearchCondition(
   if (stringFields.length === 0) return undefined
 
   return {
-    OR: stringFields.map((field) => ({ [field.name]: { contains: term } })),
+    OR: stringFields.map((field) => ({
+      [field.name]: { contains: term, ...insensitively(provider) },
+    })),
   }
 }
 
 export function buildWhere(
   model: ModelMetadata,
   query: Pick<ListQuery, 'filters' | 'search'>,
+  provider?: string,
 ): Record<string, unknown> | undefined {
   const conditions: Array<Record<string, unknown>> = []
 
   for (const rule of query.filters ?? []) {
-    conditions.push(toPrismaCondition(model, rule))
+    const condition = toPrismaCondition(model, rule)
+    // A "contains" filter is the same promise the search box makes, typed into
+    // a different box. It would be strange for one to ignore case and not the
+    // other, and stranger still to have to know which.
+    conditions.push(
+      TEXTUAL_OPERATORS.has(rule.operator) ? insensitive(condition, provider) : condition,
+    )
   }
 
   const search = query.search?.trim()
   if (search) {
-    const searchCondition = toSearchCondition(model, search)
+    const searchCondition = toSearchCondition(model, search, provider)
     if (searchCondition) conditions.push(searchCondition)
   }
 
@@ -228,9 +280,36 @@ export function resolvePagination(query: Pick<ListQuery, 'page' | 'perPage'>): {
   return { page: rawPage, perPage, skip: (rawPage - 1) * perPage, take: perPage }
 }
 
-export function toFindManyArgs(model: ModelMetadata, query: ListQuery): PrismaFindManyArgs {
+/**
+ * The same condition, told to ignore case.
+ *
+ * A condition is `{ field: { operator: value } }`, and the option belongs
+ * beside the operator rather than beside the field, so it cannot simply be
+ * spread at the top level.
+ */
+function insensitive(
+  condition: Record<string, unknown>,
+  provider: string | undefined,
+): Record<string, unknown> {
+  const mode = insensitively(provider)
+  if (mode.mode === undefined) return condition
+
+  const entries = Object.entries(condition).map(([field, comparison]) => [
+    field,
+    typeof comparison === 'object' && comparison !== null
+      ? { ...(comparison as Record<string, unknown>), ...mode }
+      : comparison,
+  ])
+  return Object.fromEntries(entries) as Record<string, unknown>
+}
+
+export function toFindManyArgs(
+  model: ModelMetadata,
+  query: ListQuery,
+  provider?: string,
+): PrismaFindManyArgs {
   const { skip, take } = resolvePagination(query)
-  const where = buildWhere(model, query)
+  const where = buildWhere(model, query, provider)
   const orderBy = buildOrderBy(model, query)
 
   return {
