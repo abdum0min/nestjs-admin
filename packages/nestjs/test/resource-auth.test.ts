@@ -181,7 +181,7 @@ describe('metadata filtering', () => {
 
     // `posts` pointed at the hidden model and is gone; everything else stays.
     expect(names).not.toContain('posts')
-    expect(names).toEqual(['id', 'email', 'name', 'age', 'active', 'role', 'createdAt'])
+    expect(names).toEqual(['id', 'email', 'name', 'bio', 'age', 'active', 'role', 'createdAt'])
     expect(user.primaryKey).toEqual(['id'])
   })
 
@@ -227,12 +227,21 @@ describe('metadata filtering', () => {
       'isUnique',
       'isList',
       'isGenerated',
+      'readOnly',
+      'label',
+      'widget',
       'defaultValue',
       'enumValues',
       'relation',
     ])
     for (const model of body.data.models) {
-      expect(Object.keys(model).sort()).toEqual(['displayField', 'fields', 'name', 'primaryKey'])
+      expect(Object.keys(model).sort()).toEqual([
+        'can',
+        'displayField',
+        'fields',
+        'name',
+        'primaryKey',
+      ])
       for (const field of model.fields) {
         for (const key of Object.keys(field)) expect(allowed).toContain(key)
       }
@@ -488,5 +497,72 @@ describe('composition with request-level authentication', () => {
     expect((await http().get('/admin/User?page=0').expect(400)).body.error.code).toBe(
       'INVALID_QUERY',
     )
+  })
+})
+
+/**
+ * What the metadata says this principal may do.
+ *
+ * `reports/009` found the interface offering `New`, `Edit` and `Delete` to a
+ * principal every one of which would be refused. The document now carries the
+ * answers, so a client can stop promising what the server will not do.
+ */
+describe('permissions in the metadata document', () => {
+  const permissionsFor = async (app: INestApplication, model = 'User') => {
+    const { body } = await request(app.getHttpServer()).get('/admin/meta').expect(200)
+    return body.data.models.find((candidate: { name: string }) => candidate.name === model).can
+  }
+
+  it('reports every operation as allowed when nothing is denied', async () => {
+    const app = await appWith(denyModels())
+
+    expect(await permissionsFor(app)).toEqual({
+      list: true,
+      read: true,
+      create: true,
+      update: true,
+      delete: true,
+    })
+  })
+
+  it('reports the operations a policy refuses', async () => {
+    const app = await appWith(denyOperations('create', 'update', 'delete'))
+
+    expect(await permissionsFor(app)).toMatchObject({
+      list: true,
+      read: true,
+      create: false,
+      update: false,
+      delete: false,
+    })
+  })
+
+  it('reads a thrown ForbiddenError as a denial, as visibility does', async () => {
+    const app = await appWith({
+      authorize: ({ operation }) => {
+        if (operation === 'delete') throw new ForbiddenError()
+        return true
+      },
+    })
+
+    expect(await permissionsFor(app)).toMatchObject({ delete: false, update: true })
+  })
+
+  it('answers per model, not per document', async () => {
+    const app = await appWith({
+      authorize: ({ model, operation }) => !(model === 'Post' && operation === 'create'),
+    })
+
+    expect((await permissionsFor(app, 'User')).create).toBe(true)
+    expect((await permissionsFor(app, 'Post')).create).toBe(false)
+  })
+
+  it('is a description, not the enforcement', async () => {
+    // A client that ignores it gets a 403, not access. The document exists so
+    // the interface can stop offering the action, not so it can rely on it.
+    const app = await appWith(denyOperations('delete'))
+
+    expect((await permissionsFor(app)).delete).toBe(false)
+    await request(app.getHttpServer()).delete('/admin/User/u1').expect(403)
   })
 })

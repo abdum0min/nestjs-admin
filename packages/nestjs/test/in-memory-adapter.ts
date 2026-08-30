@@ -57,6 +57,17 @@ export const TEST_MODELS: readonly ModelMetadata[] = [
         isGenerated: false,
       },
       {
+        // Optional and free text: the field the override tests hide, because
+        // hiding a required one would make creation impossible.
+        name: 'bio',
+        kind: 'string',
+        isId: false,
+        isRequired: false,
+        isUnique: false,
+        isList: false,
+        isGenerated: false,
+      },
+      {
         name: 'age',
         kind: 'number',
         isId: false,
@@ -130,6 +141,15 @@ export const TEST_MODELS: readonly ModelMetadata[] = [
         isGenerated: false,
       },
       {
+        name: 'body',
+        kind: 'string',
+        isId: false,
+        isRequired: false,
+        isUnique: false,
+        isList: false,
+        isGenerated: false,
+      },
+      {
         name: 'author',
         kind: 'relation',
         isId: false,
@@ -176,26 +196,33 @@ export class InMemoryAdapter implements OrmAdapter {
 
   async list(model: string, query: ListQuery): Promise<Page<RecordData>> {
     const rows = this.#require(model)
+    // Honours `query.fields` the same way the real adapter does, so the tests
+    // that assert a hidden column is unreachable are asserting the contract
+    // rather than one implementation of it.
+    const allowed = query.fields ? new Set(query.fields) : undefined
     this.lastListQuery = { model, query }
 
     let result = [...rows]
 
     for (const rule of query.filters ?? []) {
-      this.#assertField(model, rule.field)
+      this.#assertField(model, rule.field, allowed)
       result = result.filter((row) => matches(row[rule.field], rule.operator, rule.value))
     }
 
     if (query.search) {
       const term = query.search.toLowerCase()
       result = result.filter((row) =>
-        Object.values(row).some(
-          (value) => typeof value === 'string' && value.toLowerCase().includes(term),
+        Object.entries(row).some(
+          ([key, value]) =>
+            (!allowed || allowed.has(key)) &&
+            typeof value === 'string' &&
+            value.toLowerCase().includes(term),
         ),
       )
     }
 
     for (const rule of [...(query.sort ?? [])].reverse()) {
-      this.#assertField(model, rule.field)
+      this.#assertField(model, rule.field, allowed)
       result.sort(
         (a, b) => compare(a[rule.field], b[rule.field]) * (rule.direction === 'asc' ? 1 : -1),
       )
@@ -333,8 +360,11 @@ export class InMemoryAdapter implements OrmAdapter {
     return rows
   }
 
-  #assertField(model: string, field: string): void {
+  #assertField(model: string, field: string, allowed?: ReadonlySet<string>): void {
     const metadata = TEST_MODELS.find((candidate) => candidate.name === model)
+    // A field the caller scoped out is as unknown as one that never existed -
+    // which is the answer a hidden column should give.
+    if (allowed && !allowed.has(field)) throw new FieldNotFoundError(model, field)
     if (!metadata?.fields.some((candidate) => candidate.name === field)) {
       throw new FieldNotFoundError(model, field)
     }

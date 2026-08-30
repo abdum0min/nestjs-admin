@@ -1,7 +1,7 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import type { OrmAdapter, ResourceSelection } from '@nest-admin/core'
+import type { ModelOverrides, OrmAdapter, ResourceSelection } from '@nest-admin/core'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
@@ -35,6 +35,7 @@ export async function createAdminApp(
   resourceAuth?: AdminResourceAuth,
   path?: string,
   resources?: ResourceSelection,
+  models?: ModelOverrides,
 ): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -45,6 +46,7 @@ export async function createAdminApp(
         ...(resourceAuth ? { resourceAuth } : {}),
         ...(path === undefined ? {} : { path }),
         ...(resources === undefined ? {} : { resources }),
+        ...(models === undefined ? {} : { models }),
       }),
     ],
   }).compile()
