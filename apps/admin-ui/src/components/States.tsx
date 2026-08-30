@@ -31,6 +31,7 @@ const HEADINGS: Readonly<Record<AdminErrorCode, string>> = {
   FIELD_NOT_FOUND: 'Unknown field',
   INVALID_QUERY: 'Invalid request',
   VALIDATION_ERROR: 'Not accepted',
+  CONSTRAINT_VIOLATION: 'Not accepted',
   INTERNAL_ERROR: 'Something went wrong',
 }
 
@@ -44,6 +45,7 @@ const HINTS: Readonly<Record<AdminErrorCode, string>> = {
   // The server's message says what is wrong and is shown beside this, so the
   // hint only has to point at where the correction goes.
   VALIDATION_ERROR: 'Change the value and try again.',
+  CONSTRAINT_VIOLATION: 'The database refused this. Change the value and try again.',
   INTERNAL_ERROR: 'Try again. If it keeps happening, contact an administrator.',
 }
 

@@ -106,6 +106,18 @@ function Shell({
 }) {
   return (
     <div className="shell">
+      {/* Not an `<a href="#main">`. Routing here is hash-based, so a fragment
+          link would navigate as well as jump - it would leave the list and
+          land on whatever "#main" parses as. Moving focus directly does the
+          one thing that was wanted. */}
+      <button
+        type="button"
+        className="skip-link"
+        onClick={() => document.getElementById('admin-main')?.focus()}
+      >
+        Skip to content
+      </button>
+
       <header className="shell__bar">
         <a href="#/">
           {theme.logoUrl === undefined ? null : (
@@ -132,7 +144,12 @@ function Shell({
           </ul>
         </nav>
 
-        <main className="shell__content">{children}</main>
+        {/* `tabIndex={-1}` so the skip link can move focus here. It makes the
+            element programmatically focusable without adding it to the tab
+            order, which is exactly the distinction the attribute exists for. */}
+        <main className="shell__content" id="admin-main" tabIndex={-1}>
+          {children}
+        </main>
       </div>
     </div>
   )

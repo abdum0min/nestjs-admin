@@ -10,9 +10,14 @@
   --bg: #f6f7f9;
   --surface: #ffffff;
   --ink: #161a22;
-  --muted: #6b7688;
+  /* 5.0:1 on --bg. The obvious #6b7688 measures 4.28 there and reads as
+     "grey enough" while failing the contrast floor for body text. */
+  --muted: #5f6b7d;
   --line: #d7dee7;
   --accent: #2e5aac;
+  /* What sits *on* the accent. A single `#fff` works in light and collapses
+     to 2.5:1 against the lighter accent dark mode uses. */
+  --on-accent: #ffffff;
   --danger: #9e362e;
   /* Overridden by the server's theme block when one is configured. */
   --surface-2: #eef1f5;
@@ -43,6 +48,9 @@
     --muted: #93a0b1;
     --line: #2a333f;
     --accent: #7aa2f7;
+    /* 7.3:1. White here is 2.5:1 - unreadable, and on the one element that
+       marks where you are. */
+    --on-accent: #10141a;
     --danger: #f08a80;
   }
 }
@@ -58,6 +66,52 @@ body {
 
 a {
   color: var(--accent);
+}
+
+/*
+ * One focus ring, everywhere.
+ *
+ * The browser default differs per engine and disappears against a dark
+ * surface in some of them. Keyboard focus is the only way some people know
+ * where they are on a page, so it is drawn deliberately rather than inherited.
+ *
+ * `:focus-visible` rather than `:focus`: a mouse click on a button should not
+ * leave a ring behind it, which is the reason people remove focus styles
+ * altogether and break the page for everyone who does not use a mouse.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/*
+ * Past the resource list, in one keystroke.
+ *
+ * The navigation holds one link per model, so on a schema of thirty models a
+ * keyboard user passes thirty links to reach the table - on every page. Hidden
+ * until focused, which is the point: it is for people who are already tabbing.
+ */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0 0 4px 0;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ---------------------------------------------------------------- shell */
@@ -83,6 +137,37 @@ a {
 @media (max-width: 700px) {
   .shell__body {
     grid-template-columns: 1fr;
+  }
+
+  /*
+   * The resource list becomes a scrolling row rather than a column.
+   *
+   * Stacked, thirty models are thirty rows to scroll past before reaching the
+   * table - on a phone that is the whole screen, every time. Sideways it costs
+   * one line.
+   */
+  .shell__nav {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding: 0.5rem 0.75rem;
+  }
+
+  .shell__nav h2 {
+    display: none;
+  }
+
+  .shell__nav ul {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 0.25rem;
+  }
+
+  .shell__nav a {
+    white-space: nowrap;
+  }
+
+  .shell__content {
+    padding: 1rem 0.75rem;
   }
 }
 
@@ -123,7 +208,7 @@ a {
 
 .shell__nav a[aria-current='page'] {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .shell__content {
@@ -170,6 +255,7 @@ a {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -226,6 +312,12 @@ button.danger {
 }
 
 /* ---------------------------------------------------------------- table */
+
+/* Rows being replaced. Dimmed rather than removed, so a page change does not
+   flash the table out and back - which reads as a bug rather than as work. */
+.table-wrap[aria-busy='true'] {
+  opacity: 0.55;
+}
 
 .table-wrap {
   overflow-x: auto;
@@ -354,7 +446,7 @@ tbody tr:last-child td {
   gap: 0.25rem;
 }
 
-.form__row > span {
+.form__label {
   font-size: 0.85rem;
   color: var(--muted);
 }
@@ -363,6 +455,32 @@ tbody tr:last-child td {
   flex-direction: row;
   align-items: center;
   gap: 0.5rem;
+  /* So a refusal can take a line of its own beside a checkbox. */
+  flex-wrap: wrap;
+}
+
+/*
+ * Why a refused value is announced twice over.
+ *
+ * The colour alone is not the message: it is invisible to a screen reader,
+ * absent for someone who cannot distinguish it, and gone the moment the page is
+ * printed. The sentence under the input is what actually says what is wrong,
+ * and `aria-invalid` is what says it to a reader that cannot see either.
+ *
+ * Written as a child selector because .form__row > span already claims the
+ * label styling, and the message must win against it.
+ */
+.form__row > .form__error {
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
+.form__row--inline > .form__error {
+  width: 100%;
+}
+
+.form__row [aria-invalid='true'] {
+  border-color: var(--danger);
 }
 
 .form__actions {
@@ -516,4 +634,47 @@ button.link {
   width: auto;
   vertical-align: -4px;
   margin-right: 8px;
+}
+
+/* ------------------------------------------------------------------ bulk --
+   Selecting rows and acting on the selection. The bar appears only when
+   something is selected: a permanently visible "Delete selected" that does
+   nothing most of the time trains people to ignore it.                       */
+
+.bulk {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.bulk__count {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.bulk__failures {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.bulk__failures code {
+  opacity: 0.7;
+}
+
+/* Narrow, and never the column that grows when the table is wider than the
+   screen. A checkbox column that stretches puts the box far from its row. */
+.cell--select {
+  width: 1px;
+  white-space: nowrap;
+}
+
+.row--selected {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }

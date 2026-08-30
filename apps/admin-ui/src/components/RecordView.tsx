@@ -10,7 +10,7 @@ import { deleteRecord, fetchRecord } from '../api/client.js'
 import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
-import { fieldLabel } from '../metadata/fields.js'
+import { fieldLabel, modelLabel } from '../metadata/fields.js'
 import { formatDetail } from '../metadata/format.js'
 import { relationLink } from '../metadata/relations.js'
 import { RelatedList } from './RelatedList.jsx'
@@ -31,7 +31,7 @@ export function RecordView({
   const onDelete = async (): Promise<void> => {
     // A native confirm keeps a destructive action behind an explicit step
     // without pulling in a modal library for one call site.
-    if (!window.confirm(`Delete this ${model.name}? This cannot be undone.`)) return
+    if (!window.confirm(`Delete this ${modelLabel(model)}? This cannot be undone.`)) return
 
     try {
       await deleteRecord(model.name, id)
@@ -54,10 +54,10 @@ export function RecordView({
       <header className="list__header">
         <div>
           <a className="record__back" href={href({ kind: 'list', model: model.name })}>
-            ← {model.name}
+            ← {modelLabel(model)}
           </a>
           <h1>
-            {model.name} {id}
+            {modelLabel(model)} {id}
           </h1>
         </div>
         <div className="record__actions">
