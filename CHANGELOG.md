@@ -13,6 +13,98 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.7.0
+
+Everything an ordinary mistake does. Before this release a duplicate email, a
+missing required field and a reference to a deleted record all answered
+`500 INTERNAL_ERROR` with the message withheld — correct treatment for a broken
+database, and the wrong treatment for someone who typed the same address twice.
+
+### Added
+
+- **Constraint violations are readable, and name the field.** A duplicate value
+  is `409 CONSTRAINT_VIOLATION`, a missing required value is `400`, and both
+  carry `details.fields`:
+
+  ```json
+  {
+    "success": false,
+    "error": {
+      "code": "CONSTRAINT_VIOLATION",
+      "message": "Another User already has this email.",
+      "details": { "constraint": "unique", "fields": ["email"] }
+    }
+  }
+  ```
+
+  The message is written from the field names, never taken from the ORM — an
+  ORM's own text carries file paths, generated query fragments and the values
+  that collided, which is why the generic 500 existed in the first place.
+
+- **Refusals appear under the input they are about**, rather than in a banner
+  above the form. A banner is kept for a failure that names nothing, or names a
+  field the form does not show.
+
+- **`ValidationError` can name fields**, so an application's own refusal lands
+  in the same place:
+
+  ```ts
+  throw new ValidationError('That address is already in use.', ['email'])
+  ```
+
+- **Multi-select and bulk delete.** `DELETE /admin/:model` with
+  `{ "ids": [...] }`. Per-record hooks still run, so an application that refuses
+  to delete a pinned record still refuses it when the record is one of forty
+  checkboxes. A partial result is a 200 carrying both lists; at most 200 ids
+  per request.
+
+- **Case-insensitive search and text filters**, correct per provider —
+  `mode: 'insensitive'` where Prisma accepts it, nothing where the collation
+  already ignores case and Prisma would throw.
+
+- **Deliberate empty states.** "No records yet" offers to create the first one;
+  "nothing matches this search" offers to clear the search. They look the same
+  and have opposite remedies.
+
+- **Accessibility**: a skip link past the resource list, a visible focus ring,
+  named checkboxes and tables, `aria-invalid` and `aria-describedby` on refused
+  inputs, `aria-busy` while rows are being replaced, and a contrast pass — the
+  muted text colour and the active navigation item both failed WCAG AA and now
+  measure 5.0:1 and 7.3:1.
+
+### Changed
+
+- A page change or a new search term **keeps the previous rows on screen**,
+  dimmed, instead of replacing the table with a line of text and putting it
+  back — a flash that reads as a bug.
+- Form labels associate by `for`/`id` rather than by wrapping the control. A
+  wrapping label takes its whole text content as the field's accessible name,
+  so adding a message inside one renamed the field to include the error.
+- The resource list becomes a scrolling row below 700px.
+
+### Fixed
+
+- Prisma 7 with a driver adapter nests constraint metadata at
+  `meta.driverAdapterError.cause.constraint.fields` rather than `meta.target`,
+  so field names were missing from unique violations. Both shapes are read.
+- A handful of visible strings used the raw model name where the rest of the
+  interface uses the configured label — the search box announced "Search User"
+  on a resource called "People".
+- A missing required value arrives as `PrismaClientValidationError`, which
+  carries no error code and so matched nothing. It is now recognised by name,
+  and only the ``Argument `x` is missing`` phrase is read from its message —
+  the rest renders the call site and the submitted data.
+
+### Known limitations
+
+- Bulk delete is **not transactional** and runs one statement per record —
+  about 7 ms each, so a full selection of 200 takes roughly 1.4 s.
+- Free-text search on SQLite ignores case for ASCII only; `LIKE` is defined
+  that way and Prisma offers no option to change it there.
+- Dark mode still follows the operating system; there is no toggle.
+
+---
+
 ## 0.6.0
 
 The seams an application writes into. People adopt an admin for what it does on
