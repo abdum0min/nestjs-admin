@@ -326,3 +326,46 @@ describe('a self-relation', () => {
     expect(reports.data[0]!['manager']).toMatchObject({ name: 'Grace' })
   })
 })
+
+describe('scoping a query to a subset of fields', () => {
+  it('omits the rest from the result', async () => {
+    // The caller says which fields the admin exposes; the adapter reads a
+    // schema and would otherwise return every column.
+    const page = await adapter.list('User', { fields: ['id', 'name'] })
+
+    expect(Object.keys(page.data[0]!).sort()).toEqual(['id', 'name'])
+    expect(page.data[0]).not.toHaveProperty('email')
+  })
+
+  it('does not search a field outside the scope', async () => {
+    // The stronger half of the guarantee: a hidden column must not be
+    // discoverable by searching for values in it.
+    const page = await adapter.list('User', { search: 'ada@example.com', fields: ['id', 'name'] })
+
+    expect(page.total).toBe(0)
+    expect((await adapter.list('User', { search: 'ada@example.com' })).total).toBe(1)
+  })
+
+  it('refuses to filter or sort by a field outside the scope', async () => {
+    for (const query of [
+      { filters: [{ field: 'email', operator: 'eq' as const, value: 'x' }] },
+      { sort: [{ field: 'email', direction: 'asc' as const }] },
+    ]) {
+      await expect(adapter.list('User', { ...query, fields: ['id', 'name'] })).rejects.toThrow(
+        /Unknown field "email"/,
+      )
+    }
+  })
+
+  it('still loads relations that are in scope', async () => {
+    const page = await adapter.list('Post', { fields: ['id', 'title', 'authorId', 'author'] })
+
+    expect(page.data[0]).toMatchObject({ author: { name: 'Ada Lovelace' } })
+  })
+
+  it('applies to a related list too', async () => {
+    const page = await adapter.listRelated('User', authorId, 'posts', { fields: ['id', 'title'] })
+
+    expect(Object.keys(page.data[0]!).sort()).toEqual(['id', 'title'])
+  })
+})

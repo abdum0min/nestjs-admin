@@ -89,12 +89,17 @@ export class PrismaAdapter implements OrmAdapter {
   }
 
   async list(model: string, query: ListQuery): Promise<Page<RecordData>> {
-    const metadata = await this.#requireModel(model)
+    const declared = await this.#requireModel(model)
     const delegate = await this.#delegate(model)
+
+    // Narrowed first: everything below reads the model, so restricting it once
+    // restricts field lookup, free-text search and relation loading together.
+    const metadata = narrowFields(declared, query.fields)
 
     const args = toFindManyArgs(metadata, query)
     const include = toIncludeClause(metadata, await this.getModels())
-    const withRelations = include ? { ...args, include } : args
+    const omit = omitClause(declared, query.fields)
+    const withRelations = { ...args, ...(include ? { include } : {}), ...(omit ? { omit } : {}) }
     const { page, perPage } = resolvePagination(query)
 
     const [rows, total] = await this.#run(model, () =>
@@ -171,14 +176,21 @@ export class PrismaAdapter implements OrmAdapter {
     await this.#requireRecord(model, metadata, id)
     const delegate = await this.#delegate(target.name)
 
-    const args = toFindManyArgs(target, query)
+    const narrowed = narrowFields(target, query.fields)
+    const args = toFindManyArgs(narrowed, query)
     const combined = args.where ? { AND: [args.where, where] } : where
-    const include = toIncludeClause(target, models)
+    const include = toIncludeClause(narrowed, models)
+    const omit = omitClause(target, query.fields)
 
     const { page, perPage } = resolvePagination(query)
     const [rows, total] = await this.#run(target.name, () =>
       Promise.all([
-        delegate.findMany({ ...args, where: combined, ...(include ? { include } : {}) }),
+        delegate.findMany({
+          ...args,
+          where: combined,
+          ...(include ? { include } : {}),
+          ...(omit ? { omit } : {}),
+        }),
         delegate.count({ where: combined }),
       ]),
     )
@@ -388,4 +400,45 @@ function isPrismaError(value: unknown): value is { code: string } {
     'code' in value &&
     typeof (value as { code: unknown }).code === 'string'
   )
+}
+
+/**
+ * The model as this query is allowed to see it.
+ *
+ * Narrowing once, at the top, is what keeps the rest of the adapter honest:
+ * field lookup, free-text search and relation loading all read the model, so
+ * they inherit the restriction without knowing it exists. Doing it per-concern
+ * would mean three places to forget.
+ */
+function narrowFields(model: ModelMetadata, fields: readonly string[] | undefined): ModelMetadata {
+  if (!fields) return model
+
+  const allowed = new Set(fields)
+  return { ...model, fields: model.fields.filter((field) => allowed.has(field.name)) }
+}
+
+/**
+ * Columns to leave out of the result.
+ *
+ * `omit` rather than `select` because it composes with `include`: a `select`
+ * would have to enumerate the relations too, and would silently drop any the
+ * caller forgot. This way a hidden column is never read at all, which is a
+ * stronger guarantee than removing it from the response afterwards.
+ */
+function omitClause(
+  model: ModelMetadata,
+  fields: readonly string[] | undefined,
+): Record<string, true> | undefined {
+  if (!fields) return undefined
+
+  const allowed = new Set(fields)
+  const omitted: Record<string, true> = {}
+
+  for (const field of model.fields) {
+    // Relations are excluded through `include`, not `omit`; Prisma rejects
+    // naming them here.
+    if (!allowed.has(field.name) && field.kind !== 'relation') omitted[field.name] = true
+  }
+
+  return Object.keys(omitted).length > 0 ? omitted : undefined
 }
