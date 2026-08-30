@@ -17,10 +17,9 @@
  *   ?filter=age:gte:18&filter=role:in:ADMIN,USER
  *
  * `sort` and `filter` use the same colon-delimited form rather than bracket
- * syntax (`filter[age][gte]=18`). Bracket syntax depends on the HTTP platform
- * enabling a nested query parser - `qs` under Express - and would silently
- * arrive as a literal key elsewhere. Colon form parses identically on any
- * platform.
+ * syntax (`filter[age][gte]=18`), which parses differently on every platform.
+ * Bracket syntax is rejected with a 400 rather than ignored - see
+ * `rejectUnknownParameters` for why that took two guards.
  *
  * A filter is split into at most three parts, so colons inside a value survive:
  * `filter=startedAt:gte:2024-01-01T00:00:00Z` reads as
@@ -68,14 +67,81 @@ void _exhaustive
 
 const SORT_DIRECTIONS = new Set<string>(['asc', 'desc'])
 
+/**
+ * Reject a parameter that arrived as a structure rather than text.
+ *
+ * Express parses `?filter[age][gte]=18` into `{ filter: { age: { gte: '18' } } }`.
+ * Every value this parser understands is a string or a list of strings, so an
+ * object could only ever be bracket syntax - which this API does not use.
+ *
+ * It previously fell through as "no value", which meant the request **succeeded
+ * with the filter silently dropped**: a caller believed it had filtered and
+ * received every record instead. Returning more rows than asked for, quietly,
+ * is worse than refusing the request, so this is now a 400 that names the
+ * syntax the server does accept.
+ */
+function rejectStructuredValue(name: string, value: unknown): void {
+  if (value === undefined || value === null) return
+  if (typeof value === 'string') return
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return
+
+  throw new InvalidQueryError(
+    `"${name}" must be a plain value, not a nested structure. ` +
+      'This API uses colon syntax - for example ' +
+      '"?filter=age:gte:18" and "?sort=email:asc", not "?filter[age][gte]=18".',
+  )
+}
+
+/** Every parameter this API understands. Anything else is a client mistake. */
+const KNOWN_PARAMETERS = new Set(['page', 'perPage', 'search', 'sort', 'filter'])
+
+/**
+ * Reject query parameters the API does not define.
+ *
+ * The motivating case is bracket syntax, and it needs this *as well as*
+ * `rejectStructuredValue` because how it arrives depends on the platform's
+ * query parser. Measured on Express 5 under NestJS 12, which uses the simple
+ * parser, `?filter[age][gte]=18` arrives as a literal key:
+ *
+ *     { 'filter[age][gte]': '18' }
+ *
+ * so nothing lands on `filter` at all. Under an extended parser (`qs`) the same
+ * URL arrives as a nested object on `filter` instead. One guard catches each
+ * shape, which is what keeps the behaviour identical on either platform.
+ *
+ * Either way the old outcome was the dangerous one: the request succeeded and
+ * the filter was silently dropped, so a caller believed it had filtered and got
+ * every record back.
+ *
+ * The strictness is deliberate beyond that case. An unrecognised parameter is
+ * always a bug - a typo, a stale client, a half-migrated integration - and
+ * ignoring it is what let this go unnoticed in the first place.
+ */
+function rejectUnknownParameters(raw: RawQuery): void {
+  const unknown = Object.keys(raw).filter((key) => !KNOWN_PARAMETERS.has(key))
+  if (unknown.length === 0) return
+
+  const looksBracketed = unknown.some((key) => key.includes('['))
+  const hint = looksBracketed
+    ? ' This API uses colon syntax: "?filter=age:gte:18", not "?filter[age][gte]=18".'
+    : ''
+
+  throw new InvalidQueryError(
+    `Unknown query parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. ` +
+      `Supported: ${[...KNOWN_PARAMETERS].join(', ')}.${hint}`,
+  )
+}
+
 /** Normalise a query value that may be absent, a string, or repeated. */
-function toStringList(value: unknown): string[] {
+function toStringList(name: string, value: unknown): string[] {
+  rejectStructuredValue(name, value)
   if (value === undefined || value === null) return []
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string')
   return typeof value === 'string' ? [value] : []
 }
 
-function toSingleString(value: unknown): string | undefined {
+function toSingleString(name: string, value: unknown): string | undefined {
+  rejectStructuredValue(name, value)
   if (typeof value === 'string') return value
   // A repeated scalar param is a client bug; take the last rather than fail.
   if (Array.isArray(value)) {
@@ -102,7 +168,7 @@ function parsePositiveInteger(raw: string | undefined, name: string): number | u
 }
 
 function parseSort(raw: unknown): readonly SortRule[] | undefined {
-  const entries = toStringList(raw).filter((entry) => entry.trim() !== '')
+  const entries = toStringList('sort', raw).filter((entry) => entry.trim() !== '')
   if (entries.length === 0) return undefined
 
   return entries.map((entry) => {
@@ -171,7 +237,7 @@ function coerceList(raw: string, field: FieldMetadata | undefined, context: stri
 }
 
 function parseFilters(raw: unknown, model: ModelMetadata): readonly FilterRule[] | undefined {
-  const entries = toStringList(raw).filter((entry) => entry.trim() !== '')
+  const entries = toStringList('filter', raw).filter((entry) => entry.trim() !== '')
   if (entries.length === 0) return undefined
 
   return entries.map((entry) => {
@@ -215,11 +281,13 @@ function parseFilters(raw: unknown, model: ModelMetadata): readonly FilterRule[]
  * knows that `price` is a number and `active` a boolean.
  */
 export function parseListQuery(raw: RawQuery, model: ModelMetadata): ListQuery {
-  const page = parsePositiveInteger(toSingleString(raw['page']), 'page')
-  const perPage = parsePositiveInteger(toSingleString(raw['perPage']), 'perPage')
+  rejectUnknownParameters(raw)
+
+  const page = parsePositiveInteger(toSingleString('page', raw['page']), 'page')
+  const perPage = parsePositiveInteger(toSingleString('perPage', raw['perPage']), 'perPage')
   const sort = parseSort(raw['sort'])
   const filters = parseFilters(raw['filter'], model)
-  const search = toSingleString(raw['search'])
+  const search = toSingleString('search', raw['search'])
 
   return {
     ...(page !== undefined ? { page } : {}),

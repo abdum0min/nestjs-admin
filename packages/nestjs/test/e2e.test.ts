@@ -271,19 +271,34 @@ describe('the wire format the admin UI generates', () => {
     })
   }
 
-  it('silently ignores bracket syntax rather than rejecting it', async () => {
-    // FINDING, recorded rather than fixed in this phase. Express parses
-    // `filter[age][gte]=18` into an object; the query parser accepts only
-    // strings, so the filter is dropped and the request succeeds *unfiltered*.
-    //
-    // Our client never emits brackets, so this does not affect the admin UI -
-    // but a third-party caller using bracket syntax would silently receive more
-    // records than it asked for, which is worse than a 400. Changing the Phase 3
-    // parser is out of scope here; see reports/007-admin-ui.md.
-    const all = await http().get('/admin/User').expect(200)
-    const bracketed = await http().get('/admin/User?filter[age][gte]=999').expect(200)
+  it('rejects bracket syntax instead of silently ignoring it', async () => {
+    // Phase 6 recorded this returning 200 with the filter dropped, so a caller
+    // believed it had filtered and received every record. Now a 400 that names
+    // the syntax the server does accept.
+    const { body } = await http().get('/admin/User?filter[age][gte]=18').expect(400)
 
-    expect(bracketed.body.meta.total).toBe(all.body.meta.total)
+    expect(body.error.code).toBe('INVALID_QUERY')
+    expect(body.error.message).toContain('filter[age][gte]')
+    expect(body.error.message).toMatch(/colon syntax/i)
+  })
+
+  it('rejects an unknown parameter rather than ignoring it', async () => {
+    const { body } = await http().get('/admin/User?sortBy=email').expect(400)
+
+    expect(body.error.code).toBe('INVALID_QUERY')
+    expect(body.error.message).toMatch(/sortBy/)
+  })
+
+  it('never drops a filter that it accepted', async () => {
+    // The guarantee behind both rejections: a 200 means every rule was applied.
+    await seed()
+    const all = await http().get('/admin/User').expect(200)
+    const filtered = await http()
+      .get('/admin/User?filter=email:contains:definitely-no-such-address')
+      .expect(200)
+
+    expect(all.body.meta.total).toBeGreaterThan(0)
+    expect(filtered.body.meta.total).toBe(0)
   })
 
   it('describes metadata with exactly the keys the UI reads', async () => {
