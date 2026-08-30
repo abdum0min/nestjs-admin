@@ -209,6 +209,22 @@ describe('search', () => {
     expect(names(page.data)).toEqual(['Ember'])
   })
 
+  it('ignores capitalisation', async () => {
+    // Typing "candle" and being told there is no Candle is the defect people
+    // conclude the search is broken from, and they are not wrong.
+    expect(names((await adapter.list('Product', { search: 'CANDLE' })).data)).toEqual(['Candle'])
+    expect(names((await adapter.list('Product', { search: 'aNvI' })).data)).toEqual(['Anvil'])
+  })
+
+  it('ignores capitalisation in a contains filter too', async () => {
+    // Same promise, different box. It would be strange for one to ignore case
+    // and not the other, and stranger still to have to know which.
+    const page = await adapter.list('Product', {
+      filters: [{ field: 'name', operator: 'contains', value: 'BUCK' }],
+    })
+    expect(names(page.data)).toEqual(['Bucket'])
+  })
+
   it('does not match against opaque generated ids', async () => {
     // Product ids are cuids. Searching a single letter must not match a
     // record just because its random id happens to contain that letter.

@@ -105,18 +105,40 @@ describe('CRUD against a real database', () => {
     await http().get(`/admin/User/${id}`).expect(404)
   })
 
-  it('surfaces a database constraint failure as a safe 500', async () => {
+  it('answers a duplicate value with a conflict naming the field', async () => {
     await http().post('/admin/User').send({ email: 'dupe@example.com', name: 'One' }).expect(201)
 
     const { body } = await http()
       .post('/admin/User')
       .send({ email: 'dupe@example.com', name: 'Two' })
-      .expect(500)
+      .expect(409)
 
-    expect(body.error.code).toBe('INTERNAL_ERROR')
+    expect(body.error.code).toBe('CONSTRAINT_VIOLATION')
+    expect(body.error.message).toBe('Another User already has this email.')
+    expect(body.error.details).toEqual({ constraint: 'unique', fields: ['email'] })
     // The adapter's message names Prisma and a source path; neither may escape.
-    expect(body.error.message).not.toMatch(/prisma/i)
-    expect(body.error.message).not.toContain('adapter.ts')
+    expect(JSON.stringify(body)).not.toMatch(/prisma/i)
+    expect(JSON.stringify(body)).not.toContain('adapter.ts')
+  })
+
+  it('answers a missing required value with a 400 naming the field', async () => {
+    const { body } = await http().post('/admin/User').send({ name: 'Nameless' }).expect(400)
+
+    expect(body.error.code).toBe('CONSTRAINT_VIOLATION')
+    expect(body.error.message).toBe('email is required.')
+    expect(body.error.details).toEqual({ constraint: 'required', fields: ['email'] })
+    // Prisma renders the submitted data and an absolute path into this one.
+    expect(JSON.stringify(body)).not.toMatch(/invocation|.ts/)
+  })
+
+  it('answers a reference to a missing record with a conflict', async () => {
+    const { body } = await http()
+      .post('/admin/Post')
+      .send({ title: 'Orphan', authorId: 'nobody' })
+      .expect(409)
+
+    expect(body.error.code).toBe('CONSTRAINT_VIOLATION')
+    expect(body.error.details.constraint).toBe('foreign-key')
   })
 })
 

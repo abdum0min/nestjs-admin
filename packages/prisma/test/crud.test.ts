@@ -7,6 +7,7 @@
  * catch.
  */
 import {
+  ConstraintError,
   FieldNotFoundError,
   InvalidQueryError,
   ModelNotFoundError,
@@ -85,13 +86,43 @@ describe('create', () => {
     ).rejects.toThrow(FieldNotFoundError)
   })
 
-  it('surfaces a database constraint failure as a framework error', async () => {
+  it('reports a duplicate value as a constraint error naming the field', async () => {
     await adapter.create('User', { email: 'dupe@example.com', name: 'One' })
 
     // The unique constraint on email is enforced by the database, not by us.
-    await expect(
-      adapter.create('User', { email: 'dupe@example.com', name: 'Two' }),
-    ).rejects.toThrow(/Prisma operation failed for model "User"/)
+    const failure = await adapter
+      .create('User', { email: 'dupe@example.com', name: 'Two' })
+      .catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ConstraintError)
+    expect(failure).toMatchObject({ constraint: 'unique', model: 'User', fields: ['email'] })
+    // Written here from the field name, never taken from Prisma's own text.
+    expect((failure as Error).message).toBe('Another User already has this email.')
+    expect((failure as Error).message).not.toMatch(/prisma/i)
+  })
+
+  it('reports a missing required value as a constraint error', async () => {
+    // This one never reaches the database: Prisma refuses it as a
+    // `PrismaClientValidationError`, which carries no code, so it arrives by a
+    // different route than every other constraint here.
+    const failure = await adapter
+      .create('User', { name: 'Nameless' })
+      .catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ConstraintError)
+    expect(failure).toMatchObject({ constraint: 'required', model: 'User', fields: ['email'] })
+    expect((failure as Error).message).toBe('email is required.')
+    // That error's own text renders the call site and the submitted data.
+    expect((failure as Error).message).not.toMatch(/prisma|invocation|.ts/i)
+  })
+
+  it('reports a reference to a missing record as a constraint error', async () => {
+    const failure = await adapter
+      .create('Post', { title: 'Orphan', authorId: 'nobody' })
+      .catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ConstraintError)
+    expect(failure).toMatchObject({ constraint: 'foreign-key', model: 'Post' })
   })
 })
 

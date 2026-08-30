@@ -6,7 +6,7 @@
  * appears in the application source, so a schema the UI has never seen must
  * render correctly.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
@@ -199,14 +199,31 @@ describe('the generic list', () => {
     routeFetch({ '/meta': metaOk([USER_MODEL]), '/User': listOk([]) })
     render(<App />)
 
-    expect(await screen.findByText(/no user records match/i)).toBeDefined()
+    // An empty table and an empty search result look the same and have
+    // opposite remedies, so they say different things. This is the first.
+    expect(await screen.findByText(/no user records yet/i)).toBeDefined()
+    expect(screen.getByRole('button', { name: /create the first one/i })).toBeTruthy()
+  })
+
+  it('offers to widen the view when a search excludes everything', async () => {
+    routeFetch({ '/meta': metaOk([USER_MODEL]), '/User': listOk([]) })
+    render(<App />)
+
+    fireEvent.change(await screen.findByLabelText(/search user/i), {
+      target: { value: 'zzzz' },
+    })
+
+    expect(await screen.findByText(/no user matches this search/i)).toBeDefined()
+    // Not "create the first one": there may be thousands, none of them this.
+    expect(screen.queryByRole('button', { name: /create the first one/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /clear search and filters/i })).toBeTruthy()
   })
 
   it('requests the model with pagination', async () => {
     routeFetch({ '/meta': metaOk([USER_MODEL]), '/User': listOk([]) })
     render(<App />)
 
-    await screen.findByText(/no user records match/i)
+    await screen.findByText(/no user records yet/i)
 
     const listCall = fetchMock.mock.calls.find((call) => String(call[0]).includes('/User'))
     const url = decodeURIComponent(String(listCall?.[0]))

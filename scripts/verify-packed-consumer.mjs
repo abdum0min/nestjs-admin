@@ -40,6 +40,9 @@ let server
 const run = (command, args, options = {}) =>
   execFileSync(command, args, { stdio: 'pipe', shell: process.platform === 'win32', ...options })
 
+/** Text that only Prisma produces: a call site, a source path, a file name. */
+const ORM_TEXT = /prisma|invocation|[.]ts:/i
+
 const checks = []
 const check = (label, actual, expected) => {
   const ok = String(actual) === String(expected)
@@ -81,7 +84,19 @@ try {
     [
       'generator client {\n  provider = "prisma-client-js"\n}\n',
       'datasource db {\n  provider = "sqlite"\n}\n',
-      'model Widget {\n  id    String @id @default(cuid())\n  name  String\n  price Float  @default(0)\n}\n',
+      // The @unique and the required column are load-bearing: constraint
+      // mapping reads Prisma's error metadata, whose shape depends on whether
+      // the consumer built their client with a driver adapter. In-repo tests
+      // see one shape; this is the only place the other one turns up.
+      [
+        'model Widget {',
+        '  id    String @id @default(cuid())',
+        '  name  String',
+        '  code  String @unique',
+        '  price Float  @default(0)',
+        '}',
+        '',
+      ].join(String.fromCharCode(10)),
     ].join('\n'),
   )
   writeFileSync(
@@ -183,7 +198,7 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
     await fetch(`${BASE}/Widget`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Packed Widget', price: 9.5 }),
+      body: JSON.stringify({ name: 'Packed Widget', code: 'w-1', price: 9.5 }),
     })
   ).json()
   check('POST /admin/Widget (create)', created.success, true)
@@ -212,6 +227,38 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
   check('  unknown filter field', await errorCode('/Widget?filter=nope:eq:1'), 'FIELD_NOT_FOUND')
   check('  unknown model', await errorCode('/Nope'), 'MODEL_NOT_FOUND')
   check('  missing record', await errorCode('/Widget/nope'), 'RECORD_NOT_FOUND')
+  // A duplicate value, a missing required one, and a selection deleted at
+  // once - the three things an ordinary person does that used to answer 500.
+  const write = (body, method = 'POST') => ({
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  const duplicate = await (
+    await fetch(`${BASE}/Widget`, write({ name: 'Clash', code: 'w-1', price: 1 }))
+  ).json()
+  check('  duplicate value is a conflict', duplicate.error?.code, 'CONSTRAINT_VIOLATION')
+  check('    naming the field', (duplicate.error?.details?.fields ?? []).join(','), 'code')
+  check('    with no ORM text', ORM_TEXT.test(JSON.stringify(duplicate)), false)
+
+  const missing = await (await fetch(`${BASE}/Widget`, write({ price: 1 }))).json()
+  check('  missing required value', missing.error?.code, 'CONSTRAINT_VIOLATION')
+  check('    with nothing echoed back', ORM_TEXT.test(JSON.stringify(missing)), false)
+
+  const second = await (
+    await fetch(`${BASE}/Widget`, write({ name: 'Second', code: 'w-2', price: 2 }))
+  ).json()
+  const bulk = await (
+    await fetch(`${BASE}/Widget`, write({ ids: [second.data.id, 'nope'] }, 'DELETE'))
+  ).json()
+  check('DELETE /admin/Widget (bulk)', bulk.data?.deleted?.length, 1)
+  check('  reports what survived', bulk.data?.failed?.length, 1)
+  check(
+    '  refuses a bad body',
+    await errorCode('/Widget', write({ ids: 'x' }, 'DELETE')),
+    'INVALID_QUERY',
+  )
   check('DELETE /admin/Widget/:id', await status(`/Widget/${id}`, { method: 'DELETE' }), 200)
   check('  record is gone', await status(`/Widget/${id}`), 404)
 
