@@ -25,6 +25,20 @@ export function createTestClient(): PrismaClient {
   })
 }
 
+/**
+ * A client that reports every statement it runs.
+ *
+ * For the tests that make a claim about *how many* queries something costs.
+ * Asserting an N+1 is avoided without counting queries would only assert that
+ * the results look right, which they do either way.
+ */
+export function createCountingTestClient(): PrismaClient {
+  return new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: `file:${DATABASE_FILE}` }),
+    log: [{ emit: 'event', level: 'query' }],
+  })
+}
+
 /** Empty every table. Posts first - they reference users. */
 export async function resetDatabase(client: PrismaClient): Promise<void> {
   await client.post.deleteMany({})

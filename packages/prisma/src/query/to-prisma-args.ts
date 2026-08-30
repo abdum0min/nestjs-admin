@@ -33,18 +33,52 @@ export interface PrismaFindManyArgs {
 }
 
 /**
- * A field usable in a filter, sort, or write.
+ * What the field is being resolved for.
  *
- * Relations and list fields are excluded: the MVP has no nested relation
- * querying, and pretending otherwise would produce Prisma errors that surface
- * to users as opaque failures.
+ * Only relations care, and they care because the two cases are not symmetric.
+ * See {@link findQueryableField}.
  */
-function findQueryableField(model: ModelMetadata, fieldName: string): FieldMetadata {
+type QueryPurpose = 'filter' | 'sort'
+
+/**
+ * A field usable in a filter or a sort.
+ *
+ * A to-one relation the model owns is stored in a scalar column, so a **filter**
+ * on `author` is answerable: it means exactly a filter on `authorId`, and the
+ * caller gets to use whichever name they think in.
+ *
+ * **Sorting** by it is refused, even though it would run. `authorId` holds a
+ * cuid, so ordering by it is ordering by a random-looking string - a result
+ * that looks sorted, is stable, and means nothing. What someone asking to sort
+ * by `author` wants is the author's *name*, which is sorting by a field on
+ * another model and is not this version. A refusal that says so is better than
+ * a page of rows in an order nobody can explain.
+ *
+ * List fields are excluded outright: there is no column on this side at all.
+ */
+function findQueryableField(
+  model: ModelMetadata,
+  fieldName: string,
+  purpose: QueryPurpose,
+): FieldMetadata {
   const field = model.fields.find((candidate) => candidate.name === fieldName)
   if (!field) {
     throw new FieldNotFoundError(model.name, fieldName)
   }
   if (field.kind === 'relation') {
+    const owned = field.relation?.from
+    if (owned !== undefined && field.relation?.cardinality === 'one') {
+      if (purpose === 'filter') return findQueryableField(model, owned, purpose)
+
+      throw new FieldNotFoundError(
+        model.name,
+        fieldName,
+        `Sorting by a relation is not supported in this version. ` +
+          `Sorting by "${owned}" would order by an opaque key rather than by ` +
+          `anything readable.`,
+      )
+    }
+
     throw new FieldNotFoundError(
       model.name,
       fieldName,
@@ -62,7 +96,7 @@ function findQueryableField(model: ModelMetadata, fieldName: string): FieldMetad
 }
 
 function toPrismaCondition(model: ModelMetadata, rule: FilterRule): Record<string, unknown> {
-  const field = findQueryableField(model, rule.field)
+  const field = findQueryableField(model, rule.field, 'filter')
 
   if (STRING_ONLY_OPERATORS.has(rule.operator) && field.kind !== 'string') {
     throw new InvalidQueryError(
@@ -111,8 +145,20 @@ function toSearchCondition(
   model: ModelMetadata,
   term: string,
 ): Record<string, unknown> | undefined {
+  // Foreign keys are string columns holding a cuid, so they match the same
+  // rule the generated-id exclusion exists for - and they are not generated,
+  // so that rule misses them. Left in, a search for "e" matches almost every
+  // row of any model that references another, because most cuids contain an e.
+  const foreignKeys = new Set(
+    model.fields.map((field) => field.relation?.from).filter((name) => name !== undefined),
+  )
+
   const stringFields = model.fields.filter(
-    (field) => field.kind === 'string' && !field.isList && !field.isGenerated,
+    (field) =>
+      field.kind === 'string' &&
+      !field.isList &&
+      !field.isGenerated &&
+      !foreignKeys.has(field.name),
   )
   if (stringFields.length === 0) return undefined
 
@@ -150,7 +196,7 @@ function buildOrderBy(
   if (rules.length === 0) return undefined
 
   return rules.map((rule) => {
-    const field = findQueryableField(model, rule.field)
+    const field = findQueryableField(model, rule.field, 'sort')
     return { [field.name]: rule.direction }
   })
 }

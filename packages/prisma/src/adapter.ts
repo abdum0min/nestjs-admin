@@ -25,6 +25,7 @@ import { resolveDelegate, type PrismaModelDelegate } from './client/delegate.js'
 import { assertSupportedPrismaVersion } from './client/version-gate.js'
 import { readPrismaDmmf } from './metadata/read-dmmf.js'
 import { toModelMetadata } from './metadata/to-metadata.js'
+import { toIncludeClause } from './query/to-include.js'
 import { resolvePagination, toFindManyArgs } from './query/to-prisma-args.js'
 
 /** Prisma's error code for "record required but not found". */
@@ -91,11 +92,13 @@ export class PrismaAdapter implements OrmAdapter {
     const delegate = await this.#delegate(model)
 
     const args = toFindManyArgs(metadata, query)
+    const include = toIncludeClause(metadata, await this.getModels())
+    const withRelations = include ? { ...args, include } : args
     const { page, perPage } = resolvePagination(query)
 
     const [rows, total] = await this.#run(model, () =>
       Promise.all([
-        delegate.findMany(args),
+        delegate.findMany(withRelations),
         delegate.count(args.where ? { where: args.where } : {}),
       ]),
     )
@@ -108,7 +111,10 @@ export class PrismaAdapter implements OrmAdapter {
     const delegate = await this.#delegate(model)
     const where = this.#whereById(metadata, id)
 
-    const record = await this.#run(model, () => delegate.findUnique({ where }))
+    const include = toIncludeClause(metadata, await this.getModels())
+    const record = await this.#run(model, () =>
+      delegate.findUnique(include ? { where, include } : { where }),
+    )
     return (record as RecordData | null) ?? null
   }
 
