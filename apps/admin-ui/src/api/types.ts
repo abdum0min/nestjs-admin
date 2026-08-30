@@ -38,6 +38,15 @@ export interface RelationDescriptor {
 
 export type FieldWidget = 'textarea' | 'password' | 'email' | 'url' | 'color' | 'json'
 
+/** An application-defined button. */
+export interface ActionDescriptor {
+  readonly name: string
+  readonly label: string
+  readonly scope: 'record' | 'list'
+  readonly confirm?: string
+  readonly danger?: boolean
+}
+
 /** Which operations the current principal may perform on a model. */
 export interface ModelPermissions {
   readonly list: boolean
@@ -81,6 +90,8 @@ export interface ModelDescriptor {
    * again - but what the interface should offer.
    */
   readonly can?: ModelPermissions
+  /** Buttons the application added, already filtered by the policy. */
+  readonly actions?: readonly ActionDescriptor[]
 }
 
 export interface Metadata {
@@ -107,6 +118,7 @@ export type AdminErrorCode =
   | 'RECORD_NOT_FOUND'
   | 'FIELD_NOT_FOUND'
   | 'INVALID_QUERY'
+  | 'VALIDATION_ERROR'
   | 'INTERNAL_ERROR'
 
 export interface SuccessEnvelope<T> {

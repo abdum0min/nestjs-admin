@@ -215,3 +215,22 @@ export async function detachRelated(
     { method: 'DELETE' },
   )
 }
+
+/**
+ * Run an application-defined action.
+ *
+ * `id` is present for a record-scoped action and absent for a list-scoped one;
+ * the server refuses the mismatch rather than guessing.
+ */
+export async function runAction(
+  model: string,
+  action: string,
+  id?: string,
+): Promise<{ message?: string }> {
+  const path =
+    `/actions/${encodeURIComponent(model)}/${encodeURIComponent(action)}` +
+    (id === undefined ? '' : `/${encodeURIComponent(id)}`)
+
+  const { data } = await request<{ message?: string }>(path, { method: 'POST' })
+  return data ?? {}
+}

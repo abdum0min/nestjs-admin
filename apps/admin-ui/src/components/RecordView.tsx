@@ -14,6 +14,7 @@ import { fieldLabel } from '../metadata/fields.js'
 import { formatDetail } from '../metadata/format.js'
 import { relationLink } from '../metadata/relations.js'
 import { RelatedList } from './RelatedList.jsx'
+import { Actions } from './Actions.jsx'
 import { ErrorState, Loading } from './States.jsx'
 
 export function RecordView({
@@ -60,6 +61,7 @@ export function RecordView({
           </h1>
         </div>
         <div className="record__actions">
+          <Actions model={model} scope="record" id={id} onDone={state.reload} />
           {model.can?.update === false ? null : (
             <button type="button" onClick={() => navigate({ kind: 'edit', model: model.name, id })}>
               Edit

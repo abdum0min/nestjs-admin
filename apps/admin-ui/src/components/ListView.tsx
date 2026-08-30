@@ -27,6 +27,7 @@ import {
 import { fieldLabel, modelLabel } from '../metadata/fields.js'
 import { formatCell } from '../metadata/format.js'
 import { relationForForeignKey, relationLink } from '../metadata/relations.js'
+import { Actions } from './Actions.jsx'
 import { Empty, ErrorState, Loading } from './States.jsx'
 
 const PER_PAGE = 25
@@ -107,6 +108,7 @@ export function ListView({
         {/* Not offered when the policy would refuse it. The request is checked
             again when it arrives; this only stops the interface promising
             something it cannot deliver. */}
+        <Actions model={model} scope="list" onDone={state.reload} />
         {model.can?.create === false ? null : (
           <button type="button" onClick={() => navigate({ kind: 'create', model: model.name })}>
             New {modelLabel(model)}

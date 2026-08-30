@@ -30,6 +30,7 @@ const HEADINGS: Readonly<Record<AdminErrorCode, string>> = {
   RECORD_NOT_FOUND: 'Record not found',
   FIELD_NOT_FOUND: 'Unknown field',
   INVALID_QUERY: 'Invalid request',
+  VALIDATION_ERROR: 'Not accepted',
   INTERNAL_ERROR: 'Something went wrong',
 }
 
@@ -40,6 +41,9 @@ const HINTS: Readonly<Record<AdminErrorCode, string>> = {
   RECORD_NOT_FOUND: 'It may have been deleted.',
   FIELD_NOT_FOUND: 'Reset the filters and try again.',
   INVALID_QUERY: 'Adjust the filters or the page and try again.',
+  // The server's message says what is wrong and is shown beside this, so the
+  // hint only has to point at where the correction goes.
+  VALIDATION_ERROR: 'Change the value and try again.',
   INTERNAL_ERROR: 'Try again. If it keeps happening, contact an administrator.',
 }
 

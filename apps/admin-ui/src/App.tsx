@@ -14,6 +14,7 @@ import { RecordView } from './components/RecordView.jsx'
 import { Empty, ErrorState, Loading } from './components/States.jsx'
 import { useAsync } from './hooks/use-async.js'
 import { href, useRoute } from './hooks/use-route.js'
+import { theme } from './metadata/theme.js'
 
 export function App() {
   const route = useRoute()
@@ -106,7 +107,12 @@ function Shell({
   return (
     <div className="shell">
       <header className="shell__bar">
-        <a href="#/">Admin</a>
+        <a href="#/">
+          {theme.logoUrl === undefined ? null : (
+            <img className="brand__logo" src={theme.logoUrl} alt="" />
+          )}
+          {theme.title ?? 'Admin'}
+        </a>
       </header>
 
       <div className="shell__body">

@@ -14,6 +14,8 @@
   --line: #d7dee7;
   --accent: #2e5aac;
   --danger: #9e362e;
+  /* Overridden by the server's theme block when one is configured. */
+  --surface-2: #eef1f5;
 
   font-family:
     ui-sans-serif,
@@ -23,6 +25,26 @@
     sans-serif;
   line-height: 1.5;
   color: var(--ink);
+}
+
+/*
+ * The viewer's theme, honoured rather than imposed.
+ *
+ * Only the tokens are redefined; every component reads them, so nothing else
+ * has to know a second palette exists. An application that sets a brand colour
+ * keeps it in both - the server's block is emitted after this file and wins.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #10141a;
+    --surface: #171d25;
+    --surface-2: #1f2731;
+    --ink: #e3e8ee;
+    --muted: #93a0b1;
+    --line: #2a333f;
+    --accent: #7aa2f7;
+    --danger: #f08a80;
+  }
 }
 
 * {
@@ -467,4 +489,31 @@ button.link {
   flex-basis: 100%;
   margin: 0;
   font-size: 0.9em;
+}
+
+/* --------------------------------------------------------------- actions --
+   Buttons the application added. Drawn from metadata, so this file knows
+   nothing about what any of them do.                                        */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.actions__result {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+/* The logo sits with the title rather than replacing it: an image alone is not
+   a link anyone can read out. */
+.brand__logo {
+  height: 20px;
+  width: auto;
+  vertical-align: -4px;
+  margin-right: 8px;
 }
