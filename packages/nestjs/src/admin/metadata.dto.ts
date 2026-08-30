@@ -18,10 +18,13 @@
 import {
   detachBlockedReason,
   displayFieldFor,
+  fieldOverride,
+  isReadOnly,
   inverseRelationField,
   relationShape,
   type FieldMetadata,
   type ModelMetadata,
+  type ModelOverrides,
 } from '@nest-admin/core'
 
 /** Mirrors Core's `FieldKind`, restated so the wire format is self-contained. */
@@ -96,8 +99,42 @@ export interface FieldDto {
   readonly defaultValue?: unknown
   /** Present when `kind` is `'enum'`. */
   readonly enumValues?: readonly string[]
-  /** Present when `kind` is `'relation'`. */
+
+  /**
+   * What to call the field, when the column name is not what people call it.
+   *
+   * Absent unless the application said so. A client falls back to `name`.
+   */
+  readonly label?: string
+
+  /**
+   * How the field should be edited, when its kind does not say enough.
+   *
+   * A `string` column may be a sentence, a password or a colour, and the schema
+   * cannot tell them apart.
+   */
+  readonly widget?: 'textarea' | 'password' | 'email' | 'url' | 'color' | 'json'
+
+  /**
+   * The admin will refuse to write this field.
+   *
+   * True for generated columns, and for anything the application marked
+   * read-only. Enforced: a write naming it is rejected, so a client that
+   * ignores this gets a 400 rather than a surprise.
+   */
+  readonly readOnly: boolean
+
+  /** Present when `kind` is `relation`. */
   readonly relation?: RelationDto
+}
+
+/** Which operations a principal may perform on one model. */
+export interface ModelPermissionsDto {
+  readonly list: boolean
+  readonly read: boolean
+  readonly create: boolean
+  readonly update: boolean
+  readonly delete: boolean
 }
 
 export interface ModelDto {
@@ -114,10 +151,42 @@ export interface ModelDto {
    * come from one rule in Core, so they cannot disagree.
    */
   readonly displayField: string
+
+  /**
+   * What this principal may do with the model.
+   *
+   * Sent so the interface can stop offering actions that will be refused. It is
+   * a description of the policy's answers, not the enforcement: every request is
+   * checked again when it arrives, and a client that ignores this gets a 403
+   * rather than access.
+   *
+   * `metadata` is not among them - a model the principal cannot see is absent
+   * from this document entirely.
+   */
+  readonly can: ModelPermissionsDto
+
+  /** What to call the model. Absent unless the application said so. */
+  readonly label?: string
 }
 
 export interface MetadataDto {
   readonly models: readonly ModelDto[]
+}
+
+/**
+ * The answer when no policy was consulted.
+ *
+ * Only reachable from a caller that passes no permissions at all, which is the
+ * tests and nothing else - the service always supplies them. Permissive is the
+ * right default here precisely because it is not the enforcement: the request
+ * is checked when it arrives regardless.
+ */
+const ALL_PERMITTED: ModelPermissionsDto = {
+  list: true,
+  read: true,
+  create: true,
+  update: true,
+  delete: true,
 }
 
 /**
@@ -134,7 +203,33 @@ function targetForeignKeyOf(
   return inverseRelationField(field, models)?.relation?.from
 }
 
-function toFieldDto(field: FieldMetadata, models: readonly ModelMetadata[]): FieldDto {
+/**
+ * Order the way the application asked, then the way the schema declares.
+ *
+ * A declared `order` wins; anything without one keeps its schema position,
+ * after everything that has one. Sorting on a missing value would otherwise
+ * reshuffle the fields nobody configured.
+ */
+function byOrder<T>(items: readonly T[], orderOf: (item: T) => number | undefined): readonly T[] {
+  return [...items]
+    .map((item, index) => ({ item, index, order: orderOf(item) }))
+    .sort((a, b) => {
+      if (a.order === b.order) return a.index - b.index
+      if (a.order === undefined) return 1
+      if (b.order === undefined) return -1
+      return a.order - b.order
+    })
+    .map((entry) => entry.item)
+}
+
+function toFieldDto(
+  field: FieldMetadata,
+  modelName: string,
+  models: readonly ModelMetadata[],
+  overrides: ModelOverrides | undefined,
+): FieldDto {
+  const override = fieldOverride(overrides, modelName, field.name)
+
   // Built property by property on purpose. A spread would forward anything a
   // future adapter attaches to FieldMetadata straight onto the wire.
   return {
@@ -145,6 +240,9 @@ function toFieldDto(field: FieldMetadata, models: readonly ModelMetadata[]): Fie
     isUnique: field.isUnique,
     isList: field.isList,
     isGenerated: field.isGenerated,
+    readOnly: isReadOnly(overrides, modelName, field),
+    ...(override?.label !== undefined ? { label: override.label } : {}),
+    ...(override?.widget !== undefined ? { widget: override.widget } : {}),
     ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
     ...(field.enumValues ? { enumValues: [...field.enumValues] } : {}),
     ...(field.relation
@@ -183,17 +281,26 @@ function toFieldDto(field: FieldMetadata, models: readonly ModelMetadata[]): Fie
  * would still publish the hidden model's name through `relation.targetModel`,
  * and the relation field's own name along with it.
  */
-export function toMetadataDto(models: readonly ModelMetadata[]): MetadataDto {
+export function toMetadataDto(
+  models: readonly ModelMetadata[],
+  overrides?: ModelOverrides,
+  permissions?: ReadonlyMap<string, ModelPermissionsDto>,
+): MetadataDto {
   const present = new Set(models.map((model) => model.name))
 
   return {
-    models: models.map((model) => ({
+    models: byOrder(models, (model) => overrides?.[model.name]?.order).map((model) => ({
       name: model.name,
       primaryKey: [...model.primaryKey],
       displayField: displayFieldFor(model),
-      fields: model.fields
-        .filter((field) => !field.relation || present.has(field.relation.targetModel))
-        .map((field) => toFieldDto(field, models)),
+      can: permissions?.get(model.name) ?? ALL_PERMITTED,
+      ...(overrides?.[model.name]?.label !== undefined
+        ? { label: overrides[model.name]?.label }
+        : {}),
+      fields: byOrder(
+        model.fields.filter((field) => !field.relation || present.has(field.relation.targetModel)),
+        (field) => fieldOverride(overrides, model.name, field.name)?.order,
+      ).map((field) => toFieldDto(field, model.name, models, overrides)),
     })),
   }
 }

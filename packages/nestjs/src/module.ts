@@ -17,7 +17,7 @@
  * It is not `@Global()`: making a library's providers globally visible in
  * someone else's application is a decision the application should make.
  */
-import type { OrmAdapter, ResourceSelection } from '@nest-admin/core'
+import type { ModelOverrides, OrmAdapter, ResourceSelection } from '@nest-admin/core'
 import {
   Logger,
   Module,
@@ -41,6 +41,7 @@ import { AdminUiController } from './ui/controller.js'
 import {
   ADMIN_ADAPTER,
   ADMIN_AUTH,
+  ADMIN_MODELS,
   ADMIN_MOUNT_PATH,
   ADMIN_OPTIONS,
   ADMIN_RESOURCE_AUTH,
@@ -113,6 +114,16 @@ export interface AdminModuleOptions {
    * typo in `exclude` would otherwise leave the model exposed.
    */
   readonly resources?: ResourceSelection
+
+  /**
+   * Per-model configuration: labels, widgets, ordering, and the two that are
+   * enforced rather than suggested - hidden and readOnly.
+   *
+   * A hidden field is removed from the metadata every layer reads, so it cannot
+   * be filtered, sorted, written, or returned. A name matching no model or
+   * field fails at startup.
+   */
+  readonly models?: ModelOverrides
 
   /**
    * Directory holding the built admin UI.
@@ -312,6 +323,7 @@ export class AdminModule {
     return defineModule(mountPath, resolvedUiRoot, [
       { provide: ADMIN_ADAPTER, useValue: options.adapter },
       { provide: ADMIN_RESOURCES, useValue: options.resources },
+      { provide: ADMIN_MODELS, useValue: options.models },
       { provide: ADMIN_AUTH, useValue: options.auth },
       // Always provided, so injection resolves whether or not the consumer
       // supplied a policy. The default permits every model.
@@ -369,6 +381,7 @@ export class AdminModule {
         ...optionsProviders(options),
         derive(ADMIN_ADAPTER, (resolved) => resolved.adapter),
         derive(ADMIN_RESOURCES, (resolved) => resolved.resources),
+        derive(ADMIN_MODELS, (resolved) => resolved.models),
         derive(ADMIN_AUTH, (resolved) => resolved.auth),
         derive(ADMIN_RESOURCE_AUTH, (resolved) => resolved.resourceAuth ?? allowAllResources()),
       ],

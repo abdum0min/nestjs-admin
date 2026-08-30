@@ -46,3 +46,11 @@ export const ADMIN_RESOURCES = Symbol('NEST_ADMIN_RESOURCES')
  * once no matter how many of its values are injected.
  */
 export const ADMIN_OPTIONS = Symbol('NEST_ADMIN_OPTIONS')
+
+/**
+ * Per-model configuration the application supplied, if any.
+ *
+ * Labels, widgets, ordering, and the two that are enforced rather than
+ * suggested: `hidden` and `readOnly`.
+ */
+export const ADMIN_MODELS = Symbol('NEST_ADMIN_MODELS')

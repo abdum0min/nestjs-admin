@@ -11,28 +11,34 @@
  * is enforced, and exactly one place a mistake can hide.
  */
 import {
+  applyOverrides,
   detachBlockedReason,
   FieldNotFoundError,
   ForbiddenError,
   InvalidQueryError,
   isNestAdminError,
+  isReadOnly,
   ModelNotFoundError,
   RecordNotFoundError,
+  type ListQuery,
   type ModelMetadata,
   type OrmAdapter,
   type Page,
   type RecordData,
   type RecordId,
+  type ModelOverrides,
   type ResourceSelection,
   selectModels,
+  unknownOverrideNames,
   unknownSelectionNames,
+  unwritableHiddenFields,
 } from '@nest-admin/core'
 import { Inject, Injectable, type ExecutionContext, type OnModuleInit } from '@nestjs/common'
 
 import type { AdminOperation, AdminResourceAuth } from '../auth/resource.js'
 import { parseListQuery, type RawQuery } from '../http/query-parser.js'
-import { ADMIN_ADAPTER, ADMIN_RESOURCE_AUTH, ADMIN_RESOURCES } from '../tokens.js'
-import { toMetadataDto, type MetadataDto } from './metadata.dto.js'
+import { ADMIN_ADAPTER, ADMIN_MODELS, ADMIN_RESOURCE_AUTH, ADMIN_RESOURCES } from '../tokens.js'
+import { toMetadataDto, type MetadataDto, type ModelPermissionsDto } from './metadata.dto.js'
 
 @Injectable()
 export class AdminService implements OnModuleInit {
@@ -40,6 +46,7 @@ export class AdminService implements OnModuleInit {
     @Inject(ADMIN_ADAPTER) private readonly adapter: OrmAdapter,
     @Inject(ADMIN_RESOURCE_AUTH) private readonly resourceAuth: AdminResourceAuth,
     @Inject(ADMIN_RESOURCES) private readonly resources: ResourceSelection | undefined,
+    @Inject(ADMIN_MODELS) private readonly overrides: ModelOverrides | undefined,
   ) {}
 
   /**
@@ -52,15 +59,47 @@ export class AdminService implements OnModuleInit {
    * be known, and it is still before the first request.
    */
   async onModuleInit(): Promise<void> {
-    const unknown = unknownSelectionNames(await this.adapter.getModels(), this.resources)
-    if (unknown.length === 0) return
+    const schema = await this.adapter.getModels()
+    const known = schema.map((model) => model.name)
 
-    const known = (await this.adapter.getModels()).map((model) => model.name)
-    throw new Error(
-      `AdminModule \`resources\` names ${unknown.length === 1 ? 'a model' : 'models'} ` +
-        `that the schema does not have: ${unknown.join(', ')}. ` +
-        `Known models: ${known.join(', ')}.`,
+    const missingResources = unknownSelectionNames(schema, this.resources)
+    if (missingResources.length > 0) {
+      throw new Error(
+        `AdminModule \`resources\` names ${missingResources.length === 1 ? 'a model' : 'models'} ` +
+          `that the schema does not have: ${missingResources.join(', ')}. ` +
+          `Known models: ${known.join(', ')}.`,
+      )
+    }
+
+    // Checked against the *selected* models, so `models: { Session: … }` on a
+    // model that `resources` excluded is reported as unknown rather than
+    // silently having no effect.
+    const missingOverrides = unknownOverrideNames(
+      selectModels(schema, this.resources),
+      this.overrides,
     )
+    if (missingOverrides.length > 0) {
+      throw new Error(
+        `AdminModule \`models\` names ${missingOverrides.length === 1 ? 'a model or field' : 'models or fields'} ` +
+          `this admin does not have: ${missingOverrides.join(', ')}. ` +
+          `A typo in \`hidden\` leaves the real column exposed, so this is an error rather than a warning.`,
+      )
+    }
+
+    // A required column with no default is a value the caller has to supply, so
+    // hiding it means no record can ever be created. The database reports that
+    // as a constraint violation, which the admin can only pass on as an
+    // internal error - a long way from the line that caused it.
+    const unwritable = unwritableHiddenFields(selectModels(schema, this.resources), this.overrides)
+    if (unwritable.length > 0) {
+      const one = unwritable.length === 1
+      throw new Error(
+        `AdminModule \`models\` hides ${unwritable.join(', ')}, ` +
+          `${one ? 'which is a required field' : 'which are required fields'} with no default. ` +
+          `Hiding ${one ? 'it' : 'them'} leaves no way to supply a value, so every create would ` +
+          `fail. Give the column a default, make it optional, or leave it visible.`,
+      )
+    }
   }
 
   /**
@@ -79,7 +118,7 @@ export class AdminService implements OnModuleInit {
       if (await this.isVisible(context, model.name)) visible.push(model)
     }
 
-    return toMetadataDto(visible)
+    return toMetadataDto(visible, this.overrides, await this.permissionsFor(context, visible))
   }
 
   /**
@@ -97,7 +136,13 @@ export class AdminService implements OnModuleInit {
   ): Promise<Page<RecordData>> {
     const metadata = await this.requireModel(model)
     await this.assertAllowed(context, model, 'list')
-    return this.adapter.list(model, parseListQuery(rawQuery, metadata))
+    return this.projectPage(
+      metadata,
+      await this.adapter.list(
+        model,
+        this.scopeToFields(metadata, parseListQuery(rawQuery, metadata)),
+      ),
+    )
   }
 
   /**
@@ -107,17 +152,18 @@ export class AdminService implements OnModuleInit {
    * so it is turned into an error here rather than in the controller.
    */
   async findOne(context: ExecutionContext, model: string, id: RecordId): Promise<RecordData> {
-    await this.requireModel(model)
+    const metadata = await this.requireModel(model)
     await this.assertAllowed(context, model, 'read')
     const record = await this.adapter.findOne(model, id)
     if (record === null) throw new RecordNotFoundError(model, id)
-    return record
+    return this.project(metadata, record)
   }
 
   async create(context: ExecutionContext, model: string, data: RecordData): Promise<RecordData> {
-    await this.requireModel(model)
+    const metadata = await this.requireModel(model)
     await this.assertAllowed(context, model, 'create')
-    return this.adapter.create(model, data)
+    this.assertWritable(metadata, data)
+    return this.project(metadata, await this.adapter.create(model, data))
   }
 
   async update(
@@ -126,9 +172,10 @@ export class AdminService implements OnModuleInit {
     id: RecordId,
     data: RecordData,
   ): Promise<RecordData> {
-    await this.requireModel(model)
+    const metadata = await this.requireModel(model)
     await this.assertAllowed(context, model, 'update')
-    return this.adapter.update(model, id, data)
+    this.assertWritable(metadata, data)
+    return this.project(metadata, await this.adapter.update(model, id, data))
   }
 
   async delete(context: ExecutionContext, model: string, id: RecordId): Promise<void> {
@@ -161,7 +208,15 @@ export class AdminService implements OnModuleInit {
 
     // Parsed against the target's metadata: the query describes the records
     // being listed, not the one they hang off.
-    return this.adapter.listRelated(model, id, relationField, parseListQuery(rawQuery, target))
+    return this.projectPage(
+      target,
+      await this.adapter.listRelated(
+        model,
+        id,
+        relationField,
+        this.scopeToFields(target, parseListQuery(rawQuery, target)),
+      ),
+    )
   }
 
   /**
@@ -249,6 +304,120 @@ export class AdminService implements OnModuleInit {
     return target
   }
 
+  /**
+   * A record as this admin is allowed to return it.
+   *
+   * A whitelist against the effective metadata, which is what makes `hidden`
+   * a guarantee rather than a request. The adapter reads whole rows - it knows
+   * nothing about admin configuration - so a hidden column arrives here and is
+   * dropped before anything can serialise it.
+   *
+   * Whitelisting rather than deleting the hidden names also covers a column the
+   * adapter reports that the metadata does not describe: if it is not part of
+   * this admin, it does not leave it.
+   */
+  private project(model: ModelMetadata, record: RecordData): RecordData {
+    const allowed = new Set(model.fields.map((field) => field.name))
+    const projected: RecordData = {}
+
+    for (const [key, value] of Object.entries(record)) {
+      if (allowed.has(key)) projected[key] = value
+    }
+
+    return projected
+  }
+
+  /**
+   * Tell the adapter which fields this admin exposes.
+   *
+   * The adapter reads a schema, not a configuration, so without this a hidden
+   * column would still be searched by free text, sorted and filtered on, and
+   * read from the database - each of them a way to learn a value nobody is
+   * meant to see. `project` would still keep it out of the response, but
+   * "you cannot read it" is a weaker promise than "it was never fetched".
+   */
+  private scopeToFields(model: ModelMetadata, query: ListQuery): ListQuery {
+    return { ...query, fields: model.fields.map((field) => field.name) }
+  }
+
+  private projectPage(model: ModelMetadata, page: Page<RecordData>): Page<RecordData> {
+    return { ...page, data: page.data.map((record) => this.project(model, record)) }
+  }
+
+  /**
+   * Reject a write that names a field this admin will not write.
+   *
+   * The adapter validates too, but against the *schema* - it would accept a
+   * hidden or read-only column, because from where it stands those are ordinary
+   * writable ones. This is the only layer that knows the difference.
+   */
+  private assertWritable(model: ModelMetadata, data: RecordData): void {
+    for (const key of Object.keys(data)) {
+      const field = model.fields.find((candidate) => candidate.name === key)
+
+      // Hidden fields are absent from the metadata, so an attempt to write one
+      // is indistinguishable from a typo - which is the intended answer.
+      if (!field) throw new FieldNotFoundError(model.name, key)
+
+      if (isReadOnly(this.overrides, model.name, field)) {
+        throw new FieldNotFoundError(
+          model.name,
+          key,
+          field.isGenerated
+            ? 'This value is produced by the database.'
+            : 'This field is configured as read-only.',
+        )
+      }
+    }
+  }
+
+  /**
+   * What this principal may do with each visible model.
+   *
+   * Asked of the same policy the requests go through, so the document and the
+   * enforcement cannot disagree. A policy that throws `ForbiddenError` is read
+   * as a denial, exactly as `isVisible` reads it; anything else it throws is a
+   * bug and propagates.
+   *
+   * This closes the gap `reports/009` left open: the interface used to offer
+   * `New`, `Edit` and `Delete` to a principal every one of which would refuse.
+   */
+  private async permissionsFor(
+    context: ExecutionContext,
+    models: readonly ModelMetadata[],
+  ): Promise<ReadonlyMap<string, ModelPermissionsDto>> {
+    const permissions = new Map<string, ModelPermissionsDto>()
+
+    for (const model of models) {
+      const permits = async (operation: AdminOperation): Promise<boolean> =>
+        this.permits(context, model.name, operation)
+
+      permissions.set(model.name, {
+        list: await permits('list'),
+        read: await permits('read'),
+        create: await permits('create'),
+        update: await permits('update'),
+        delete: await permits('delete'),
+      })
+    }
+
+    return permissions
+  }
+
+  /** The policy's answer for one operation, with a thrown denial read as `false`. */
+  private async permits(
+    context: ExecutionContext,
+    model: string,
+    operation: AdminOperation,
+  ): Promise<boolean> {
+    try {
+      return (await this.resourceAuth.authorize({ context, model, operation })) !== false
+    } catch (error) {
+      if (isNestAdminError(error) && error.kind === 'forbidden') return false
+      throw error
+    }
+  }
+
   // ------------------------------------------------------- resource policy
 
   /**
@@ -300,7 +469,10 @@ export class AdminService implements OnModuleInit {
    * metadata document and unknown to every route.
    */
   private async exposedModels(): Promise<readonly ModelMetadata[]> {
-    return selectModels(await this.adapter.getModels(), this.resources)
+    return applyOverrides(
+      selectModels(await this.adapter.getModels(), this.resources),
+      this.overrides,
+    )
   }
 
   /**
