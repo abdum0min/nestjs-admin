@@ -8,12 +8,13 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "seed": "nest build && node seed.mjs",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push"
   },
   "dependencies": {
-    "@nest-admin/nest-admin": "workspace:*",
+    "@nest-admin/nestjs": "workspace:*",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
     "@nestjs/platform-express": "catalog:",

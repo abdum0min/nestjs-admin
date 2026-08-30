@@ -1,7 +1,7 @@
 # examples/basic
 
 A real consumer of the published package, not documentation scaffolding. It
-imports `@nest-admin/nest-admin` and its `./prisma` subpath — nothing from
+imports `@nest-admin/nestjs` and its `./prisma` subpath — nothing from
 `@nest-admin/core` or `@nest-admin/prisma` directly — exactly as an application
 that ran `npm install` would.
 
@@ -14,10 +14,13 @@ consumer app → public package → AdminModule → auth → resource authorizat
 
 ## Run it
 
+From the repository root:
+
 ```bash
-cp .env.example .env
-pnpm --filter @nest-admin/example-basic prisma:generate
-pnpm --filter @nest-admin/example-basic prisma:push
+pnpm install
+pnpm build                                         # the package itself
+pnpm prisma:setup                                  # generated clients + dev.db
+pnpm --filter @nest-admin/example-basic seed       # optional: sample rows
 pnpm --filter @nest-admin/example-basic start
 ```
 
