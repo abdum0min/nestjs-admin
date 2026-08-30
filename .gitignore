@@ -39,3 +39,7 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# SQL emitted by `pnpm prisma:setup` to build a database from a schema.
+# Regenerated on demand; never edited by hand.
+**/prisma/.schema.sql
