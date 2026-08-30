@@ -52,10 +52,11 @@ export {
   unwritableHiddenFields,
 } from './config/overrides.js'
 
-export type { AdminErrorKind } from './errors/errors.js'
+export type { AdminErrorKind, ConstraintKind } from './errors/errors.js'
 
 export {
   AdapterError,
+  ConstraintError,
   FieldNotFoundError,
   ForbiddenError,
   InvalidQueryError,

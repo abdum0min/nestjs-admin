@@ -50,6 +50,8 @@ export type AdminErrorKind =
   | 'invalid-query'
   /** Application code refused the input. Its message reaches the client. */
   | 'validation'
+  /** The database refused the write: unique, foreign key, or required. */
+  | 'constraint'
   | 'adapter'
   /** A subclass that declared no kind of its own. Treated as internal. */
   | 'unknown'
@@ -148,9 +150,86 @@ export class InvalidQueryError extends NestAdminError {
  *
  * The message **is** forwarded to the client, which is the point of it and also
  * the responsibility that comes with it: whatever goes in is published.
+ *
+ * Naming the fields it is about is optional and worth doing. An interface that
+ * knows which input was refused can say so next to that input, where the person
+ * is looking, instead of in a banner above a form they then have to re-read.
  */
 export class ValidationError extends NestAdminError {
   override readonly kind = 'validation' as const
+
+  constructor(
+    message: string,
+    /** The inputs this is about. Empty when it is about the record as a whole. */
+    readonly fields: readonly string[] = [],
+    options?: { cause?: unknown },
+  ) {
+    super(message, options)
+  }
+}
+
+/**
+ * What the database refused, and about which fields.
+ *
+ * The distinction that matters is between a request that is *wrong* and a
+ * database that is *broken*. A duplicate email, a foreign key pointing at
+ * nothing, a missing required value - these are ordinary mistakes a person
+ * makes in a form, and until they were told apart from a real failure the admin
+ * answered every one of them with "an internal error occurred".
+ *
+ * The message is built here, from the constraint and the field names, rather
+ * than taken from the ORM. An ORM's own text carries file paths, generated
+ * query fragments and the values that collided, none of which should be
+ * published - which is exactly why the generic 500 existed in the first place.
+ */
+export type ConstraintKind =
+  /** A value that has to be unique is not. */
+  | 'unique'
+  /** A reference points at a record that is not there, or is still referenced. */
+  | 'foreign-key'
+  /** A value the database requires was not supplied. */
+  | 'required'
+
+export class ConstraintError extends NestAdminError {
+  override readonly kind = 'constraint' as const
+
+  constructor(
+    readonly constraint: ConstraintKind,
+    readonly model: string,
+    /** The columns involved. Empty when the ORM did not say. */
+    readonly fields: readonly string[] = [],
+  ) {
+    super(describeConstraint(constraint, model, fields))
+  }
+}
+
+/**
+ * A sentence for the person who filled in the form.
+ *
+ * Written from the field names alone, so it is safe to forward. Where the ORM
+ * did not name a field the wording stays true rather than guessing at one.
+ */
+function describeConstraint(
+  constraint: ConstraintKind,
+  model: string,
+  fields: readonly string[],
+): string {
+  const named = fields.length > 0 ? fields.join(', ') : undefined
+
+  switch (constraint) {
+    case 'unique':
+      return named
+        ? `Another ${model} already has this ${named}.`
+        : `Another ${model} already has one of these values.`
+
+    case 'foreign-key':
+      return named
+        ? `The ${named} does not refer to an existing record, or the record it refers to is still in use.`
+        : `A reference on this ${model} does not point at an existing record, or is still in use.`
+
+    case 'required':
+      return named ? `${named} is required.` : `A required value on this ${model} is missing.`
+  }
 }
 
 /**
