@@ -10,11 +10,19 @@ import type { FieldDescriptor, FilterOperator, ModelDescriptor } from '../api/ty
 
 /** Fields a user may type into. */
 export function isEditable(field: FieldDescriptor): boolean {
-  // Generated values (cuid, now(), autoincrement, @updatedAt) are the
-  // database's to produce. Relations and lists are excluded because the API
-  // rejects writing them - the adapter returns FIELD_NOT_FOUND - so offering
-  // an input would only produce a confusing 400.
-  return !field.isGenerated && field.kind !== 'relation' && !field.isList
+  // `readOnly` covers generated values (cuid, now(), autoincrement, @updatedAt)
+  // and anything the application marked read-only; the server refuses writes to
+  // both, so an input would only produce a confusing 400. Relations and lists
+  // are excluded for the same reason.
+  //
+  // `isGenerated` is still consulted, for a server that predates `readOnly`.
+  const readOnly = field.readOnly ?? field.isGenerated
+  return !readOnly && field.kind !== 'relation' && !field.isList
+}
+
+/** What to call a field: the application's label, or the column name. */
+export function fieldLabel(field: FieldDescriptor): string {
+  return field.label ?? field.name
 }
 
 /** Fields worth showing as table columns, in order, capped for readability. */
@@ -144,4 +152,9 @@ export function toFormValue(field: FieldDescriptor, value: unknown): string | bo
   }
 
   return String(value)
+}
+
+/** What to call a model: the application's label, or the model name. */
+export function modelLabel(model: ModelDescriptor): string {
+  return model.label ?? model.name
 }

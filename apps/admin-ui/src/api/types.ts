@@ -36,6 +36,17 @@ export interface RelationDescriptor {
   readonly targetForeignKey?: string
 }
 
+export type FieldWidget = 'textarea' | 'password' | 'email' | 'url' | 'color' | 'json'
+
+/** Which operations the current principal may perform on a model. */
+export interface ModelPermissions {
+  readonly list: boolean
+  readonly read: boolean
+  readonly create: boolean
+  readonly update: boolean
+  readonly delete: boolean
+}
+
 export interface FieldDescriptor {
   readonly name: string
   readonly kind: FieldKind
@@ -45,6 +56,12 @@ export interface FieldDescriptor {
   readonly isList: boolean
   /** Produced by the database or ORM. Displayed, never asked of the user. */
   readonly isGenerated: boolean
+  /** The admin will refuse to write this field. */
+  readonly readOnly?: boolean
+  /** What to call it, when the column name is not what people call it. */
+  readonly label?: string
+  /** How to edit it, when the kind does not say enough. */
+  readonly widget?: FieldWidget
   /** Literal default to pre-fill on create, when the schema declares one. */
   readonly defaultValue?: unknown
   readonly enumValues?: readonly string[]
@@ -57,6 +74,13 @@ export interface ModelDescriptor {
   readonly fields: readonly FieldDescriptor[]
   /** Field that names a record of this model in one line. */
   readonly displayField: string
+  /** What to call the model. */
+  readonly label?: string
+  /**
+   * What this principal may do. Not the enforcement - every request is checked
+   * again - but what the interface should offer.
+   */
+  readonly can?: ModelPermissions
 }
 
 export interface Metadata {

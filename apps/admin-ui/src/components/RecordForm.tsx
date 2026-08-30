@@ -19,7 +19,13 @@ import { createRecord, fetchRecord, updateRecord } from '../api/client.js'
 import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
-import { inputTypeFor, isEditable, toFormValue, toRequestValue } from '../metadata/fields.js'
+import {
+  fieldLabel,
+  inputTypeFor,
+  isEditable,
+  toFormValue,
+  toRequestValue,
+} from '../metadata/fields.js'
 import { relationForForeignKey } from '../metadata/relations.js'
 import { RelationPicker } from './RelationPicker.jsx'
 import { ErrorState, Loading } from './States.jsx'
@@ -174,7 +180,7 @@ function FieldInput({
   readonly value: string | boolean
   readonly onChange: (next: string | boolean) => void
 }) {
-  const label = `${field.name}${field.isRequired ? ' *' : ''}`
+  const label = `${fieldLabel(field)}${field.isRequired ? ' *' : ''}`
 
   // A foreign key is a string field whose values are ids. Offer the records by
   // name; the picker still submits the key, so the request is unchanged.
@@ -211,6 +217,40 @@ function FieldInput({
             </option>
           ))}
         </select>
+      </label>
+    )
+  }
+
+  // A widget is the application saying what the column actually holds. The
+  // schema cannot tell a sentence from a password from a colour.
+  if (field.widget === 'textarea' || field.widget === 'json') {
+    return (
+      <label className="form__row">
+        <span>{label}</span>
+        <textarea
+          value={String(value)}
+          required={field.isRequired}
+          rows={field.widget === 'json' ? 8 : 4}
+          spellCheck={field.widget !== 'json'}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </label>
+    )
+  }
+
+  if (field.widget !== undefined && field.kind !== 'boolean') {
+    return (
+      <label className="form__row">
+        <span>{label}</span>
+        <input
+          type={field.widget}
+          value={String(value)}
+          required={field.isRequired}
+          // A password box must not be offered to a password manager as the
+          // visitor's own credential: it belongs to someone else's record.
+          {...(field.widget === 'password' ? { autoComplete: 'new-password' } : {})}
+          onChange={(event) => onChange(event.target.value)}
+        />
       </label>
     )
   }

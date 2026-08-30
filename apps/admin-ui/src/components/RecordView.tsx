@@ -10,6 +10,7 @@ import { deleteRecord, fetchRecord } from '../api/client.js'
 import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
+import { fieldLabel } from '../metadata/fields.js'
 import { formatDetail } from '../metadata/format.js'
 import { relationLink } from '../metadata/relations.js'
 import { RelatedList } from './RelatedList.jsx'
@@ -59,12 +60,16 @@ export function RecordView({
           </h1>
         </div>
         <div className="record__actions">
-          <button type="button" onClick={() => navigate({ kind: 'edit', model: model.name, id })}>
-            Edit
-          </button>
-          <button type="button" className="danger" onClick={() => void onDelete()}>
-            Delete
-          </button>
+          {model.can?.update === false ? null : (
+            <button type="button" onClick={() => navigate({ kind: 'edit', model: model.name, id })}>
+              Edit
+            </button>
+          )}
+          {model.can?.delete === false ? null : (
+            <button type="button" className="danger" onClick={() => void onDelete()}>
+              Delete
+            </button>
+          )}
         </div>
       </header>
 
@@ -72,7 +77,7 @@ export function RecordView({
         {model.fields.map((field) => (
           <div key={field.name} className="record__field">
             <dt>
-              {field.name}
+              {fieldLabel(field)}
               <span className="record__kind">
                 {field.kind}
                 {field.isList ? '[]' : ''}

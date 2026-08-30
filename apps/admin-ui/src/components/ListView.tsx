@@ -24,6 +24,7 @@ import {
   recordId,
   sortableFields,
 } from '../metadata/fields.js'
+import { fieldLabel, modelLabel } from '../metadata/fields.js'
 import { formatCell } from '../metadata/format.js'
 import { relationForForeignKey, relationLink } from '../metadata/relations.js'
 import { Empty, ErrorState, Loading } from './States.jsx'
@@ -102,10 +103,15 @@ export function ListView({
   return (
     <section className="list">
       <header className="list__header">
-        <h1>{model.name}</h1>
-        <button type="button" onClick={() => navigate({ kind: 'create', model: model.name })}>
-          New {model.name}
-        </button>
+        <h1>{modelLabel(model)}</h1>
+        {/* Not offered when the policy would refuse it. The request is checked
+            again when it arrives; this only stops the interface promising
+            something it cannot deliver. */}
+        {model.can?.create === false ? null : (
+          <button type="button" onClick={() => navigate({ kind: 'create', model: model.name })}>
+            New {modelLabel(model)}
+          </button>
+        )}
       </header>
 
       <div className="toolbar">
@@ -414,7 +420,8 @@ function Cell({
  * headed by the relation it stands for.
  */
 function columnLabel(model: ModelDescriptor, column: FieldDescriptor): string {
-  return relationForForeignKey(model, column.name)?.name ?? column.name
+  const relation = relationForForeignKey(model, column.name)
+  return relation ? fieldLabel(relation) : fieldLabel(column)
 }
 
 /**

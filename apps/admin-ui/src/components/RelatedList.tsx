@@ -121,7 +121,7 @@ export function RelatedList({
                       {id === undefined ? null : (
                         <>
                           <a href={href({ kind: 'detail', model: target.name, id })}>View</a>
-                          {detachBlocked === undefined ? (
+                          {detachBlocked === undefined && parent.can?.update !== false ? (
                             <button
                               type="button"
                               className="link"
@@ -158,12 +158,14 @@ export function RelatedList({
         </div>
       ) : null}
 
-      <Attach
-        target={target}
-        shape={shape}
-        busy={busy}
-        onAttach={(id) => void run(() => attachRelated(parent.name, parentId, field.name, id))}
-      />
+      {parent.can?.update === false ? null : (
+        <Attach
+          target={target}
+          shape={shape}
+          busy={busy}
+          onAttach={(id) => void run(() => attachRelated(parent.name, parentId, field.name, id))}
+        />
+      )}
 
       {detachBlocked === undefined ? null : <p className="muted related__note">{detachBlocked}</p>}
     </section>
