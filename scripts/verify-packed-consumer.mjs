@@ -16,7 +16,15 @@
  *   node scripts/verify-packed-consumer.mjs
  */
 import { execFileSync, spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -37,6 +45,11 @@ const check = (label, actual, expected) => {
   const ok = String(actual) === String(expected)
   checks.push({ label, actual, expected, ok })
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label.padEnd(44)} ${actual}`)
+}
+
+async function errorCode(path, init) {
+  const response = await fetch(`${BASE}${path}`, init)
+  return (await response.json())?.error?.code
 }
 
 async function status(path, init) {
@@ -191,6 +204,14 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
   check('  filter', await status('/Widget?filter=price:gte:5'), 200)
   check('  paginate', await status('/Widget?page=1&perPage=10'), 200)
   check('  bracket syntax rejected', await status('/Widget?filter[a][gte]=1'), 400)
+  // Adapter-raised errors must keep their identity across the package's two
+  // CommonJS bundles. Each inlines its own copy of Core, so `instanceof` in the
+  // exception filter answered `false` and mapped all of these to 500. Only a
+  // packed install can catch it -- in-repo tests share one copy of Core.
+  check('  unknown sort field', await errorCode('/Widget?sort=nope:asc'), 'FIELD_NOT_FOUND')
+  check('  unknown filter field', await errorCode('/Widget?filter=nope:eq:1'), 'FIELD_NOT_FOUND')
+  check('  unknown model', await errorCode('/Nope'), 'MODEL_NOT_FOUND')
+  check('  missing record', await errorCode('/Widget/nope'), 'RECORD_NOT_FOUND')
   check('DELETE /admin/Widget/:id', await status(`/Widget/${id}`, { method: 'DELETE' }), 200)
   check('  record is gone', await status(`/Widget/${id}`), 404)
 
@@ -202,6 +223,23 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
     Object.keys(manifest.dependencies ?? {}).some((name) => name.startsWith('@nest-admin/')),
     false,
   )
+
+  // A CJS consumer under `moduleResolution: node16` reads the `require`
+  // condition's `types`. Pointing it at the ESM `.d.ts` of a `"type": "module"`
+  // package makes TypeScript reject the import (TS1479) even though `require`
+  // works at runtime. The `.d.cts` files ship; they must actually be referenced.
+  const pkgDir = join(consumer, 'node_modules/@nest-admin/nest-admin')
+  for (const [subpath, entry] of Object.entries(manifest.exports)) {
+    if (subpath === './package.json') continue
+    check(`  ${subpath} require types`, entry.require.types.endsWith('.d.cts'), true)
+    check(`  ${subpath} import types`, entry.import.types.endsWith('.d.ts'), true)
+    for (const condition of ['require', 'import']) {
+      for (const field of ['types', 'default']) {
+        const target = entry[condition][field]
+        check(`    ${subpath} ${condition}.${field} exists`, existsSync(join(pkgDir, target)), true)
+      }
+    }
+  }
 
   const failed = checks.filter((entry) => !entry.ok)
   console.log(`\n${checks.length - failed.length}/${checks.length} checks passed`)
