@@ -1,9 +1,33 @@
 // Reference schema for the Nest Admin example application.
 //
-// These two models are the target of the MVP: once the CRUD engine and the
-// admin UI exist, `User` and `Product` must appear under /admin with list,
-// create, read, update, delete, pagination and basic search - with no
-// hand-written controller, service, table or form.
+// Deliberately larger than an example needs to be. Two models proved the CRUD
+// engine worked; they proved nothing about the shapes a real schema has, and
+// every relation defect this project has shipped was found by pointing the
+// admin at a schema that had one more shape than the fixtures did.
+//
+// So each model here earns its place by being a shape the admin has to handle
+// differently from the others:
+//
+//   User      <-> Profile     one-to-one, and the only place `@unique` sits on
+//                             a foreign key
+//   User      --> User        self-relation, optional ("who manages whom")
+//   Category  --> Category    self-relation, a tree rather than a chain
+//   Comment   --> Comment     self-relation, threaded replies
+//   Product   --> Category    required to-one: a bad key is a 409, and the
+//                             category cannot be deleted while used
+//   Product  <--> Tag         many-to-many through an implicit join table
+//   Post     <--> Tag         a second many-to-many, sharing one side
+//   Order     --> OrderItem   one-to-many where the child is a join table
+//                             *with payload* - quantity and price live on it
+//   Review                    a join with payload keyed by a composite unique
+//
+// Plus the scalar variety the metadata mapper has to describe: three enums,
+// optional and required strings, integers, floats, booleans, timestamps with
+// `now()` and `@updatedAt`, and nullable dates that mean "has not happened".
+//
+// Not here on purpose: composite primary keys (represented in metadata and
+// rejected by the adapter), and `Decimal`, `BigInt` and `Bytes` (mapped to
+// `unknown` and shown read-only). An example should demonstrate what works.
 
 generator client {
   provider = "prisma-client"
@@ -17,16 +41,212 @@ datasource db {
   // adapter. See ../../docs/architecture.md.
 }
 
+/// What a person may do in the application - not in the admin. The admin's own
+/// permissions come from `resourceAuth`, which is a separate decision.
+enum Role {
+  MEMBER
+  EDITOR
+  ADMIN
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING
+  PAID
+  SHIPPED
+  CANCELLED
+  REFUNDED
+}
+
+enum PostStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
+  id    String @id @default(cuid())
+  email String @unique
+  name  String
+
+  // Nullable, and hidden in the admin configuration. A required hidden column
+  // would leave no way to supply a value, and the module refuses to start
+  // rather than let every create fail - see app.module.ts.
+  passwordHash String?
+
+  bio       String?
+  avatarUrl String?
+  age       Int?
+  role      Role     @default(MEMBER)
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Self-relation. Optional on both sides, so a record can be edited into and
+  // out of a reporting line without the database refusing.
+  managerId String?
+  manager   User?   @relation("Reports", fields: [managerId], references: [id])
+  reports   User[]  @relation("Reports")
+
+  // One-to-one. The `@unique` is on Profile.userId, which is what makes it one
+  // rather than many - the admin reads that from the metadata, not from a name.
+  profile Profile?
+
+  orders   Order[]
+  posts    Post[]
+  comments Comment[]
+  reviews  Review[]
+}
+
+model Profile {
+  id String @id @default(cuid())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  headline   String?
+  website    String?
+  location   String?
+  newsletter Boolean @default(false)
+}
+
+/// A tree, not a list: a category may sit under another, to any depth. The
+/// admin renders the parent as a link and the children as a related list.
+model Category {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String?
+  position    Int     @default(0)
+
+  parentId String?
+  parent   Category?  @relation("Subcategories", fields: [parentId], references: [id])
+  children Category[] @relation("Subcategories")
+
+  products Product[]
 }
 
 model Product {
+  id          String  @id @default(cuid())
+  sku         String  @unique
+  name        String
+  description String?
+  price       Float
+  stock       Int     @default(0)
+  active      Boolean @default(true)
+
+  // Nullable date meaning "not yet", which is a different thing from zero.
+  releasedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  // Required, so pointing it at a missing category is a constraint violation
+  // and deleting a category that still has products is another one.
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  tags    Tag[]
+  items   OrderItem[]
+  reviews Review[]
+}
+
+/// Shared by two many-to-many relations, which is the case a to-many
+/// implementation is most likely to get wrong.
+model Tag {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  colour String? // rendered with the `color` widget - see app.module.ts
+
+  products Product[]
+  posts    Post[]
+}
+
+model Order {
+  id        String      @id @default(cuid())
+  reference String      @unique
+  status    OrderStatus @default(DRAFT)
+  total     Float       @default(0)
+  note      String?
+  placedAt  DateTime?
+  createdAt DateTime    @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  items OrderItem[]
+}
+
+/// A join table with payload. It cannot be an implicit many-to-many, because
+/// how many of a product an order holds is a fact about the pairing rather than
+/// about either side - which is exactly why it is a model of its own.
+model OrderItem {
+  id       String @id @default(cuid())
+  quantity Int    @default(1)
+
+  // Copied at the time of the order rather than read from the product, because
+  // a price that changes later must not rewrite what someone already paid.
+  unitPrice Float
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([orderId, productId])
+}
+
+model Post {
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  excerpt     String?
+  body        String?
+  status      PostStatus @default(DRAFT)
+  views       Int        @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  tags     Tag[]
+  comments Comment[]
+}
+
+/// Threaded: a comment may be a reply to another comment on the same post.
+model Comment {
   id        String   @id @default(cuid())
-  name      String
-  price     Float
+  body      String
+  approved  Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id])
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  parentId String?
+  parent   Comment?  @relation("Replies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("Replies")
+}
+
+/// One review per person per product, enforced by a composite unique - which is
+/// a different thing from a composite primary key, and is supported.
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int
+  title     String?
+  body      String?
+  createdAt DateTime @default(now())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([productId, userId])
 }
