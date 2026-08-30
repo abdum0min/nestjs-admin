@@ -27,6 +27,13 @@ model Post {
   title    String
   authorId String
   author   User   @relation(fields: [authorId], references: [id])
+  tags     Tag[]
+}
+
+model Tag {
+  id    String @id @default(cuid())
+  name  String @unique
+  posts Post[]
 }
 
 enum Role {

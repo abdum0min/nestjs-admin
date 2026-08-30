@@ -41,7 +41,9 @@ export function createCountingTestClient(): PrismaClient {
 
 /** Empty every table. Posts first - they reference users. */
 export async function resetDatabase(client: PrismaClient): Promise<void> {
+  await client.tag.deleteMany({})
   await client.post.deleteMany({})
+  await client.user.updateMany({ data: { managerId: null } })
   await client.user.deleteMany({})
   await client.product.deleteMany({})
   await client.counter.deleteMany({})

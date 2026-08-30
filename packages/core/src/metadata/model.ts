@@ -51,6 +51,20 @@ export interface RelationMetadata {
 
   /** Field on the target model that `from` points at - usually its id. */
   readonly to?: string
+
+  /**
+   * Name shared by both halves of the relation.
+   *
+   * The only reliable way to pair `User.posts` with `Post.author`, which two
+   * things need. Distinguishing a many-to-many from a one-to-many requires
+   * looking at the other side - both are `'many'` from here, but only one has
+   * no column anywhere. And knowing whether a child's key is required decides
+   * whether it can be detached at all.
+   *
+   * Two relations between the same pair of models are told apart by it too:
+   * `Post.author` and `Post.reviewer` both target `User`.
+   */
+  readonly name?: string
 }
 
 export interface FieldMetadata {

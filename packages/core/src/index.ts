@@ -18,6 +18,13 @@ export type {
 
 export { displayFieldFor } from './metadata/display-field.js'
 
+export type { RelationShape } from './metadata/relation-shape.js'
+export {
+  detachBlockedReason,
+  inverseRelationField,
+  relationShape,
+} from './metadata/relation-shape.js'
+
 export type {
   FilterOperator,
   FilterRule,

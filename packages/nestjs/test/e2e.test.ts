@@ -60,7 +60,11 @@ describe('metadata over HTTP from a real schema', () => {
   it('describes the schema without naming the ORM', async () => {
     const { body, text } = await http().get('/admin/meta').expect(200)
 
-    expect(body.data.models.map((m: { name: string }) => m.name).sort()).toEqual(['Post', 'User'])
+    expect(body.data.models.map((m: { name: string }) => m.name).sort()).toEqual([
+      'Post',
+      'Tag',
+      'User',
+    ])
     expect(text.toLowerCase()).not.toContain('prisma')
     expect(text.toLowerCase()).not.toContain('dmmf')
   })
@@ -211,8 +215,9 @@ describe('resource authorization on the real stack', () => {
     const http = () => request(restricted.getHttpServer())
 
     const { body, text } = await http().get('/admin/meta').expect(200)
-    expect(body.data.models.map((m: { name: string }) => m.name)).toEqual(['User'])
-    // Neither the hidden model nor the relation that pointed at it.
+    expect(body.data.models.map((m: { name: string }) => m.name)).toEqual(['User', 'Tag'])
+    // Neither the hidden model nor any relation that pointed at it - including
+    // Tag.posts, on a model that is still visible.
     expect(text).not.toContain('Post')
     expect(text).not.toContain('posts')
 

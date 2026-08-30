@@ -35,7 +35,7 @@ function model(models: readonly ModelMetadata[], name: string): ModelMetadata {
 describe('model discovery', () => {
   it('finds every model in the schema', () => {
     const models = load(SINGLE_FILE)
-    expect(models.map((m) => m.name).sort()).toEqual(['Counter', 'Post', 'Product', 'User'])
+    expect(models.map((m) => m.name).sort()).toEqual(['Counter', 'Post', 'Product', 'Tag', 'User'])
   })
 
   it('identifies the primary key', () => {
@@ -123,13 +123,14 @@ describe('relations', () => {
     const posts = field(model(models, 'User'), 'posts')
     // No `from`: the column is on the other side. Filtering or writing this
     // relation from here would have to go through Post, not through User.
-    expect(posts.relation).toEqual({ targetModel: 'Post', cardinality: 'many' })
+    expect(posts.relation).toMatchObject({ targetModel: 'Post', cardinality: 'many' })
+    expect(posts.relation?.from).toBeUndefined()
   })
 
   it('represents a to-one relation, and names the column it is stored in', () => {
     const author = field(model(models, 'Post'), 'author')
 
-    expect(author.relation).toEqual({
+    expect(author.relation).toMatchObject({
       targetModel: 'User',
       cardinality: 'one',
       from: 'authorId',
@@ -168,7 +169,7 @@ describe('multi-file schemas', () => {
       targetModel: 'Author',
       cardinality: 'one',
     })
-    expect(field(model(models, 'Author'), 'article').relation).toEqual({
+    expect(field(model(models, 'Author'), 'article').relation).toMatchObject({
       targetModel: 'Article',
       cardinality: 'many',
     })

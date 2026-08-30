@@ -101,6 +101,9 @@ function toFieldMetadata(
               ? { from: field.relationFromFields[0] }
               : {}),
             ...(field.relationToFields?.[0] !== undefined ? { to: field.relationToFields[0] } : {}),
+            // Shared by both halves, so the other side can be found. Prisma
+            // generates one when the schema does not name it.
+            ...(field.relationName !== undefined ? { name: field.relationName } : {}),
           },
         }
       : {}),
