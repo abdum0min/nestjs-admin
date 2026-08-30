@@ -150,6 +150,17 @@ export const TEST_MODELS: readonly ModelMetadata[] = [
         isGenerated: false,
       },
       {
+        // The column the relation is stored in. A real adapter reports both, and
+        // the write path needs the scalar: relations are not directly writable.
+        name: 'authorId',
+        kind: 'string',
+        isId: false,
+        isRequired: true,
+        isUnique: false,
+        isList: false,
+        isGenerated: false,
+      },
+      {
         name: 'author',
         kind: 'relation',
         isId: false,
