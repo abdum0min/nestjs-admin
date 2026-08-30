@@ -19,14 +19,27 @@ import { useEffect, useState } from 'react'
 
 export type Route =
   | { readonly kind: 'home' }
-  | { readonly kind: 'list'; readonly model: string }
+  | {
+      readonly kind: 'list'
+      readonly model: string
+      /**
+       * A filter to open the list with, in the API's own `field:op:value` form.
+       *
+       * Carried in the hash so a filtered list can be linked to - which is what
+       * "all the posts by this author" is - and so reloading the page does not
+       * silently drop the constraint the reader is looking at.
+       */
+      readonly filter?: string
+    }
   | { readonly kind: 'create'; readonly model: string }
   | { readonly kind: 'detail'; readonly model: string; readonly id: string }
   | { readonly kind: 'edit'; readonly model: string; readonly id: string }
 
 export function parseHash(hash: string): Route {
-  const segments = hash
-    .replace(/^#\/?/, '')
+  const [path = '', query = ''] = hash.replace(/^#\/?/, '').split('?')
+  const filter = new URLSearchParams(query).get('filter') ?? undefined
+
+  const segments = path
     .split('/')
     .filter((segment) => segment !== '')
     .map(decodeURIComponent)
@@ -34,7 +47,7 @@ export function parseHash(hash: string): Route {
   const [model, second, third] = segments
 
   if (model === undefined) return { kind: 'home' }
-  if (second === undefined) return { kind: 'list', model }
+  if (second === undefined) return { kind: 'list', model, ...(filter ? { filter } : {}) }
   if (second === 'new') return { kind: 'create', model }
   if (third === 'edit') return { kind: 'edit', model, id: second }
   return { kind: 'detail', model, id: second }
@@ -45,7 +58,10 @@ export function href(route: Route): string {
     case 'home':
       return '#/'
     case 'list':
-      return `#/${encodeURIComponent(route.model)}`
+      return (
+        `#/${encodeURIComponent(route.model)}` +
+        (route.filter ? `?filter=${encodeURIComponent(route.filter)}` : '')
+      )
     case 'create':
       return `#/${encodeURIComponent(route.model)}/new`
     case 'detail':

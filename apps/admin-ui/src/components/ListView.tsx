@@ -33,15 +33,23 @@ const PER_PAGE = 25
 export function ListView({
   model,
   models,
+  initialFilter,
 }: {
   readonly model: ModelDescriptor
   readonly models: readonly ModelDescriptor[]
+  /**
+   * A filter carried in the URL, in the API's `field:op:value` form.
+   *
+   * How "all the posts by this author" arrives: the link into this list says
+   * what it is showing, and reloading the page keeps showing it.
+   */
+  readonly initialFilter?: string
 }) {
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortRule | undefined>(undefined)
-  const [filter, setFilter] = useState<FilterRule | undefined>(undefined)
+  const [filter, setFilter] = useState<FilterRule | undefined>(() => parseFilter(initialFilter))
 
   // Reset view state when the model changes; a page number or sort field from
   // the previous model is meaningless here and would produce a 400.
@@ -50,8 +58,12 @@ export function ListView({
     setSearchInput('')
     setSearch('')
     setSort(undefined)
-    setFilter(undefined)
-  }, [model.name])
+    // Back to whatever the URL asks for, not to nothing. This effect also runs
+    // on mount, so clearing it unconditionally would throw away the filter a
+    // link arrived with - "all the posts by this author" would open showing
+    // every post, one render after showing the right ones.
+    setFilter(parseFilter(initialFilter))
+  }, [model.name, initialFilter])
 
   // Debounce the search box so typing does not fire a request per keystroke.
   useEffect(() => {
@@ -403,4 +415,25 @@ function Cell({
  */
 function columnLabel(model: ModelDescriptor, column: FieldDescriptor): string {
   return relationForForeignKey(model, column.name)?.name ?? column.name
+}
+
+/**
+ * A `field:op:value` string from the URL, as a filter rule.
+ *
+ * Split on the first two colons only: a value may contain them, and a date
+ * usually does. Returns `undefined` for anything malformed rather than
+ * throwing - a bad link should open an unfiltered list, not a broken screen.
+ */
+function parseFilter(raw: string | undefined): FilterRule | undefined {
+  if (!raw) return undefined
+
+  const first = raw.indexOf(':')
+  const second = raw.indexOf(':', first + 1)
+  if (first < 1 || second < 0) return undefined
+
+  return {
+    field: raw.slice(0, first),
+    operator: raw.slice(first + 1, second) as FilterRule['operator'],
+    value: raw.slice(second + 1),
+  }
 }

@@ -76,7 +76,13 @@ function Content({
 }) {
   switch (route.kind) {
     case 'list':
-      return <ListView model={model} models={models} />
+      return (
+        <ListView
+          model={model}
+          models={models}
+          {...(route.filter ? { initialFilter: route.filter } : {})}
+        />
+      )
     case 'create':
       return <RecordForm model={model} models={models} />
     case 'edit':

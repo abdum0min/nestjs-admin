@@ -12,6 +12,7 @@ import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
 import { formatDetail } from '../metadata/format.js'
 import { relationLink } from '../metadata/relations.js'
+import { RelatedList } from './RelatedList.jsx'
 import { ErrorState, Loading } from './States.jsx'
 
 export function RecordView({
@@ -89,6 +90,28 @@ export function RecordView({
           </div>
         ))}
       </dl>
+
+      {/* Each to-many relation gets its own paginated section below the
+          fields. They are separate requests, so a parent with many kinds of
+          child does not turn its detail page into one enormous response. */}
+      {model.fields
+        .filter((field) => field.relation?.cardinality === 'many')
+        .map((field) => {
+          const target = models.find((candidate) => candidate.name === field.relation?.targetModel)
+          if (!target) return null
+          const shape = field.relation?.shape === 'many-to-many' ? 'many-to-many' : 'one-to-many'
+          return (
+            <RelatedList
+              key={field.name}
+              parent={model}
+              parentId={id}
+              field={field}
+              target={target}
+              shape={shape}
+              detachBlocked={field.relation?.detachBlocked}
+            />
+          )
+        })}
     </section>
   )
 }

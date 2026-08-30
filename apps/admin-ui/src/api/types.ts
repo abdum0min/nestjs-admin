@@ -26,6 +26,14 @@ export interface RelationDescriptor {
   readonly from?: string
   /** Field on the target the key points at. */
   readonly to?: string
+  /** Shared by both halves, so the other side can be found. */
+  readonly name?: string
+  /** Where the link is stored, which decides what may be done to it. */
+  readonly shape?: 'to-one' | 'one-to-many' | 'many-to-many'
+  /** Why records cannot be detached, when they cannot. */
+  readonly detachBlocked?: string
+  /** The column on the target that points back here. One-to-many only. */
+  readonly targetForeignKey?: string
 }
 
 export interface FieldDescriptor {

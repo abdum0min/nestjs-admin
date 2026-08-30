@@ -165,3 +165,53 @@ export async function deleteRecord(model: string, id: string): Promise<void> {
     method: 'DELETE',
   })
 }
+
+/**
+ * A page of the records on the far side of a to-many relation.
+ *
+ * The query applies to the records being returned, not to the one they hang
+ * off, so this behaves exactly like `listRecords` on the target model.
+ */
+export async function listRelated(
+  model: string,
+  id: string,
+  relation: string,
+  query: ListQuery,
+): Promise<ListResult> {
+  const envelope = await request<readonly AdminRecord[]>(
+    `/${encodeURIComponent(model)}/${encodeURIComponent(id)}/${encodeURIComponent(relation)}` +
+      buildQueryString(query),
+  )
+
+  return {
+    records: envelope.data,
+    meta: envelope.meta ?? { total: envelope.data.length, page: 1, perPage: envelope.data.length },
+  }
+}
+
+/** Link an existing record to this one. */
+export async function attachRelated(
+  model: string,
+  id: string,
+  relation: string,
+  targetId: string,
+): Promise<void> {
+  await request<null>(
+    `/${encodeURIComponent(model)}/${encodeURIComponent(id)}/${encodeURIComponent(relation)}`,
+    { method: 'POST', body: JSON.stringify({ id: targetId }) },
+  )
+}
+
+/** Unlink a record from this one, leaving both in place. */
+export async function detachRelated(
+  model: string,
+  id: string,
+  relation: string,
+  targetId: string,
+): Promise<void> {
+  await request<null>(
+    `/${encodeURIComponent(model)}/${encodeURIComponent(id)}/${encodeURIComponent(relation)}/` +
+      encodeURIComponent(targetId),
+    { method: 'DELETE' },
+  )
+}

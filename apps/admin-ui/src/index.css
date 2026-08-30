@@ -417,3 +417,54 @@ button.link {
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* --------------------------------------------------------------- related --
+   A to-many relation, shown on the parent's detail page. Paginated, because
+   how many children a record has is a property of the data.                  */
+
+.related {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.related__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.related__header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.related__pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.related__attach {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.related__attach .picker {
+  flex: 1 1 220px;
+}
+
+/* Said before the click rather than after: attaching across a one-to-many
+   moves a record, and detaching may not be possible at all. */
+.related__note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.9em;
+}
