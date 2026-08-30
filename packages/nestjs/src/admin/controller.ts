@@ -20,7 +20,7 @@
  * `users`. Declaring `meta` before `:model` is what keeps it reachable; see
  * the route-collision note in reports/004-http-api.md.
  */
-import { InvalidQueryError, type RecordData } from '@nest-admin/core'
+import { InvalidQueryError, type RecordData, type RecordId } from '@nest-admin/core'
 import type { ExecutionContext } from '@nestjs/common'
 import {
   Body,
@@ -42,7 +42,7 @@ import { AdminExceptionFilter } from '../http/exception.filter.js'
 import { success, successPage, type SuccessResponse } from '../http/response.js'
 import type { RawQuery } from '../http/query-parser.js'
 import type { MetadataDto } from './metadata.dto.js'
-import { AdminService } from './service.js'
+import { AdminService, type BulkDeleteResult } from './service.js'
 
 @Controller()
 // Guards at controller scope cover every handler below, including `meta`.
@@ -142,6 +142,33 @@ export class AdminController {
   ): Promise<SuccessResponse<null>> {
     await this.service.delete(context, model, id)
     return success(null)
+  }
+
+  /**
+   * `DELETE /admin/:model` with `{ "ids": [...] }` - delete several records.
+   *
+   * One segment, so it cannot be confused with `/:model/:id`. The ids are in
+   * the body rather than the query string because a selection of two hundred
+   * would not survive a URL length limit, and a request that silently deletes
+   * the first N of what was asked for is worse than one that fails.
+   *
+   * Answers 200 with both lists even when some records survived; see
+   * `deleteMany` for why a partial result is not an error.
+   */
+  @Delete(':model')
+  async removeMany(
+    @AdminContext() context: ExecutionContext,
+    @Param('model') model: string,
+    @Body() body: { ids?: unknown },
+  ): Promise<SuccessResponse<BulkDeleteResult>> {
+    const ids: unknown = body?.ids
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' && typeof id !== 'number')) {
+      throw new InvalidQueryError(
+        'Deleting records requires a body of the form { "ids": ["...", "..."] }.',
+      )
+    }
+
+    return success(await this.service.deleteMany(context, model, ids as RecordId[]))
   }
 
   /**

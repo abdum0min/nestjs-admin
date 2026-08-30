@@ -36,6 +36,7 @@ import {
 import { Inject, Injectable, type ExecutionContext, type OnModuleInit } from '@nestjs/common'
 
 import type { AdminOperation, AdminResourceAuth } from '../auth/resource.js'
+import { clientMessage } from '../http/exception.filter.js'
 import { parseListQuery, type RawQuery } from '../http/query-parser.js'
 import type { AdminActionResult, AdminActionsByModel } from '../actions/contract.js'
 import type { AdminHooksByModel } from '../hooks/contract.js'
@@ -53,6 +54,24 @@ import {
   type MetadataDto,
   type ModelPermissionsDto,
 } from './metadata.dto.js'
+
+/**
+ * How many records one bulk delete may name.
+ *
+ * Not a performance limit - it is a blast-radius limit. The loop below issues
+ * one statement per record and runs every hook, so a request naming fifty
+ * thousand ids would hold a connection for minutes and be unstoppable halfway
+ * through. Two hundred is more than anyone selects by hand and small enough to
+ * finish.
+ */
+export const MAX_BULK_DELETE = 200
+
+/** What happened to each record a bulk delete named. */
+export interface BulkDeleteResult {
+  readonly deleted: readonly RecordId[]
+  /** Records still in place, and why. Messages are already safe to show. */
+  readonly failed: readonly { readonly id: RecordId; readonly message: string }[]
+}
 
 @Injectable()
 export class AdminService implements OnModuleInit {
@@ -207,6 +226,65 @@ export class AdminService implements OnModuleInit {
     await this.runAfter(context, model, 'afterUpdate', { id, record: updated })
 
     return this.project(metadata, updated)
+  }
+
+  /**
+   * Delete several records, and say what happened to each.
+   *
+   * ## Why this is a loop and not a `deleteMany`
+   *
+   * The adapter contract has no bulk delete, and giving it one would mean
+   * every adapter had to have one. More to the point, hooks are per-record: an
+   * application that refuses to delete a pinned post must still refuse it when
+   * the post is one of forty checkboxes. A single `deleteMany` would step past
+   * every one of those refusals at once, which is the opposite of what a
+   * confirmation dialog leads someone to expect.
+   *
+   * ## Why a partial result is a success
+   *
+   * Deleting thirty records where two are still referenced is not a failed
+   * request - twenty-eight rows are gone, and an error response would say
+   * nothing about which. So the response is a 200 carrying both lists, and the
+   * interface reports them. Nothing is rolled back, and `§ Known Limitations`
+   * says so: this is not a transaction, exactly as hooks are not.
+   */
+  async deleteMany(
+    context: ExecutionContext,
+    model: string,
+    ids: readonly RecordId[],
+  ): Promise<BulkDeleteResult> {
+    await this.requireModel(model)
+    // Once, for the operation - not once per record. The permission is to
+    // delete records of this model, and it does not change mid-loop.
+    await this.assertAllowed(context, model, 'delete')
+
+    if (ids.length === 0) {
+      throw new InvalidQueryError('Deleting records requires a body of the form { "ids": [...] }.')
+    }
+    if (ids.length > MAX_BULK_DELETE) {
+      throw new InvalidQueryError(
+        `Refusing to delete ${ids.length} records in one request. The limit is ${MAX_BULK_DELETE}.`,
+      )
+    }
+
+    const before = this.hooks?.[model]?.beforeDelete
+    const deleted: RecordId[] = []
+    const failed: Array<{ id: RecordId; message: string }> = []
+
+    for (const id of ids) {
+      try {
+        if (before) await before({ context, model, id })
+        await this.adapter.delete(model, id)
+        await this.runAfter(context, model, 'afterDelete', { id })
+        deleted.push(id)
+      } catch (cause) {
+        // Through the filter's own rule, so a refusal explains itself and an
+        // internal failure stays generic. A 200 is not a licence to leak.
+        failed.push({ id, message: clientMessage(cause) })
+      }
+    }
+
+    return { deleted, failed }
   }
 
   async delete(context: ExecutionContext, model: string, id: RecordId): Promise<void> {
