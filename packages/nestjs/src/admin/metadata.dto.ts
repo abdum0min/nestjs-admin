@@ -15,7 +15,7 @@
  *
  * @experimental The HTTP contract is expected to change before 1.0.
  */
-import type { FieldMetadata, ModelMetadata } from '@nest-admin/core'
+import { displayFieldFor, type FieldMetadata, type ModelMetadata } from '@nest-admin/core'
 
 /** Mirrors Core's `FieldKind`, restated so the wire format is self-contained. */
 export type FieldKindDto =
@@ -24,6 +24,18 @@ export type FieldKindDto =
 export interface RelationDto {
   readonly targetModel: string
   readonly cardinality: 'one' | 'many'
+
+  /**
+   * Scalar field on this model holding the key, for a to-one relation.
+   *
+   * The UI needs it twice over: it is the field a form submits when the user
+   * picks a related record, and the field a filter is expressed in. Absent on
+   * to-many relations, which have no column on this side.
+   */
+  readonly from?: string
+
+  /** Field on the target the key points at - usually its id. */
+  readonly to?: string
 }
 
 export interface FieldDto {
@@ -55,6 +67,15 @@ export interface ModelDto {
   /** Field names forming the primary key. Single-column in this version. */
   readonly primaryKey: readonly string[]
   readonly fields: readonly FieldDto[]
+
+  /**
+   * Field that names a record of this model in one line.
+   *
+   * Sent rather than left for the UI to guess, because the guess would have to
+   * match what the adapter already selected when it loaded the relation. Both
+   * come from one rule in Core, so they cannot disagree.
+   */
+  readonly displayField: string
 }
 
 export interface MetadataDto {
@@ -79,6 +100,8 @@ function toFieldDto(field: FieldMetadata): FieldDto {
           relation: {
             targetModel: field.relation.targetModel,
             cardinality: field.relation.cardinality,
+            ...(field.relation.from !== undefined ? { from: field.relation.from } : {}),
+            ...(field.relation.to !== undefined ? { to: field.relation.to } : {}),
           },
         }
       : {}),
@@ -106,6 +129,7 @@ export function toMetadataDto(models: readonly ModelMetadata[]): MetadataDto {
     models: models.map((model) => ({
       name: model.name,
       primaryKey: [...model.primaryKey],
+      displayField: displayFieldFor(model),
       fields: model.fields
         .filter((field) => !field.relation || present.has(field.relation.targetModel))
         .map(toFieldDto),

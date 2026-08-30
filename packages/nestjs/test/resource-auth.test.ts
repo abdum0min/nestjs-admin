@@ -230,7 +230,7 @@ describe('metadata filtering', () => {
       'relation',
     ])
     for (const model of body.data.models) {
-      expect(Object.keys(model).sort()).toEqual(['fields', 'name', 'primaryKey'])
+      expect(Object.keys(model).sort()).toEqual(['displayField', 'fields', 'name', 'primaryKey'])
       for (const field of model.fields) {
         for (const key of Object.keys(field)) expect(allowed).toContain(key)
       }

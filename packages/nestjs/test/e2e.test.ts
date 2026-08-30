@@ -305,7 +305,7 @@ describe('the wire format the admin UI generates', () => {
     const { body } = await http().get('/admin/meta').expect(200)
     const user = body.data.models.find((m: { name: string }) => m.name === 'User')
 
-    expect(Object.keys(user).sort()).toEqual(['fields', 'name', 'primaryKey'])
+    expect(Object.keys(user).sort()).toEqual(['displayField', 'fields', 'name', 'primaryKey'])
 
     const allowed = new Set([
       'name',
