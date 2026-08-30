@@ -57,9 +57,19 @@ describe('the include clause', () => {
   })
 
   it('is undefined for a model that owns none', () => {
-    // User has `posts`, but the column is on Post.
-    expect(toIncludeClause(model('User'), models)).toBeUndefined()
+    // Product has no relations at all. User has `posts`, but that column is on
+    // Post - it owns only the self-relation below.
     expect(toIncludeClause(model('Product'), models)).toBeUndefined()
+    expect(toIncludeClause(model('Tag'), models)).toBeUndefined()
+  })
+
+  it('covers a self-relation without recursing', () => {
+    // User.manager points at User. The include is one level deep by
+    // construction - it selects columns, never nested relations - so a cycle
+    // is not expressible here.
+    expect(toIncludeClause(model('User'), models)).toEqual({
+      manager: { select: { id: true, name: true } },
+    })
   })
 
   it('skips a relation whose target is not in the given set', () => {
@@ -214,5 +224,105 @@ describe('writing', () => {
     })
 
     expect(updated['authorId']).toBe(other['id'])
+  })
+})
+
+describe('listing across a to-many relation', () => {
+  it('returns the children of one parent, paginated', async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await adapter.create('Post', { title: `Extra ${index}`, authorId })
+    }
+
+    const page = await adapter.listRelated('User', authorId, 'posts', { page: 2, perPage: 2 })
+
+    expect(page.total).toBe(6)
+    expect(page.data).toHaveLength(2)
+    expect(page.page).toBe(2)
+  })
+
+  it('applies the query to the children, not to the parent', async () => {
+    await adapter.create('Post', { title: 'Findable', authorId })
+
+    const page = await adapter.listRelated('User', authorId, 'posts', { search: 'Findable' })
+
+    expect(page.total).toBe(1)
+    expect(page.data[0]!['title']).toBe('Findable')
+  })
+
+  it('resolves the children own relations too', async () => {
+    // A related list is an ordinary list, so it gets the same treatment.
+    const page = await adapter.listRelated('User', authorId, 'posts', {})
+
+    expect(page.data[0]).toMatchObject({ author: { name: 'Ada Lovelace' } })
+  })
+
+  it('404s for a parent that does not exist', async () => {
+    await expect(adapter.listRelated('User', 'nope', 'posts', {})).rejects.toThrow(
+      /No User record found/,
+    )
+  })
+
+  it('refuses a field that is not a to-many relation', async () => {
+    await expect(adapter.listRelated('Post', 'any-id', 'author', {})).rejects.toThrow(
+      /to-one relation/,
+    )
+    await expect(adapter.listRelated('User', authorId, 'email', {})).rejects.toThrow(
+      /Only a relation field/,
+    )
+  })
+})
+
+describe('many-to-many', () => {
+  let postId: string
+  let tagId: string
+
+  beforeEach(async () => {
+    const post = await adapter.create('Post', { title: 'Taggable', authorId })
+    postId = post['id'] as string
+    const tag = await adapter.create('Tag', { name: 'prisma' })
+    tagId = tag['id'] as string
+  })
+
+  it('starts with nothing linked', async () => {
+    expect((await adapter.listRelated('Post', postId, 'tags', {})).total).toBe(0)
+  })
+
+  it('attaches and detaches without touching either record', async () => {
+    await adapter.attachRelated('Post', postId, 'tags', tagId)
+    expect((await adapter.listRelated('Post', postId, 'tags', {})).data[0]!['name']).toBe('prisma')
+
+    await adapter.detachRelated('Post', postId, 'tags', tagId)
+    expect((await adapter.listRelated('Post', postId, 'tags', {})).total).toBe(0)
+
+    // Both records are still there; only the link was removed.
+    expect(await adapter.findOne('Tag', tagId)).not.toBeNull()
+    expect(await adapter.findOne('Post', postId)).not.toBeNull()
+  })
+
+  it('is visible from both sides', async () => {
+    await adapter.attachRelated('Post', postId, 'tags', tagId)
+
+    const fromTag = await adapter.listRelated('Tag', tagId, 'posts', {})
+    expect(fromTag.data[0]!['title']).toBe('Taggable')
+  })
+
+  it('can be attached from either side', async () => {
+    await adapter.attachRelated('Tag', tagId, 'posts', postId)
+
+    expect((await adapter.listRelated('Post', postId, 'tags', {})).total).toBe(1)
+  })
+})
+
+describe('a self-relation', () => {
+  it('lists reports without recursing', async () => {
+    const manager = await adapter.create('User', { email: 'grace@example.com', name: 'Grace' })
+    await adapter.update('User', authorId, { managerId: manager['id'] as string })
+
+    const reports = await adapter.listRelated('User', manager['id'] as string, 'reports', {})
+
+    expect(reports.total).toBe(1)
+    expect(reports.data[0]!['name']).toBe('Ada Lovelace')
+    // The child carries its own manager, one level deep and no further.
+    expect(reports.data[0]!['manager']).toMatchObject({ name: 'Grace' })
   })
 })

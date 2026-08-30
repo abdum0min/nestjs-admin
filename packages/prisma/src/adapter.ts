@@ -26,6 +26,7 @@ import { assertSupportedPrismaVersion } from './client/version-gate.js'
 import { readPrismaDmmf } from './metadata/read-dmmf.js'
 import { toModelMetadata } from './metadata/to-metadata.js'
 import { toIncludeClause } from './query/to-include.js'
+import { toRelatedWhere } from './query/to-related-where.js'
 import { resolvePagination, toFindManyArgs } from './query/to-prisma-args.js'
 
 /** Prisma's error code for "record required but not found". */
@@ -145,7 +146,112 @@ export class PrismaAdapter implements OrmAdapter {
     await this.#run(model, () => delegate.delete({ where }), id)
   }
 
+  /**
+   * A page of the records on the far side of a to-many relation.
+   *
+   * Implemented as an ordinary list of the *target* model with one extra
+   * condition, so pagination, sorting, filtering and relation loading all
+   * behave exactly as they do on a top-level list. See `to-related-where.ts`.
+   */
+  async listRelated(
+    model: string,
+    id: RecordId,
+    relationField: string,
+    query: ListQuery,
+  ): Promise<Page<RecordData>> {
+    const metadata = await this.#requireModel(model)
+    const models = await this.getModels()
+
+    // The relation is validated first: a bad field name is wrong whether or
+    // not the record exists, and rejecting it here costs no query.
+    const { target, where } = toRelatedWhere(metadata, relationField, id, models)
+
+    // A missing parent is a 404, not an empty page. The condition below would
+    // simply match nothing, which reads as "this record has no children".
+    await this.#requireRecord(model, metadata, id)
+    const delegate = await this.#delegate(target.name)
+
+    const args = toFindManyArgs(target, query)
+    const combined = args.where ? { AND: [args.where, where] } : where
+    const include = toIncludeClause(target, models)
+
+    const { page, perPage } = resolvePagination(query)
+    const [rows, total] = await this.#run(target.name, () =>
+      Promise.all([
+        delegate.findMany({ ...args, where: combined, ...(include ? { include } : {}) }),
+        delegate.count({ where: combined }),
+      ]),
+    )
+
+    return { data: rows as RecordData[], total, page, perPage }
+  }
+
+  async attachRelated(
+    model: string,
+    id: RecordId,
+    relationField: string,
+    targetId: RecordId,
+  ): Promise<void> {
+    await this.#link(model, id, relationField, targetId, 'connect')
+  }
+
+  async detachRelated(
+    model: string,
+    id: RecordId,
+    relationField: string,
+    targetId: RecordId,
+  ): Promise<void> {
+    await this.#link(model, id, relationField, targetId, 'disconnect')
+  }
+
   // ---------------------------------------------------------------- internals
+
+  /**
+   * Add or remove one link, from the parent's side.
+   *
+   * Prisma expresses both the same way and works out where the link is stored -
+   * a join-table row for a many-to-many, the child's foreign key for a
+   * one-to-many. Whether the operation is allowed is the caller's decision;
+   * this performs it.
+   */
+  async #link(
+    model: string,
+    id: RecordId,
+    relationField: string,
+    targetId: RecordId,
+    operation: 'connect' | 'disconnect',
+  ): Promise<void> {
+    const metadata = await this.#requireModel(model)
+    const models = await this.getModels()
+    const { target } = toRelatedWhere(metadata, relationField, id, models)
+
+    const [targetKey] = target.primaryKey
+    if (targetKey === undefined) {
+      throw new FieldNotFoundError(target.name, relationField, 'The target has no primary key.')
+    }
+
+    const delegate = await this.#delegate(model)
+    await this.#run(
+      model,
+      () =>
+        delegate.update({
+          where: this.#whereById(metadata, id),
+          data: { [relationField]: { [operation]: { [targetKey]: targetId } } },
+        }),
+      id,
+    )
+  }
+
+  /** Throw `RecordNotFoundError` unless the record exists. */
+  async #requireRecord(model: string, metadata: ModelMetadata, id: RecordId): Promise<void> {
+    const delegate = await this.#delegate(model)
+    const found = await this.#run(
+      model,
+      () => delegate.findUnique({ where: this.#whereById(metadata, id) }),
+      id,
+    )
+    if (found === null || found === undefined) throw new RecordNotFoundError(model, id)
+  }
 
   async #requireModel(model: string): Promise<ModelMetadata> {
     const models = await this.getModels()
