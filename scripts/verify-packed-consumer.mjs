@@ -277,4 +277,10 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
   } catch {
     // A Windows file lock on a just-killed process is not worth failing over.
   }
+
+  // The verdict is the checks, and nothing else. A killed child server can
+  // still emit on its way out, and an exit code that sometimes reflects
+  // teardown noise makes this a flaky step - which is worse than a slow one,
+  // because a flaky check is one people learn to re-run rather than read.
+  process.exit(process.exitCode === undefined ? 0 : Number(process.exitCode))
 }
