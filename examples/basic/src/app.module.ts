@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common'
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import { AdminModule, ForbiddenError, UnauthorizedError, type AdminAuth } from '@nest-admin/nestjs'
 import { PrismaAdapter } from '@nest-admin/nestjs/prisma'
 
-import { PrismaClient } from './generated/prisma/client.js'
+import { PrismaService } from './prisma.service.js'
 
 /**
  * The reference consumer.
@@ -12,19 +11,6 @@ import { PrismaClient } from './generated/prisma/client.js'
  * `@nest-admin/core` or `@nest-admin/prisma` directly - only the single public
  * package and its `./prisma` subpath, exactly as an installed consumer would.
  */
-
-/**
- * The application owns its database client.
- *
- * Prisma 7 builds a client from a driver adapter, so only the application knows
- * the provider and the connection. Nest Admin receives what is built here and
- * never constructs one.
- */
-const prisma = new PrismaClient({
-  adapter: new PrismaBetterSqlite3({
-    url: process.env['DATABASE_URL'] ?? 'file:./dev.db',
-  }),
-})
 
 /**
  * The application owns identity.
@@ -49,19 +35,43 @@ const adminAuth: AdminAuth = {
   },
 }
 
+/**
+ * Holds the database client, so the admin can be given one through injection.
+ *
+ * In a real application this module is usually already there, and usually has
+ * more in it than one provider.
+ */
+@Module({ providers: [PrismaService], exports: [PrismaService] })
+class DatabaseModule {}
+
 @Module({
   imports: [
-    AdminModule.forRoot({
-      adapter: new PrismaAdapter({ client: prisma }),
-      auth: adminAuth,
-      // Optional. Shown because per-model rules are the common next step:
-      // Product is read-only here, User is fully editable.
-      resourceAuth: {
-        authorize({ model, operation }) {
-          if (model === 'Product') return operation === 'metadata' || operation === 'list'
-          return true
+    // `forRootAsync` rather than `forRoot`, because the client is a provider
+    // rather than a module-level value. That is the normal case: the client
+    // usually needs configuration, and configuration usually arrives through
+    // DI too. `forRoot` is there for the simpler arrangement.
+    AdminModule.forRootAsync({
+      imports: [DatabaseModule],
+      inject: [PrismaService],
+
+      // Structural, so it stays out of the factory: routes are registered
+      // before any provider exists. `/admin` is the default and is spelled out
+      // here only to show where it goes.
+      path: '/admin',
+
+      useFactory: (prisma: PrismaService) => ({
+        adapter: new PrismaAdapter({ client: prisma }),
+        auth: adminAuth,
+
+        // Optional. Shown because per-model rules are the common next step:
+        // Product is read-only here, User is fully editable.
+        resourceAuth: {
+          authorize({ model, operation }) {
+            if (model === 'Product') return operation === 'metadata' || operation === 'list'
+            return true
+          },
         },
-      },
+      }),
     }),
   ],
 })

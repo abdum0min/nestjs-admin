@@ -22,7 +22,13 @@
  * and the configuration engine.
  */
 
-export { AdminModule, type AdminModuleOptions } from './module.js'
+export {
+  AdminModule,
+  type AdminModuleAsyncOptions,
+  type AdminModuleFactoryOptions,
+  type AdminModuleOptions,
+  type AdminModuleOptionsFactory,
+} from './module.js'
 
 // The authentication boundary the consuming application implements. The guard
 // that calls it is internal - a consumer supplies the decision, not the wiring.
