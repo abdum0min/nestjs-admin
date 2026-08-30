@@ -507,6 +507,15 @@ answered `false`. Every branch fell through to the generic 500.
 ESM is unaffected — both ESM entrypoints share `chunk-7QVYU63E.js` — but NestJS
 consumers default to CJS, so the shipped default was the broken one.
 
+> **Correction, made in 0.2.0.** The sentence above is wrong. `chunk-7QVYU63E.js`
+> was 193 bytes and contained one esbuild helper, not Core; `index.js` and
+> `prisma.js` each carried their own copy, exactly as the CommonJS files did.
+> ESM was affected too, and the claim was never checked. The fix in this report
+> — identifying errors by brand rather than by class — covers both formats, so
+> nothing behavioural follows from the mistake. The cause is fixed in 0.2.0: the
+> Prisma package no longer inlines Core, so ESM now genuinely shares one copy.
+> See `reports/011`.
+
 **Why nothing caught it.** Every in-repo test resolves `@nest-admin/core` to a
 single source module, so class identity always matches. The bug exists only
 after bundling. `pnpm build`, `pnpm typecheck` and 304 tests were all green.
