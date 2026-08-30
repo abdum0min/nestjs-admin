@@ -10,14 +10,11 @@
  * application, which is not ours to change.
  */
 import {
-  AdapterError,
-  FieldNotFoundError,
-  ForbiddenError,
-  InvalidQueryError,
-  ModelNotFoundError,
-  NestAdminError,
-  RecordNotFoundError,
-  UnauthorizedError,
+  isNestAdminError,
+  type FieldNotFoundError,
+  type ModelNotFoundError,
+  type NestAdminError,
+  type RecordNotFoundError,
 } from '@nest-admin/core'
 import {
   Catch,
@@ -50,6 +47,13 @@ const INTERNAL: MappedError = {
 /**
  * Map an error to its HTTP representation.
  *
+ * Dispatch is on `error.kind`, not `instanceof`. The published package ships
+ * two CommonJS entrypoints that each inline their own copy of Core, so an error
+ * thrown inside the Prisma adapter is an instance of a different class object
+ * than the one imported here - `instanceof` answered `false` and mapped every
+ * adapter-raised error to a generic 500. See `errors.ts` in Core, and
+ * reports/009-consumer-acceptance.md.
+ *
  * Only errors on this allowlist have their message forwarded to the client.
  * That is a security decision, not a stylistic one: `AdapterError` wraps raw
  * ORM failures whose messages contain filesystem paths and generated query
@@ -57,62 +61,67 @@ const INTERNAL: MappedError = {
  * unrecognised becomes the generic 500 above, and the real error is logged.
  */
 function mapError(error: unknown): MappedError {
-  // Auth first. No `details` on either: echoing anything about why a request
-  // was refused hands a prober information it did not have.
-  if (error instanceof UnauthorizedError) {
-    return {
-      status: HttpStatus.UNAUTHORIZED,
-      code: 'UNAUTHORIZED',
-      message: error.message,
-    }
-  }
+  if (!isNestAdminError(error)) return INTERNAL
 
-  if (error instanceof ForbiddenError) {
-    return {
-      status: HttpStatus.FORBIDDEN,
-      code: 'FORBIDDEN',
-      message: error.message,
-    }
-  }
+  switch (error.kind) {
+    // Auth first. No `details` on either: echoing anything about why a request
+    // was refused hands a prober information it did not have.
+    case 'unauthorized':
+      return {
+        status: HttpStatus.UNAUTHORIZED,
+        code: 'UNAUTHORIZED',
+        message: error.message,
+      }
 
-  if (error instanceof ModelNotFoundError) {
-    return {
-      status: HttpStatus.NOT_FOUND,
-      code: 'MODEL_NOT_FOUND',
-      message: error.message,
-      details: { model: error.model },
-    }
-  }
+    case 'forbidden':
+      return {
+        status: HttpStatus.FORBIDDEN,
+        code: 'FORBIDDEN',
+        message: error.message,
+      }
 
-  if (error instanceof RecordNotFoundError) {
-    return {
-      status: HttpStatus.NOT_FOUND,
-      code: 'RECORD_NOT_FOUND',
-      message: error.message,
-      details: { model: error.model, id: error.id },
-    }
-  }
+    case 'model-not-found':
+      return {
+        status: HttpStatus.NOT_FOUND,
+        code: 'MODEL_NOT_FOUND',
+        message: error.message,
+        details: { model: (error as ModelNotFoundError).model },
+      }
 
-  if (error instanceof FieldNotFoundError) {
-    return {
-      status: HttpStatus.BAD_REQUEST,
-      code: 'FIELD_NOT_FOUND',
-      message: error.message,
-      details: { model: error.model, field: error.field },
-    }
-  }
+    case 'record-not-found':
+      return {
+        status: HttpStatus.NOT_FOUND,
+        code: 'RECORD_NOT_FOUND',
+        message: error.message,
+        details: {
+          model: (error as RecordNotFoundError).model,
+          id: (error as RecordNotFoundError).id,
+        },
+      }
 
-  if (error instanceof InvalidQueryError) {
-    return {
-      status: HttpStatus.BAD_REQUEST,
-      code: 'INVALID_QUERY',
-      message: error.message,
-    }
-  }
+    case 'field-not-found':
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        code: 'FIELD_NOT_FOUND',
+        message: error.message,
+        details: {
+          model: (error as FieldNotFoundError).model,
+          field: (error as FieldNotFoundError).field,
+        },
+      }
 
-  // AdapterError and every other NestAdminError subclass (including the Prisma
-  // schema errors, which contain absolute filesystem paths) fall through here.
-  return INTERNAL
+    case 'invalid-query':
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        code: 'INVALID_QUERY',
+        message: error.message,
+      }
+
+    // 'adapter', 'unknown', and any kind added later without a mapping. The
+    // default stays generic so a new internal error cannot start leaking.
+    default:
+      return INTERNAL
+  }
 }
 
 @Catch()
@@ -131,7 +140,7 @@ export class AdminExceptionFilter implements ExceptionFilter {
     if (mapped.status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       // The client gets a generic message; the operator gets everything.
       this.logger.error(
-        exception instanceof AdapterError
+        isNestAdminError(exception) && exception.kind === 'adapter'
           ? `Adapter failure: ${exception.message}`
           : 'Unhandled error while handling an admin request',
         exception instanceof Error ? exception.stack : String(exception),
@@ -146,7 +155,12 @@ export class AdminExceptionFilter implements ExceptionFilter {
   }
 }
 
-/** Exported for tests and for consumers that want the same mapping elsewhere. */
+/**
+ * Exported for tests and for consumers that want the same mapping elsewhere.
+ *
+ * Delegates to Core's brand check rather than `instanceof` for the reason given
+ * on `mapError`: duplicate copies of Core mean class identity is not reliable.
+ */
 export function isFrameworkError(error: unknown): error is NestAdminError {
-  return error instanceof NestAdminError
+  return isNestAdminError(error)
 }
