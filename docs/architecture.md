@@ -138,7 +138,19 @@ own. It restates the wire types by hand rather than importing Core, so the
 dependency runs UI -> HTTP -> NestJS -> Core, never UI -> Core.
 
 Routing is hash-based (`#/User/u1`). The API owns the same path space the app is
-mounted in, so a path route would be answered by the record controller.
+mounted in, so a path route would be answered by the record controller - and it
+is what makes serving the SPA need no fallback route at all.
+
+Phase 7 made the package serve it. `AdminUiController` binds exactly two paths,
+`/admin` and `/admin/assets/:file`, and is listed **before** `AdminController`,
+so `assets` can never be read as a model name while everything else falls
+through to the API. The UI is copied into `packages/nestjs/dist/admin-ui` at
+build time and ships inside the published tarball.
+
+The UI controller carries **no** auth guard, deliberately: it returns a static
+shell and bundle that contain no records, no schema and no configuration. Every
+route that can return data stays guarded, so an unauthenticated visitor loads
+the shell, its first API call is refused, and the UI shows a signed-out state.
 
 ### examples/basic
 

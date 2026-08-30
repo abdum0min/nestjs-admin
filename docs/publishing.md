@@ -75,11 +75,48 @@ A second bug fell out with it: the published `dependencies` previously declared
 to resolve packages that do not exist on npm. There is now no `dependencies`
 field at all - only peers.
 
+## Phase 7: the package now runs in a real consumer
+
+Two further blockers only appeared once the tarball was installed outside the
+workspace and started. Neither was visible from `pnpm build` or `pnpm test`.
+
+### The wasm that was bundled
+
+`@prisma/get-dmmf` loads `prisma_schema_build_bg.wasm` through a `require()`
+resolved relative to its own package. tsup inlined the package, so the built
+bundle looked fine, imported fine, and then died on the first request:
+
+```text
+Error: ENOENT ... packages/nestjs/dist/prisma_schema_build_bg.wasm
+```
+
+It is now `external` and declared as a real `dependencies` entry. That is the
+correct shape: it is a published third-party package, not a private workspace
+one, so declaring it keeps the "no unpublished dependency" property intact.
+
+### Types that resolved only under modern module resolution
+
+The Nest CLI still ships `"moduleResolution": "node"`, which ignores
+`exports`. Node resolves the `./prisma` subpath at runtime regardless, so the
+import worked while its types did not - the failure mode a consumer sees is a
+red squiggle on working code. A `typesVersions` entry maps the subpath for
+legacy resolution.
+
+### Verified by installing the tarball
+
+`pnpm verify:package` builds, packs, installs the tarball into a temporary
+project **outside** this workspace, boots a real NestJS app against a schema the
+package has never seen, and exercises `/admin`, `/admin/meta` and full CRUD. It
+is not part of `pnpm test` because it runs a real `npm install`.
+
+The bundled admin UI ships inside the tarball at `dist/admin-ui`, so a consumer
+gets the interface without cloning this repository.
+
 ## What still has to be built before a first publish
 
-1. **Admin UI assets.** `apps/admin-ui` builds to `apps/admin-ui/dist`. The
-   publish pipeline must copy that into `packages/nestjs/dist/admin-ui` and add
-   it to `files`. Not wired yet.
+1. ~~**Admin UI assets.**~~ Done in Phase 7: `packages/nestjs` builds the UI
+   first (via a devDependency for ordering) and copies it into
+   `dist/admin-ui`, which `files: ["dist"]` already ships.
 2. **The `bin` entry.** Once the CLI works, `packages/nestjs/package.json`
    gains `"bin": { "nest-admin": "./dist/bin/nest-admin.cjs" }` plus a tsup
    entry that wraps the CLI. Declared only when it does something.

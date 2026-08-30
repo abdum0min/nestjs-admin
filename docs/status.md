@@ -32,7 +32,10 @@ page is the answer.
 | **Metadata filtering**: `/admin/meta` describes only the resources the principal may see                   | `packages/nestjs/src/admin/service.ts`     |
 | **Metadata-driven Admin UI**: shell, nav, list, search, sort, filter, pagination, CRUD                     | `apps/admin-ui/src`                        |
 | **Published declarations resolve**: no unpublished workspace package in the emitted `.d.ts`                | `packages/nestjs/tsup.config.ts`           |
-| **288 tests**, against real SQLite, a real Nest HTTP server, and jsdom                                     | `packages/*/test`, `apps/*/test`, `tests/` |
+| **Admin UI served by the package** at `/admin`, bundled into the tarball                                   | `packages/nestjs/src/ui`                   |
+| **Consumer example** wired end to end against the public package                                           | `examples/basic`                           |
+| **Packed-package verification** (`pnpm verify:package`)                                                    | `scripts/verify-packed-consumer.mjs`       |
+| **304 tests**, against real SQLite, a real Nest HTTP server, and jsdom                                     | `packages/*/test`, `apps/*/test`, `tests/` |
 | Reference Prisma schema with `User` and `Product`                                                          | `examples/basic/prisma/schema.prisma`      |
 | Single-public-package bundling strategy                                                                    | `docs/publishing.md`                       |
 
@@ -40,9 +43,9 @@ page is the answer.
 
 Everything else, specifically:
 
-- Static serving of the SPA under `/admin` (the UI exists; the server does not
-  serve it yet, and `/admin/:model` would shadow `/admin/assets`) (the UI exists, the server does not
-  serve it yet - and `/admin/:model` would shadow `/admin/assets`)
+(the UI exists, the server does not
+serve it yet - and `/admin/:model` would shadow `/admin/assets`)
+
 - A configurable admin base path (fixed at `/admin`)
 - `AdminModule.forRootAsync` for a DI-provided adapter
 - The admin UI: resource list, tables, forms, pagination, search
@@ -60,7 +63,9 @@ Everything else, specifically:
 - Custom pages, plugins, multi-tenancy, SaaS features
 - TypeORM, Drizzle and MikroORM adapters
 
-The example project does **not** yet wire the adapter in.
+The example project is now a real consumer: it configures the adapter, auth and
+resource authorization through the public package only, and serves the admin at
+`/admin`.
 
 The Phase 3 publishing blocker is **resolved** - the emitted declarations no
 longer reference an unpublished package. See [publishing.md](publishing.md).
