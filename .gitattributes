@@ -1,0 +1,20 @@
+# Line endings are LF everywhere, in the repository and in the working tree.
+#
+# Without this, a clone on Windows with the common `core.autocrlf=true` gets
+# CRLF in every file, and `pnpm format:check` then fails on every file - while
+# CI on Linux stays green, because Linux never did the conversion. That split
+# is worse than either result on its own: it tells a new contributor the
+# repository is broken when it is their checkout that differs.
+* text=auto eol=lf
+
+# Never touched, whatever they contain.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.db    binary
+*.tgz   binary
