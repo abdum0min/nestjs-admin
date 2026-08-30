@@ -329,6 +329,11 @@ distributed across a release history nobody reads backwards.
 
 - Composite primary keys are represented in metadata and **rejected** by the
   adapter.
+- **Half of every one-to-one is invisible.** The `@unique` foreign key lives on
+  one side, so the other has no column to resolve — `Profile.user` loads and
+  links, `User.profile` is absent from the record and its nested route answers 400. Deliberate in the loader, which skips any to-one without a `from`; the
+  user-visible consequence had not been written down until `examples/basic`
+  gained a one-to-one.
 - No nested writes: creating a record and its children in one request.
 - No sorting by a related field.
 - Deep pagination is an `OFFSET`. Flat at 50k rows; it will not stay flat.
