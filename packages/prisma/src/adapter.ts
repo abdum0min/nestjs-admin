@@ -11,7 +11,7 @@ import {
   FieldNotFoundError,
   InvalidQueryError,
   ModelNotFoundError,
-  NestAdminError,
+  isNestAdminError,
   RecordNotFoundError,
   type ListQuery,
   type ModelMetadata,
@@ -257,7 +257,7 @@ export class PrismaAdapter implements OrmAdapter {
     try {
       return await operation()
     } catch (cause) {
-      if (cause instanceof NestAdminError) throw cause
+      if (isNestAdminError(cause)) throw cause
 
       if (isPrismaError(cause) && cause.code === PRISMA_RECORD_NOT_FOUND && id !== undefined) {
         throw new RecordNotFoundError(model, id)

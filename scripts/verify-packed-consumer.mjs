@@ -241,6 +241,28 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
     }
   }
 
+  // Core must exist once per module format in the installed package.
+  //
+  // ESM shares it through a chunk both entrypoints import. CJS cannot: esbuild
+  // does not code-split CommonJS, so each entry inlines its own copy, and an
+  // error thrown in one is not an `instanceof` the class held by the other.
+  // That is why framework errors carry a brand instead - see errors.ts in Core.
+  // These assert the arrangement rather than hope for it: if CJS ever gains a
+  // shared chunk the count changes here first.
+  const coreCopies = (file) => {
+    const source = readFileSync(join(pkgDir, file), 'utf8')
+    return (source.match(/class FieldNotFoundError|FieldNotFoundError = class/g) ?? []).length
+  }
+  const chunk = readdirSync(join(pkgDir, 'dist')).find(
+    (entry) => entry.startsWith('chunk-') && entry.endsWith('.js'),
+  )
+
+  check('ESM: Core lives in a shared chunk', chunk ? coreCopies(`dist/${chunk}`) : 0, 1)
+  check('  not in dist/index.js', coreCopies('dist/index.js'), 0)
+  check('  not in dist/prisma.js', coreCopies('dist/prisma.js'), 0)
+  check('CJS: one copy per entrypoint (known)', coreCopies('dist/index.cjs'), 1)
+  check('  and one in prisma.cjs', coreCopies('dist/prisma.cjs'), 1)
+
   const failed = checks.filter((entry) => !entry.ok)
   console.log(`\n${checks.length - failed.length}/${checks.length} checks passed`)
   if (failed.length > 0) {

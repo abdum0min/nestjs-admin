@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-import { AdapterError, NestAdminError } from '@nest-admin/core'
+import { AdapterError, isNestAdminError, NestAdminError } from '@nest-admin/core'
 import { getDMMF } from '@prisma/get-dmmf'
 import type * as DMMF from '@prisma/dmmf'
 
@@ -116,7 +116,7 @@ export function readPrismaDmmf(options: ReadDmmfOptions = {}): DMMF.Document {
   try {
     files = readSchemaFiles(absolutePath)
   } catch (cause) {
-    if (cause instanceof NestAdminError) throw cause
+    if (isNestAdminError(cause)) throw cause
     throw new AdapterError(`Failed to read the Prisma schema at "${absolutePath}".`, { cause })
   }
 
