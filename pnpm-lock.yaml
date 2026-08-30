@@ -172,7 +172,14 @@ importers:
         version: 5.9.3
 
   packages/nestjs:
+    dependencies:
+      '@prisma/get-dmmf':
+        specifier: 7.10.0
+        version: 7.10.0
     devDependencies:
+      '@nest-admin/admin-ui':
+        specifier: workspace:*
+        version: link:../../apps/admin-ui
       '@nest-admin/core':
         specifier: workspace:*
         version: link:../core

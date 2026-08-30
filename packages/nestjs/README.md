@@ -104,6 +104,31 @@ The application constructs the client and the adapter. The framework never
 does: under Prisma 7 a client is built from a driver adapter, so only the
 application knows the provider, credentials and connection strategy.
 
+## The admin UI
+
+The built interface ships inside this package. Once `AdminModule` is imported,
+open `/admin` in a browser - no extra install, no static-file configuration, no
+build step in the consuming project.
+
+Two routes serve it, and they are matched **before** the API routes so `assets`
+is never read as a model name:
+
+| Route                     | Serves                     |
+| ------------------------- | -------------------------- |
+| `GET /admin`              | the SPA shell (`no-cache`) |
+| `GET /admin/assets/:file` | hashed bundles (immutable) |
+
+The UI uses hash routing (`/admin#/User/u1`), so deep links are still requests
+for `/admin` and no catch-all fallback is needed - a fallback would have to
+match `/admin/*`, which is exactly the space the API occupies.
+
+**The shell is served without authentication, deliberately.** It is a static
+bundle: no records, no schema, identical for every visitor. It discovers what
+exists by calling `/admin/meta`, which _is_ guarded. Guarding the shell too
+would render a JSON 401 in the browser instead of a page that can explain
+itself, and would stop you putting your own login redirect in front of it. Every
+route that can return data remains protected.
+
 ## HTTP contract
 
 All routes are mounted under a fixed `/admin` prefix.
@@ -122,6 +147,10 @@ All routes are mounted under a fixed `/admin` prefix.
 models that do exist.
 
 ### Query syntax
+
+Only `page`, `perPage`, `search`, `sort` and `filter` are accepted. Anything
+else is a `400` - including bracket syntax (`?filter[age][gte]=18`), which used
+to be ignored, so a caller believed it had filtered and received every record.
 
 ```text
 ?page=2

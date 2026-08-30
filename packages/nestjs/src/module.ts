@@ -18,7 +18,7 @@
  * someone else's application is a decision the application should make.
  */
 import type { OrmAdapter } from '@nest-admin/core'
-import { Module, type DynamicModule } from '@nestjs/common'
+import { Logger, Module, type DynamicModule } from '@nestjs/common'
 
 import { AdminController } from './admin/controller.js'
 import { AdminService } from './admin/service.js'
@@ -26,7 +26,9 @@ import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
 import { AdminAuthGuard } from './auth/guard.js'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
 import { AdminExceptionFilter } from './http/exception.filter.js'
-import { ADMIN_ADAPTER, ADMIN_AUTH, ADMIN_RESOURCE_AUTH } from './tokens.js'
+import { uiAvailable, uiRoot } from './ui/assets.js'
+import { AdminUiController } from './ui/controller.js'
+import { ADMIN_ADAPTER, ADMIN_AUTH, ADMIN_RESOURCE_AUTH, ADMIN_UI_ROOT } from './tokens.js'
 
 export interface AdminModuleOptions {
   /**
@@ -67,6 +69,17 @@ export interface AdminModuleOptions {
    * fail with 403 before the ORM adapter is called.
    */
   readonly resourceAuth?: AdminResourceAuth
+
+  /**
+   * Directory holding the built admin UI.
+   *
+   * Defaults to the copy bundled inside this package, which is what a consumer
+   * wants and why it is optional. Overriding it exists for this repository's
+   * own tests, which run from `src` while the built UI lives in `dist`.
+   *
+   * @internal
+   */
+  readonly uiRoot?: string
 }
 
 @Module({})
@@ -102,11 +115,29 @@ export class AdminModule {
 
     warnIfUnsafe(options.auth)
 
+    const resolvedUiRoot = options.uiRoot ?? uiRoot()
+
+    if (!uiAvailable(resolvedUiRoot)) {
+      // Not fatal - the API is perfectly usable on its own, and a source
+      // checkout that has not run the UI build lands here. Said once, at
+      // startup, rather than as a 404 someone has to reverse-engineer.
+      new Logger('NestAdmin').warn(
+        'The admin UI was not found in this build; /admin will return 404. ' +
+          'The API under /admin is unaffected.',
+      )
+    }
+
     return {
       module: AdminModule,
-      controllers: [AdminController],
+      // Order matters and is the whole answer to the route collision. The UI
+      // controller binds exactly two paths - `/admin` and `/admin/assets/:file`
+      // - and is matched first, so `assets` can never be read as a model name.
+      // Everything else falls through to the API controller, including
+      // `/admin/meta` and every `/admin/:model` route.
+      controllers: [AdminUiController, AdminController],
       providers: [
         { provide: ADMIN_ADAPTER, useValue: options.adapter },
+        { provide: ADMIN_UI_ROOT, useValue: resolvedUiRoot },
         { provide: ADMIN_AUTH, useValue: options.auth },
         // Always provided, so injection resolves whether or not the consumer
         // supplied a policy. The default permits every model.

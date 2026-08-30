@@ -20,6 +20,13 @@
     },
     "./package.json": "./package.json"
   },
+  "typesVersions": {
+    "*": {
+      "prisma": [
+        "./dist/prisma.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist"
   ],
@@ -28,9 +35,12 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/copy-admin-ui.mjs",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/get-dmmf": "7.10.0"
   },
   "peerDependencies": {
     "@nestjs/common": ">=10.0.0 <13",
@@ -45,6 +55,7 @@
     }
   },
   "devDependencies": {
+    "@nest-admin/admin-ui": "workspace:*",
     "@nest-admin/core": "workspace:*",
     "@nest-admin/prisma": "workspace:*",
     "@nestjs/common": "catalog:",
