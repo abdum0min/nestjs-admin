@@ -1,10 +1,10 @@
 /**
- * `@nest-admin/nest-admin` - the NestJS integration and the single published
+ * `@nest-admin/nestjs` - the NestJS integration and the single published
  * package.
  *
  * ```ts
- * import { AdminModule } from '@nest-admin/nest-admin'
- * import { PrismaAdapter } from '@nest-admin/nest-admin/prisma'
+ * import { AdminModule } from '@nest-admin/nestjs'
+ * import { PrismaAdapter } from '@nest-admin/nestjs/prisma'
  *
  * @Module({
  *   imports: [AdminModule.forRoot({ adapter: new PrismaAdapter({ client: prisma }) })],
@@ -53,20 +53,19 @@ export type {
 // Core contracts are re-exported so consumers of the single public package can
 // type their own adapters and configuration without a second install.
 export type {
+  AdminErrorKind,
   FieldKind,
   FieldMetadata,
   FilterOperator,
   FilterRule,
   ListQuery,
   ModelMetadata,
-  NestAdminConfig,
   OrmAdapter,
   Page,
   RecordData,
   RecordId,
   RelationCardinality,
   RelationMetadata,
-  ResourceSelection,
   SortDirection,
   SortRule,
 } from '@nest-admin/core'
@@ -76,6 +75,10 @@ export {
   FieldNotFoundError,
   ForbiddenError,
   InvalidQueryError,
+  // Errors cross bundle boundaries, so `instanceof` is not reliable for them -
+  // see the note in Core's `errors.ts`. Consumers that need to recognise a
+  // framework error must have the same guard the framework uses.
+  isNestAdminError,
   ModelNotFoundError,
   NestAdminError,
   RecordNotFoundError,

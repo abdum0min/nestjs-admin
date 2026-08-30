@@ -61,7 +61,7 @@ try {
   console.log('1/5  building the workspace')
   run('pnpm', ['build'], { cwd: repoRoot })
 
-  console.log('2/5  packing @nest-admin/nest-admin')
+  console.log('2/5  packing @nest-admin/nestjs')
   run('pnpm', ['pack', '--pack-destination', workspace], {
     cwd: join(repoRoot, 'packages/nestjs'),
   })
@@ -119,8 +119,8 @@ try {
 const path = require('node:path')
 const { Module } = require('@nestjs/common')
 const { NestFactory } = require('@nestjs/core')
-const { AdminModule, unsafeAllowAllRequests } = require('@nest-admin/nest-admin')
-const { PrismaAdapter } = require('@nest-admin/nest-admin/prisma')
+const { AdminModule, unsafeAllowAllRequests } = require('@nest-admin/nestjs')
+const { PrismaAdapter } = require('@nest-admin/nestjs/prisma')
 const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3')
 const { PrismaClient } = require('@prisma/client')
 
@@ -216,7 +216,7 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
   check('  record is gone', await status(`/Widget/${id}`), 404)
 
   const manifest = JSON.parse(
-    readFileSync(join(consumer, 'node_modules/@nest-admin/nest-admin/package.json'), 'utf8'),
+    readFileSync(join(consumer, 'node_modules/@nest-admin/nestjs/package.json'), 'utf8'),
   )
   check(
     'no private workspace package required',
@@ -228,7 +228,7 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
   // condition's `types`. Pointing it at the ESM `.d.ts` of a `"type": "module"`
   // package makes TypeScript reject the import (TS1479) even though `require`
   // works at runtime. The `.d.cts` files ship; they must actually be referenced.
-  const pkgDir = join(consumer, 'node_modules/@nest-admin/nest-admin')
+  const pkgDir = join(consumer, 'node_modules/@nest-admin/nestjs')
   for (const [subpath, entry] of Object.entries(manifest.exports)) {
     if (subpath === './package.json') continue
     check(`  ${subpath} require types`, entry.require.types.endsWith('.d.cts'), true)

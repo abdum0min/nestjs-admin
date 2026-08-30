@@ -111,7 +111,7 @@ importers:
 
   examples/basic:
     dependencies:
-      '@nest-admin/nest-admin':
+      '@nest-admin/nestjs':
         specifier: workspace:*
         version: link:../../packages/nestjs
       '@nestjs/common':

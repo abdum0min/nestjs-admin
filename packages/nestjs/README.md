@@ -1,4 +1,4 @@
-# @nest-admin/nest-admin
+# @nest-admin/nestjs
 
 The NestJS integration — and **the single package published to npm**.
 
@@ -7,8 +7,8 @@ The name is a placeholder. The final brand/package name is not decided.
 ## Usage
 
 ```ts
-import { AdminModule } from '@nest-admin/nest-admin'
-import { PrismaAdapter } from '@nest-admin/nest-admin/prisma'
+import { AdminModule } from '@nest-admin/nestjs'
+import { PrismaAdapter } from '@nest-admin/nestjs/prisma'
 import { PrismaClient } from './generated/prisma/client'
 
 const prisma = new PrismaClient({ adapter: /* your driver adapter */ })
@@ -54,7 +54,7 @@ generic 500 - a bug in authentication never becomes an accidental allow.
 For local development only:
 
 ```ts
-import { unsafeAllowAllRequests } from '@nest-admin/nest-admin'
+import { unsafeAllowAllRequests } from '@nest-admin/nestjs'
 
 AdminModule.forRoot({ adapter, auth: unsafeAllowAllRequests() })
 ```

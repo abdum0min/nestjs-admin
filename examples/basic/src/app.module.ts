@@ -1,12 +1,7 @@
 import { Module } from '@nestjs/common'
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
-import {
-  AdminModule,
-  ForbiddenError,
-  UnauthorizedError,
-  type AdminAuth,
-} from '@nest-admin/nest-admin'
-import { PrismaAdapter } from '@nest-admin/nest-admin/prisma'
+import { AdminModule, ForbiddenError, UnauthorizedError, type AdminAuth } from '@nest-admin/nestjs'
+import { PrismaAdapter } from '@nest-admin/nestjs/prisma'
 
 import { PrismaClient } from './generated/prisma/client.js'
 
