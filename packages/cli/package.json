@@ -1,6 +1,6 @@
 {
   "name": "@nest-admin/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Nest Admin CLI: project detection and setup commands.",
   "license": "MIT",
