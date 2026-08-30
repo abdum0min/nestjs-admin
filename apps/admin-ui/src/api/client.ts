@@ -13,6 +13,7 @@
 import { buildQueryString } from './query.js'
 import type {
   AdminErrorCode,
+  BulkDeleteResult,
   AdminRecord,
   ErrorEnvelope,
   ListQuery,
@@ -57,9 +58,26 @@ export class AdminApiError extends Error {
     readonly code: AdminErrorCode,
     message: string,
     readonly status: number,
+    /** Whatever the server attached. Read through the accessors below. */
+    readonly details?: Readonly<Record<string, unknown>>,
   ) {
     super(message)
     this.name = 'AdminApiError'
+  }
+
+  /**
+   * The inputs this failure is about, if the server named any.
+   *
+   * A duplicate email, a missing required value, a hook that refused one
+   * particular field: all of them arrive naming the column, which is what lets
+   * a form put the message under that input instead of in a banner.
+   *
+   * Read defensively. `details` is a free-form object on the wire, and a form
+   * that trusted its shape would break on a server that sent something else.
+   */
+  get fields(): readonly string[] {
+    const named = this.details?.['fields']
+    return Array.isArray(named) ? named.filter((entry) => typeof entry === 'string') : []
   }
 }
 
@@ -103,7 +121,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<SuccessEnve
   }
 
   if (!payload.success) {
-    throw new AdminApiError(payload.error.code, payload.error.message, response.status)
+    throw new AdminApiError(
+      payload.error.code,
+      payload.error.message,
+      response.status,
+      payload.error.details,
+    )
   }
 
   return payload as SuccessEnvelope<T>
@@ -164,6 +187,25 @@ export async function deleteRecord(model: string, id: string): Promise<void> {
   await request<null>(`/${encodeURIComponent(model)}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   })
+}
+
+/**
+ * `DELETE /admin/:model` with `{ ids }` - delete a selection.
+ *
+ * Answers 200 even when some records survived, carrying both lists: deleting
+ * thirty rows where two are still referenced is not a failed request, and an
+ * error response would say nothing about which twenty-eight are gone. The
+ * caller reports what came back.
+ */
+export async function deleteRecords(
+  model: string,
+  ids: readonly string[],
+): Promise<BulkDeleteResult> {
+  const { data } = await request<BulkDeleteResult>(`/${encodeURIComponent(model)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  })
+  return data
 }
 
 /**

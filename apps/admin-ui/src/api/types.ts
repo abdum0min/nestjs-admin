@@ -119,6 +119,7 @@ export type AdminErrorCode =
   | 'FIELD_NOT_FOUND'
   | 'INVALID_QUERY'
   | 'VALIDATION_ERROR'
+  | 'CONSTRAINT_VIOLATION'
   | 'INTERNAL_ERROR'
 
 export interface SuccessEnvelope<T> {
@@ -158,6 +159,13 @@ export interface ListQuery {
   readonly search?: string
   readonly sort?: readonly SortRule[]
   readonly filters?: readonly FilterRule[]
+}
+
+/** What happened to each record a bulk delete named. */
+export interface BulkDeleteResult {
+  readonly deleted: readonly string[]
+  /** Records still in place, and why. The messages are safe to show. */
+  readonly failed: readonly { readonly id: string; readonly message: string }[]
 }
 
 export interface ListResult {

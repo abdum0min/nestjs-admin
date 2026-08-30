@@ -28,11 +28,19 @@ export function RelationPicker({
   target,
   value,
   required,
+  inputProps,
   onChange,
 }: {
   readonly target: ModelDescriptor
   readonly value: string
   readonly required: boolean
+  /**
+   * Accessibility attributes for the search box.
+   *
+   * The form owns whether this field was refused and what to say about it; the
+   * picker only knows which input the message should be attached to.
+   */
+  readonly inputProps?: Readonly<Record<string, unknown>>
   readonly onChange: (value: string) => void
 }) {
   const [term, setTerm] = useState('')
@@ -118,6 +126,7 @@ export function RelationPicker({
       )}
 
       <input
+        {...inputProps}
         type="search"
         value={term}
         placeholder={chosen === undefined ? `Search ${target.name}…` : `Change ${target.name}…`}
