@@ -349,3 +349,71 @@ tbody tr:last-child td {
   gap: 0.75rem;
   padding-top: 0.25rem;
 }
+
+/* ---------------------------------------------------------------- picker --
+   Choosing the record a to-one relation points at. The field being edited is
+   a foreign key, so what is stored is an id and what is shown is a name.      */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+
+.picker__chosen {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-weight: 500;
+}
+
+.picker__options {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.picker__options li {
+  margin: 0;
+}
+
+.picker__options li.muted {
+  padding: 6px 8px;
+}
+
+/* A row in a list of choices, not a call to action - so it reads as text and
+   only shows it is interactive on hover and focus. */
+.picker__options button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.picker__options button:hover,
+.picker__options button:focus-visible {
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+}
+
+button.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent, currentColor);
+  cursor: pointer;
+  text-decoration: underline;
+}

@@ -8,7 +8,13 @@
 import { useEffect, useState } from 'react'
 
 import { listRecords } from '../api/client.js'
-import type { FilterRule, ModelDescriptor, SortRule } from '../api/types.js'
+import type {
+  AdminRecord,
+  FieldDescriptor,
+  FilterRule,
+  ModelDescriptor,
+  SortRule,
+} from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
 import {
@@ -19,11 +25,18 @@ import {
   sortableFields,
 } from '../metadata/fields.js'
 import { formatCell } from '../metadata/format.js'
+import { relationForForeignKey, relationLink } from '../metadata/relations.js'
 import { Empty, ErrorState, Loading } from './States.jsx'
 
 const PER_PAGE = 25
 
-export function ListView({ model }: { readonly model: ModelDescriptor }) {
+export function ListView({
+  model,
+  models,
+}: {
+  readonly model: ModelDescriptor
+  readonly models: readonly ModelDescriptor[]
+}) {
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
@@ -128,7 +141,7 @@ export function ListView({ model }: { readonly model: ModelDescriptor }) {
                   <tr>
                     {columns.map((column) => (
                       <th key={column.name} scope="col">
-                        {column.name}
+                        {columnLabel(model, column)}
                       </th>
                     ))}
                     <th scope="col" aria-label="Actions" />
@@ -140,7 +153,9 @@ export function ListView({ model }: { readonly model: ModelDescriptor }) {
                     return (
                       <tr key={id ?? index}>
                         {columns.map((column) => (
-                          <td key={column.name}>{formatCell(column, record[column.name])}</td>
+                          <td key={column.name}>
+                            <Cell model={model} models={models} column={column} record={record} />
+                          </td>
                         ))}
                         <td className="cell--actions">
                           {id === undefined ? null : (
@@ -349,4 +364,43 @@ function Pagination({
       </button>
     </nav>
   )
+}
+
+/**
+ * One table cell.
+ *
+ * A foreign key is rendered as the related record's name, linking to it -
+ * `authorId` says `cmtf50g…`, which is true and unusable. The raw value stays
+ * available on the detail page.
+ */
+function Cell({
+  model,
+  models,
+  column,
+  record,
+}: {
+  readonly model: ModelDescriptor
+  readonly models: readonly ModelDescriptor[]
+  readonly column: FieldDescriptor
+  readonly record: AdminRecord
+}) {
+  const relationField = relationForForeignKey(model, column.name)
+  const link = relationField ? relationLink(relationField, models, record) : undefined
+
+  if (link) {
+    return <a href={href({ kind: 'detail', model: link.model, id: link.id })}>{link.label}</a>
+  }
+
+  return <>{formatCell(column, record[column.name])}</>
+}
+
+/**
+ * What to call a column.
+ *
+ * A foreign-key column shows the related record's name, so heading it
+ * `authorId` would label the values with the name of something else. It is
+ * headed by the relation it stands for.
+ */
+function columnLabel(model: ModelDescriptor, column: FieldDescriptor): string {
+  return relationForForeignKey(model, column.name)?.name ?? column.name
 }

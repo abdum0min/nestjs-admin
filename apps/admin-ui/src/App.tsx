@@ -57,7 +57,7 @@ export function App() {
           <p>“{route.model}” is not one of the resources you can access.</p>
         </Empty>
       ) : (
-        <Content route={route} model={active} />
+        <Content route={route} model={active} models={models} />
       )}
     </Shell>
   )
@@ -66,19 +66,23 @@ export function App() {
 function Content({
   route,
   model,
+  models,
 }: {
   readonly route: ReturnType<typeof useRoute>
   readonly model: ModelDescriptor
+  // Every model, not just the active one: a relation names its target by name,
+  // and rendering it needs that target's primary key and display field.
+  readonly models: readonly ModelDescriptor[]
 }) {
   switch (route.kind) {
     case 'list':
-      return <ListView model={model} />
+      return <ListView model={model} models={models} />
     case 'create':
-      return <RecordForm model={model} />
+      return <RecordForm model={model} models={models} />
     case 'edit':
-      return <RecordForm model={model} id={route.id} />
+      return <RecordForm model={model} models={models} id={route.id} />
     case 'detail':
-      return <RecordView model={model} id={route.id} />
+      return <RecordView model={model} models={models} id={route.id} />
     default:
       return null
   }

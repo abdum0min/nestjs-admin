@@ -2,22 +2,25 @@
  * The generic record detail screen, plus delete.
  *
  * Every field the server described is shown, in schema order, formatted by
- * kind. Relations are rendered as a summary rather than a link: the list
- * endpoint has no relation filter, so a link would promise navigation the API
- * cannot serve.
+ * kind. A to-one relation is a link to the record it names, because the server
+ * now sends that record's label alongside the key. A to-many is still only
+ * named: nothing loads it yet.
  */
 import { deleteRecord, fetchRecord } from '../api/client.js'
-import type { ModelDescriptor } from '../api/types.js'
+import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
 import { formatDetail } from '../metadata/format.js'
+import { relationLink } from '../metadata/relations.js'
 import { ErrorState, Loading } from './States.jsx'
 
 export function RecordView({
   model,
+  models,
   id,
 }: {
   readonly model: ModelDescriptor
+  readonly models: readonly ModelDescriptor[]
   readonly id: string
 }) {
   const state = useAsync(() => fetchRecord(model.name, id), [model.name, id])
@@ -78,11 +81,7 @@ export function RecordView({
             </dt>
             <dd>
               {field.kind === 'relation' ? (
-                <span className="muted">
-                  {field.relation?.cardinality === 'many'
-                    ? `Related ${field.relation.targetModel} records`
-                    : `Related ${field.relation?.targetModel ?? 'record'}`}
-                </span>
+                <RelationValue field={field} models={models} record={record} />
               ) : (
                 <pre>{formatDetail(field, record[field.name])}</pre>
               )}
@@ -92,4 +91,33 @@ export function RecordView({
       </dl>
     </section>
   )
+}
+
+/**
+ * A relation on the detail page.
+ *
+ * A to-one that is set becomes a link to the record it names. Everything else
+ * says plainly what it is rather than pretending: an unset relation is a dash,
+ * and a to-many is named but not listed, because 0.3.0 does not load it.
+ */
+function RelationValue({
+  field,
+  models,
+  record,
+}: {
+  readonly field: FieldDescriptor
+  readonly models: readonly ModelDescriptor[]
+  readonly record: AdminRecord
+}) {
+  const link = relationLink(field, models, record)
+
+  if (link) {
+    return <a href={href({ kind: 'detail', model: link.model, id: link.id })}>{link.label}</a>
+  }
+
+  if (field.relation?.cardinality === 'many') {
+    return <span className="muted">Related {field.relation.targetModel} records</span>
+  }
+
+  return <span className="muted">—</span>
 }

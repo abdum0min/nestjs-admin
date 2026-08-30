@@ -22,6 +22,10 @@ export type FieldKind =
 export interface RelationDescriptor {
   readonly targetModel: string
   readonly cardinality: 'one' | 'many'
+  /** Scalar field on this model holding the key. To-one relations only. */
+  readonly from?: string
+  /** Field on the target the key points at. */
+  readonly to?: string
 }
 
 export interface FieldDescriptor {
@@ -43,6 +47,8 @@ export interface ModelDescriptor {
   readonly name: string
   readonly primaryKey: readonly string[]
   readonly fields: readonly FieldDescriptor[]
+  /** Field that names a record of this model in one line. */
+  readonly displayField: string
 }
 
 export interface Metadata {
