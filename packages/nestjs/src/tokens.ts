@@ -54,3 +54,12 @@ export const ADMIN_OPTIONS = Symbol('NEST_ADMIN_OPTIONS')
  * suggested: `hidden` and `readOnly`.
  */
 export const ADMIN_MODELS = Symbol('NEST_ADMIN_MODELS')
+
+/** Application code that runs around a write. */
+export const ADMIN_HOOKS = Symbol('NEST_ADMIN_HOOKS')
+
+/** Application-defined actions, per model. */
+export const ADMIN_ACTIONS = Symbol('NEST_ADMIN_ACTIONS')
+
+/** Branding the served page applies without a rebuild. */
+export const ADMIN_THEME = Symbol('NEST_ADMIN_THEME')

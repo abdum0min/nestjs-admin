@@ -37,8 +37,22 @@ import { Inject, Injectable, type ExecutionContext, type OnModuleInit } from '@n
 
 import type { AdminOperation, AdminResourceAuth } from '../auth/resource.js'
 import { parseListQuery, type RawQuery } from '../http/query-parser.js'
-import { ADMIN_ADAPTER, ADMIN_MODELS, ADMIN_RESOURCE_AUTH, ADMIN_RESOURCES } from '../tokens.js'
-import { toMetadataDto, type MetadataDto, type ModelPermissionsDto } from './metadata.dto.js'
+import type { AdminActionResult, AdminActionsByModel } from '../actions/contract.js'
+import type { AdminHooksByModel } from '../hooks/contract.js'
+import {
+  ADMIN_ACTIONS,
+  ADMIN_ADAPTER,
+  ADMIN_HOOKS,
+  ADMIN_MODELS,
+  ADMIN_RESOURCE_AUTH,
+  ADMIN_RESOURCES,
+} from '../tokens.js'
+import {
+  toMetadataDto,
+  type ActionDto,
+  type MetadataDto,
+  type ModelPermissionsDto,
+} from './metadata.dto.js'
 
 @Injectable()
 export class AdminService implements OnModuleInit {
@@ -47,6 +61,8 @@ export class AdminService implements OnModuleInit {
     @Inject(ADMIN_RESOURCE_AUTH) private readonly resourceAuth: AdminResourceAuth,
     @Inject(ADMIN_RESOURCES) private readonly resources: ResourceSelection | undefined,
     @Inject(ADMIN_MODELS) private readonly overrides: ModelOverrides | undefined,
+    @Inject(ADMIN_HOOKS) private readonly hooks: AdminHooksByModel | undefined,
+    @Inject(ADMIN_ACTIONS) private readonly actions: AdminActionsByModel | undefined,
   ) {}
 
   /**
@@ -118,7 +134,12 @@ export class AdminService implements OnModuleInit {
       if (await this.isVisible(context, model.name)) visible.push(model)
     }
 
-    return toMetadataDto(visible, this.overrides, await this.permissionsFor(context, visible))
+    return toMetadataDto(
+      visible,
+      this.overrides,
+      await this.permissionsFor(context, visible),
+      await this.actionsFor(context, visible),
+    )
   }
 
   /**
@@ -163,7 +184,12 @@ export class AdminService implements OnModuleInit {
     const metadata = await this.requireModel(model)
     await this.assertAllowed(context, model, 'create')
     this.assertWritable(metadata, data)
-    return this.project(metadata, await this.adapter.create(model, data))
+
+    const prepared = await this.runBefore(context, metadata, 'beforeCreate', data)
+    const created = await this.adapter.create(model, prepared)
+    await this.runAfter(context, model, 'afterCreate', { record: created })
+
+    return this.project(metadata, created)
   }
 
   async update(
@@ -175,13 +201,23 @@ export class AdminService implements OnModuleInit {
     const metadata = await this.requireModel(model)
     await this.assertAllowed(context, model, 'update')
     this.assertWritable(metadata, data)
-    return this.project(metadata, await this.adapter.update(model, id, data))
+
+    const prepared = await this.runBefore(context, metadata, 'beforeUpdate', data, id)
+    const updated = await this.adapter.update(model, id, prepared)
+    await this.runAfter(context, model, 'afterUpdate', { id, record: updated })
+
+    return this.project(metadata, updated)
   }
 
   async delete(context: ExecutionContext, model: string, id: RecordId): Promise<void> {
     await this.requireModel(model)
     await this.assertAllowed(context, model, 'delete')
+
+    const before = this.hooks?.[model]?.beforeDelete
+    if (before) await before({ context, model, id })
+
     await this.adapter.delete(model, id)
+    await this.runAfter(context, model, 'afterDelete', { id })
   }
 
   /**
@@ -416,6 +452,130 @@ export class AdminService implements OnModuleInit {
       if (isNestAdminError(error) && error.kind === 'forbidden') return false
       throw error
     }
+  }
+
+  /**
+   * Run a `before` hook, if the model has one.
+   *
+   * The result is validated again rather than trusted: a hook is application
+   * code, and the rule that a hidden or read-only field cannot be written is
+   * not one it should be able to step around by accident.
+   */
+  private async runBefore(
+    context: ExecutionContext,
+    metadata: ModelMetadata,
+    hook: 'beforeCreate' | 'beforeUpdate',
+    data: RecordData,
+    id?: RecordId,
+  ): Promise<RecordData> {
+    const handler = this.hooks?.[metadata.name]?.[hook]
+    if (!handler) return data
+
+    const result = await (hook === 'beforeCreate'
+      ? (handler as (args: never) => RecordData | Promise<RecordData>)({
+          context,
+          model: metadata.name,
+          data,
+        } as never)
+      : (handler as (args: never) => RecordData | Promise<RecordData>)({
+          context,
+          model: metadata.name,
+          id,
+          data,
+        } as never))
+
+    this.assertWritable(metadata, result)
+    return result
+  }
+
+  /**
+   * Run an `after` hook, if the model has one.
+   *
+   * Nothing is rolled back if it throws - the write already happened - so the
+   * failure is reported as it is rather than dressed up as a failed write.
+   */
+  private async runAfter(
+    context: ExecutionContext,
+    model: string,
+    hook: 'afterCreate' | 'afterUpdate' | 'afterDelete',
+    args: Record<string, unknown>,
+  ): Promise<void> {
+    const handler = this.hooks?.[model]?.[hook]
+    if (!handler) return
+
+    await (handler as (a: never) => void | Promise<void>)({
+      context,
+      model,
+      ...args,
+    } as never)
+  }
+
+  /**
+   * The actions this principal may run, per model.
+   *
+   * Filtered by the policy before it reaches the document, so an action that
+   * would be refused is simply not there - the interface cannot draw a button
+   * for something it was never told about.
+   */
+  private async actionsFor(
+    context: ExecutionContext,
+    models: readonly ModelMetadata[],
+  ): Promise<ReadonlyMap<string, readonly ActionDto[]>> {
+    const byModel = new Map<string, readonly ActionDto[]>()
+
+    for (const model of models) {
+      const declared = this.actions?.[model.name] ?? []
+      if (declared.length === 0) continue
+      if (!(await this.permits(context, model.name, 'action'))) continue
+
+      byModel.set(
+        model.name,
+        declared.map((action) => ({
+          name: action.name,
+          label: action.label ?? action.name,
+          scope: action.scope,
+          ...(action.confirm !== undefined ? { confirm: action.confirm } : {}),
+          ...(action.danger !== undefined ? { danger: action.danger } : {}),
+        })),
+      )
+    }
+
+    return byModel
+  }
+
+  /**
+   * Run one application-defined action.
+   *
+   * Authorized as `'action'` rather than as the operation it resembles: an
+   * action can do anything, so a policy should be able to decide about it on
+   * its own terms.
+   *
+   * A `'record'` action is given the id; a `'list'` one is not, and passing an
+   * id to it - or omitting one from a record action - is a request that does
+   * not match the action that was declared.
+   */
+  async runAction(
+    context: ExecutionContext,
+    model: string,
+    name: string,
+    id?: RecordId,
+  ): Promise<AdminActionResult> {
+    await this.requireModel(model)
+    await this.assertAllowed(context, model, 'action')
+
+    const action = (this.actions?.[model] ?? []).find((candidate) => candidate.name === name)
+    if (!action) {
+      throw new FieldNotFoundError(model, name, 'No such action.')
+    }
+
+    if (action.scope === 'record' && id === undefined) {
+      throw new InvalidQueryError(`Action "${name}" applies to one record and needs an id.`)
+    }
+    if (action.scope === 'list' && id !== undefined) {
+      throw new InvalidQueryError(`Action "${name}" applies to the whole model, not to a record.`)
+    }
+
+    return (await action.run({ context, model, ...(id === undefined ? {} : { id }) })) ?? {}
   }
 
   // ------------------------------------------------------- resource policy
