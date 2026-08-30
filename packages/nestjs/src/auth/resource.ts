@@ -26,7 +26,22 @@ import type { ExecutionContext } from '@nestjs/common'
  * whether the model should be *visible* to this principal at all. A model that
  * fails a `'metadata'` check disappears from `GET /admin/meta` entirely.
  */
-export type AdminOperation = 'metadata' | 'list' | 'read' | 'create' | 'update' | 'delete'
+export type AdminOperation =
+  | 'metadata'
+  | 'list'
+  | 'read'
+  | 'create'
+  | 'update'
+  | 'delete'
+  /**
+   * An application-defined action.
+   *
+   * Distinct from `update` because an action can do anything, including things
+   * no CRUD route offers, so a policy should be able to decide about it
+   * separately. A policy written before actions existed does not recognise the
+   * value and denies it, which is the right direction to fail in.
+   */
+  | 'action'
 
 /** Everything the policy is given to decide with. */
 export interface ResourceAuthorization {

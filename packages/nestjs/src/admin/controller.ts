@@ -35,6 +35,7 @@ import {
   UseGuards,
 } from '@nestjs/common'
 
+import type { AdminActionResult } from '../actions/contract.js'
 import { AdminAuthGuard } from '../auth/guard.js'
 import { AdminContext } from '../http/execution-context.js'
 import { AdminExceptionFilter } from '../http/exception.filter.js'
@@ -58,6 +59,34 @@ export class AdminController {
    * capitalised (`Meta`) and matching is case-sensitive, so this is a narrow
    * and documented corner.
    */
+  /**
+   * `POST /admin/actions/:model/:action[/:id]` - run an application action.
+   *
+   * Under a reserved first segment, and declared before every `:model` route,
+   * so `actions` is matched literally. The same arrangement already reserves
+   * `meta` here and `assets` in the UI controller; the cost is that a model
+   * called `actions` would be unreachable, which is documented rather than
+   * guarded against.
+   */
+  @Post('actions/:model/:action')
+  async runListAction(
+    @AdminContext() context: ExecutionContext,
+    @Param('model') model: string,
+    @Param('action') action: string,
+  ): Promise<SuccessResponse<AdminActionResult>> {
+    return success(await this.service.runAction(context, model, action))
+  }
+
+  @Post('actions/:model/:action/:id')
+  async runRecordAction(
+    @AdminContext() context: ExecutionContext,
+    @Param('model') model: string,
+    @Param('action') action: string,
+    @Param('id') id: string,
+  ): Promise<SuccessResponse<AdminActionResult>> {
+    return success(await this.service.runAction(context, model, action, id))
+  }
+
   @Get('meta')
   async meta(@AdminContext() context: ExecutionContext): Promise<SuccessResponse<MetadataDto>> {
     return success(await this.service.getMetadata(context))

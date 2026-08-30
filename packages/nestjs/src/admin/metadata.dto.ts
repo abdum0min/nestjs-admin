@@ -137,6 +137,17 @@ export interface ModelPermissionsDto {
   readonly delete: boolean
 }
 
+/** An application-defined button the interface should draw. */
+export interface ActionDto {
+  readonly name: string
+  readonly label: string
+  readonly scope: 'record' | 'list'
+  /** Ask this before running. Absent means run straight away. */
+  readonly confirm?: string
+  /** Draw it as destructive. */
+  readonly danger?: boolean
+}
+
 export interface ModelDto {
   readonly name: string
   /** Field names forming the primary key. Single-column in this version. */
@@ -164,6 +175,14 @@ export interface ModelDto {
    * from this document entirely.
    */
   readonly can: ModelPermissionsDto
+
+  /**
+   * Application-defined actions this principal may run.
+   *
+   * Already filtered by the policy: an action that would be refused is absent,
+   * so the interface never draws a button that cannot work.
+   */
+  readonly actions: readonly ActionDto[]
 
   /** What to call the model. Absent unless the application said so. */
   readonly label?: string
@@ -285,6 +304,7 @@ export function toMetadataDto(
   models: readonly ModelMetadata[],
   overrides?: ModelOverrides,
   permissions?: ReadonlyMap<string, ModelPermissionsDto>,
+  actions?: ReadonlyMap<string, readonly ActionDto[]>,
 ): MetadataDto {
   const present = new Set(models.map((model) => model.name))
 
@@ -294,6 +314,7 @@ export function toMetadataDto(
       primaryKey: [...model.primaryKey],
       displayField: displayFieldFor(model),
       can: permissions?.get(model.name) ?? ALL_PERMITTED,
+      actions: actions?.get(model.name) ?? [],
       ...(overrides?.[model.name]?.label !== undefined
         ? { label: overrides[model.name]?.label }
         : {}),
