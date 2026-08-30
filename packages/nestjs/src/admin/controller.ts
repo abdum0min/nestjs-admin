@@ -20,7 +20,7 @@
  * `users`. Declaring `meta` before `:model` is what keeps it reachable; see
  * the route-collision note in reports/004-http-api.md.
  */
-import type { RecordData } from '@nest-admin/core'
+import { InvalidQueryError, type RecordData } from '@nest-admin/core'
 import type { ExecutionContext } from '@nestjs/common'
 import {
   Body,
@@ -112,6 +112,64 @@ export class AdminController {
     @Param('id') id: string,
   ): Promise<SuccessResponse<null>> {
     await this.service.delete(context, model, id)
+    return success(null)
+  }
+
+  /**
+   * `GET /admin/:model/:id/:relation` - a page of related records.
+   *
+   * Three segments, so it cannot be confused with `/:model/:id`. The query
+   * string is the ordinary list query and describes the records being returned,
+   * not the record they hang off.
+   */
+  @Get(':model/:id/:relation')
+  async listRelated(
+    @AdminContext() context: ExecutionContext,
+    @Param('model') model: string,
+    @Param('id') id: string,
+    @Param('relation') relation: string,
+    @Query() query: RawQuery,
+  ): Promise<SuccessResponse<readonly RecordData[]>> {
+    const page = await this.service.listRelated(context, model, id, relation, query)
+    return successPage(page.data, { total: page.total, page: page.page, perPage: page.perPage })
+  }
+
+  /**
+   * `POST /admin/:model/:id/:relation` with `{ "id": "..." }` - link a record.
+   *
+   * The body carries only an id: this attaches something that already exists.
+   * Creating a record and linking it in one request is a different operation
+   * and is not this one.
+   */
+  @Post(':model/:id/:relation')
+  async attachRelated(
+    @AdminContext() context: ExecutionContext,
+    @Param('model') model: string,
+    @Param('id') id: string,
+    @Param('relation') relation: string,
+    @Body() body: { id?: unknown },
+  ): Promise<SuccessResponse<null>> {
+    const targetId = body?.id
+    if (typeof targetId !== 'string' && typeof targetId !== 'number') {
+      throw new InvalidQueryError(
+        'Attaching a related record requires a body of the form { "id": "..." }.',
+      )
+    }
+
+    await this.service.attachRelated(context, model, id, relation, targetId)
+    return success(null)
+  }
+
+  /** `DELETE /admin/:model/:id/:relation/:targetId` - unlink, without deleting. */
+  @Delete(':model/:id/:relation/:targetId')
+  async detachRelated(
+    @AdminContext() context: ExecutionContext,
+    @Param('model') model: string,
+    @Param('id') id: string,
+    @Param('relation') relation: string,
+    @Param('targetId') targetId: string,
+  ): Promise<SuccessResponse<null>> {
+    await this.service.detachRelated(context, model, id, relation, targetId)
     return success(null)
   }
 }

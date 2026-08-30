@@ -103,7 +103,7 @@ export const TEST_MODELS: readonly ModelMetadata[] = [
         isUnique: false,
         isList: true,
         isGenerated: false,
-        relation: { targetModel: 'Post', cardinality: 'many' },
+        relation: { targetModel: 'Post', cardinality: 'many', name: 'PostToUser' },
       },
     ],
   },
@@ -137,7 +137,13 @@ export const TEST_MODELS: readonly ModelMetadata[] = [
         isUnique: false,
         isList: false,
         isGenerated: false,
-        relation: { targetModel: 'User', cardinality: 'one' },
+        relation: {
+          targetModel: 'User',
+          cardinality: 'one',
+          from: 'authorId',
+          to: 'id',
+          name: 'PostToUser',
+        },
       },
     ],
   },
@@ -232,6 +238,88 @@ export class InMemoryAdapter implements OrmAdapter {
     const index = rows.findIndex((row) => String(row['id']) === String(id))
     if (index === -1) throw new RecordNotFoundError(model, id)
     rows.splice(index, 1)
+  }
+
+  /**
+   * Related records, by matching the child's foreign key.
+   *
+   * The double only models one-to-many, which is what the fixture has. It is
+   * enough for the transport layer's tests: what those assert is the route, the
+   * authorization and the envelope, none of which depend on where the link is
+   * stored.
+   */
+  async listRelated(
+    model: string,
+    id: RecordId,
+    relationField: string,
+    query: ListQuery,
+  ): Promise<Page<RecordData>> {
+    const metadata = TEST_MODELS.find((candidate) => candidate.name === model) as ModelMetadata
+    if (!this.#require(model).some((row) => String(row['id']) === String(id))) {
+      throw new RecordNotFoundError(model, id)
+    }
+
+    const field = metadata.fields.find((candidate) => candidate.name === relationField)
+    if (!field?.relation || field.relation.cardinality !== 'many') {
+      throw new FieldNotFoundError(model, relationField, 'Not a to-many relation.')
+    }
+
+    const target = field.relation.targetModel
+    const inverse = TEST_MODELS.find((candidate) => candidate.name === target)?.fields.find(
+      (candidate) =>
+        candidate.relation?.name === field.relation?.name && candidate.name !== relationField,
+    )
+    const key = inverse?.relation?.from ?? 'id'
+
+    const matched = this.#require(target).filter((row) => String(row[key]) === String(id))
+    const page = query.page ?? 1
+    const perPage = query.perPage ?? 25
+    return {
+      data: matched.slice((page - 1) * perPage, page * perPage),
+      total: matched.length,
+      page,
+      perPage,
+    }
+  }
+
+  async attachRelated(
+    model: string,
+    id: RecordId,
+    relationField: string,
+    targetId: RecordId,
+  ): Promise<void> {
+    await this.#relink(model, id, relationField, targetId, String(id))
+  }
+
+  async detachRelated(
+    model: string,
+    id: RecordId,
+    relationField: string,
+    targetId: RecordId,
+  ): Promise<void> {
+    await this.#relink(model, id, relationField, targetId, null)
+  }
+
+  /** Point the child's foreign key at the parent, or clear it. */
+  async #relink(
+    model: string,
+    id: RecordId,
+    relationField: string,
+    targetId: RecordId,
+    value: string | null,
+  ): Promise<void> {
+    const metadata = TEST_MODELS.find((candidate) => candidate.name === model) as ModelMetadata
+    const field = metadata.fields.find((candidate) => candidate.name === relationField)
+    if (!field?.relation) throw new FieldNotFoundError(model, relationField)
+
+    const target = field.relation.targetModel
+    const child = this.#require(target).find((row) => String(row['id']) === String(targetId))
+    if (!child) throw new RecordNotFoundError(target, targetId)
+
+    const inverse = TEST_MODELS.find((candidate) => candidate.name === target)?.fields.find(
+      (candidate) => candidate.relation?.name === field.relation?.name,
+    )
+    ;(child as Record<string, unknown>)[inverse?.relation?.from ?? 'id'] = value
   }
 
   #require(model: string): RecordData[] {

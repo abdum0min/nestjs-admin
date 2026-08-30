@@ -11,7 +11,10 @@
  * is enforced, and exactly one place a mistake can hide.
  */
 import {
+  detachBlockedReason,
+  FieldNotFoundError,
   ForbiddenError,
+  InvalidQueryError,
   isNestAdminError,
   ModelNotFoundError,
   RecordNotFoundError,
@@ -132,6 +135,118 @@ export class AdminService implements OnModuleInit {
     await this.requireModel(model)
     await this.assertAllowed(context, model, 'delete')
     await this.adapter.delete(model, id)
+  }
+
+  /**
+   * A page of the records on the far side of a to-many relation.
+   *
+   * Authorized against **both** models, and the distinction matters. Reading
+   * `/User/u1/posts` returns Post records, so a principal who may read a User
+   * but not list Posts must not receive them through the back door of a
+   * relation. The parent decides whether this record may be opened at all; the
+   * target decides whether its records may be listed.
+   */
+  async listRelated(
+    context: ExecutionContext,
+    model: string,
+    id: RecordId,
+    relationField: string,
+    rawQuery: RawQuery,
+  ): Promise<Page<RecordData>> {
+    const parent = await this.requireModel(model)
+    await this.assertAllowed(context, model, 'read')
+
+    const target = await this.requireRelationTarget(parent, relationField)
+    await this.assertAllowed(context, target.name, 'list')
+
+    // Parsed against the target's metadata: the query describes the records
+    // being listed, not the one they hang off.
+    return this.adapter.listRelated(model, id, relationField, parseListQuery(rawQuery, target))
+  }
+
+  /**
+   * Link an existing record to this one.
+   *
+   * Requires `update` on both models. Across a one-to-many the child's foreign
+   * key is what actually changes, so permitting this with rights over the
+   * parent alone would let someone edit records they cannot otherwise touch.
+   */
+  async attachRelated(
+    context: ExecutionContext,
+    model: string,
+    id: RecordId,
+    relationField: string,
+    targetId: RecordId,
+  ): Promise<void> {
+    const target = await this.assertMayRelink(context, model, relationField)
+    await this.assertAllowed(context, target.name, 'update')
+
+    await this.adapter.attachRelated(model, id, relationField, targetId)
+  }
+
+  /**
+   * Unlink a record from this one, leaving both in place.
+   *
+   * Refused up front when the relation cannot be broken - a child whose foreign
+   * key is required cannot exist without a parent, so there is nothing to
+   * detach it to. Saying so is better than forwarding a constraint violation.
+   */
+  async detachRelated(
+    context: ExecutionContext,
+    model: string,
+    id: RecordId,
+    relationField: string,
+    targetId: RecordId,
+  ): Promise<void> {
+    const target = await this.assertMayRelink(context, model, relationField)
+    await this.assertAllowed(context, target.name, 'update')
+
+    const parent = await this.requireModel(model)
+    const field = parent.fields.find((candidate) => candidate.name === relationField)
+    const blocked = field ? detachBlockedReason(field, await this.exposedModels()) : undefined
+    if (blocked) throw new InvalidQueryError(blocked)
+
+    await this.adapter.detachRelated(model, id, relationField, targetId)
+  }
+
+  /** Shared preamble for attach and detach: the parent must be updatable. */
+  private async assertMayRelink(
+    context: ExecutionContext,
+    model: string,
+    relationField: string,
+  ): Promise<ModelMetadata> {
+    const parent = await this.requireModel(model)
+    await this.assertAllowed(context, model, 'update')
+    return this.requireRelationTarget(parent, relationField)
+  }
+
+  /**
+   * The model on the far side of a to-many relation field.
+   *
+   * Resolved through the exposed set, so a relation pointing at a model this
+   * admin does not expose reads as an unknown field rather than as a route
+   * into it.
+   */
+  private async requireRelationTarget(
+    parent: ModelMetadata,
+    relationField: string,
+  ): Promise<ModelMetadata> {
+    const field = parent.fields.find((candidate) => candidate.name === relationField)
+
+    if (!field?.relation || field.relation.cardinality !== 'many') {
+      throw new FieldNotFoundError(
+        parent.name,
+        relationField,
+        'Only a to-many relation can be listed this way.',
+      )
+    }
+
+    const target = (await this.exposedModels()).find(
+      (candidate) => candidate.name === field.relation?.targetModel,
+    )
+    if (!target) throw new FieldNotFoundError(parent.name, relationField)
+
+    return target
   }
 
   // ------------------------------------------------------- resource policy

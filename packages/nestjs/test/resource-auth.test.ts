@@ -190,7 +190,9 @@ describe('metadata filtering', () => {
     const { body } = await request(app.getHttpServer()).get('/admin/meta').expect(200)
 
     const posts = body.data.models[0].fields.find((f: { name: string }) => f.name === 'posts')
-    expect(posts.relation).toEqual({ targetModel: 'Post', cardinality: 'many' })
+    expect(posts.relation).toMatchObject({ targetModel: 'Post', cardinality: 'many' })
+    // The shape is resolved from the other half, which is present here.
+    expect(posts.relation.shape).toBe('one-to-many')
   })
 
   it('does not signal a denied model through an error', async () => {

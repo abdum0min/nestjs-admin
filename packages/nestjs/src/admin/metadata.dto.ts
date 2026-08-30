@@ -15,7 +15,14 @@
  *
  * @experimental The HTTP contract is expected to change before 1.0.
  */
-import { displayFieldFor, type FieldMetadata, type ModelMetadata } from '@nest-admin/core'
+import {
+  detachBlockedReason,
+  displayFieldFor,
+  inverseRelationField,
+  relationShape,
+  type FieldMetadata,
+  type ModelMetadata,
+} from '@nest-admin/core'
 
 /** Mirrors Core's `FieldKind`, restated so the wire format is self-contained. */
 export type FieldKindDto =
@@ -36,6 +43,37 @@ export interface RelationDto {
 
   /** Field on the target the key points at - usually its id. */
   readonly to?: string
+
+  /**
+   * Where the link is stored, which decides what may be done to it.
+   *
+   * Computed on the server rather than left for the client to derive, for the
+   * same reason as `displayField`: working it out needs the other half of the
+   * relation, and two implementations of that rule would drift. A client that
+   * guessed wrong would offer a button that cannot work.
+   */
+  readonly shape?: 'to-one' | 'one-to-many' | 'many-to-many'
+
+  /**
+   * Why records cannot be detached from this relation, when they cannot.
+   *
+   * Present only for a one-to-many whose child key is required: such a child
+   * cannot exist without a parent, so there is nothing to detach it to.
+   */
+  readonly detachBlocked?: string
+
+  /**
+   * The column on the target model that points back at this one.
+   *
+   * What "all the posts by this author" is expressed as:
+   * `?filter=<targetForeignKey>:eq:<parentId>`. Present only for a one-to-many,
+   * since a many-to-many has no such column on either side.
+   *
+   * Sent rather than derived, for the same reason as `shape`: finding it means
+   * pairing the two halves of the relation, and a rule implemented twice is a
+   * rule that will eventually disagree with itself.
+   */
+  readonly targetForeignKey?: string
 }
 
 export interface FieldDto {
@@ -82,7 +120,21 @@ export interface MetadataDto {
   readonly models: readonly ModelDto[]
 }
 
-function toFieldDto(field: FieldMetadata): FieldDto {
+/**
+ * The column on the target that points back, for a one-to-many.
+ *
+ * `undefined` for every other shape: a to-one owns its own column, and a
+ * many-to-many has none on either side.
+ */
+function targetForeignKeyOf(
+  field: FieldMetadata,
+  models: readonly ModelMetadata[],
+): string | undefined {
+  if (relationShape(field, models) !== 'one-to-many') return undefined
+  return inverseRelationField(field, models)?.relation?.from
+}
+
+function toFieldDto(field: FieldMetadata, models: readonly ModelMetadata[]): FieldDto {
   // Built property by property on purpose. A spread would forward anything a
   // future adapter attaches to FieldMetadata straight onto the wire.
   return {
@@ -102,6 +154,15 @@ function toFieldDto(field: FieldMetadata): FieldDto {
             cardinality: field.relation.cardinality,
             ...(field.relation.from !== undefined ? { from: field.relation.from } : {}),
             ...(field.relation.to !== undefined ? { to: field.relation.to } : {}),
+            ...(relationShape(field, models) !== undefined
+              ? { shape: relationShape(field, models) }
+              : {}),
+            ...(detachBlockedReason(field, models) !== undefined
+              ? { detachBlocked: detachBlockedReason(field, models) }
+              : {}),
+            ...(targetForeignKeyOf(field, models) !== undefined
+              ? { targetForeignKey: targetForeignKeyOf(field, models) }
+              : {}),
           },
         }
       : {}),
@@ -132,7 +193,7 @@ export function toMetadataDto(models: readonly ModelMetadata[]): MetadataDto {
       displayField: displayFieldFor(model),
       fields: model.fields
         .filter((field) => !field.relation || present.has(field.relation.targetModel))
-        .map(toFieldDto),
+        .map((field) => toFieldDto(field, models)),
     })),
   }
 }
