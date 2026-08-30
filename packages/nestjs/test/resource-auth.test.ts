@@ -236,6 +236,7 @@ describe('metadata filtering', () => {
     ])
     for (const model of body.data.models) {
       expect(Object.keys(model).sort()).toEqual([
+        'actions',
         'can',
         'displayField',
         'fields',

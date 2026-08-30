@@ -311,6 +311,7 @@ describe('the wire format the admin UI generates', () => {
     const user = body.data.models.find((m: { name: string }) => m.name === 'User')
 
     expect(Object.keys(user).sort()).toEqual([
+      'actions',
       'can',
       'displayField',
       'fields',
