@@ -1,6 +1,6 @@
 {
   "name": "@nest-admin/nestjs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "NestJS integration for Nest Admin. This is the single package published to npm.",
   "license": "MIT",
   "type": "module",

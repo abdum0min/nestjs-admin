@@ -13,6 +13,71 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.3.0
+
+To-one relations. The admin shows people's names where it used to show cuids.
+
+### Added
+
+- **Relations resolve to something readable.** A record that references another
+  now arrives with the related record alongside its key:
+
+  ```json
+  { "id": "p1", "title": "…", "authorId": "u1", "author": { "id": "u1", "name": "Ada" } }
+  ```
+
+  **Exactly two columns of the related record are selected** — its primary key
+  and its display field. That is a boundary, not an optimisation: attaching the
+  whole related row would publish a `User.passwordHash` through the act of
+  listing `Post`.
+
+- **`displayField`** on every model in `/admin/meta` — the field that names a
+  record in one line. Detected from the schema (`name`, `title`, `label`,
+  `displayName`, `username`, `email`, `slug`, then any unique string, then any
+  string, then the primary key).
+
+- **`relation.from` / `relation.to`** in the metadata, naming the column a
+  to-one relation is stored in. The UI needs it to know what a form submits.
+
+- **Filtering by a relation name.** `?filter=author:eq:<id>` means the same as
+  `?filter=authorId:eq:<id>`; use whichever reads better.
+
+- **A picker instead of a text box.** A foreign key used to render as the plain
+  string input its kind implies, which asked people to paste an id. The form now
+  searches the target model by name and submits the key. It searches rather than
+  listing everything, so a large table costs the same as a small one.
+
+- **Relations are links.** In the list and on the detail page, a to-one relation
+  is the related record's name, linking to it. The column is headed by the
+  relation (`author`), not by the key (`authorId`).
+
+### Fixed
+
+- **Free-text search no longer matches foreign keys.** `?search=e` matched
+  nearly every row of any model that references another, because a cuid is a
+  string column that is not generated — so the existing exclusion for generated
+  ids missed it.
+
+### Changed
+
+- **Sorting by a relation is refused**, with an error that says why. It would
+  have run: `authorId` holds a cuid, so the result looks sorted and means
+  nothing, and what the caller wanted was the author's name. Sorting by a field
+  on another model is a later release.
+
+- `ModelMetadata` and `ModelDto` gained `displayField`; `RelationMetadata` and
+  `RelationDto` gained `from` and `to`. Additive for consumers reading the
+  metadata; an adapter implementing `OrmAdapter` should populate `from`/`to` for
+  to-one relations it owns.
+
+### Not in this release
+
+To-many relations are not loaded. They have no column on this side, they can be
+unbounded, and one query per row would make a list page cost an unpredictable
+amount. They arrive in 0.4.0, paginated and asked for explicitly.
+
+---
+
 ## 0.2.0
 
 Configuration and dependency injection. The admin now fits an application it
