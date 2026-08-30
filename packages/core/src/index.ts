@@ -64,4 +64,5 @@ export {
   NestAdminError,
   RecordNotFoundError,
   UnauthorizedError,
+  ValidationError,
 } from './errors/errors.js'

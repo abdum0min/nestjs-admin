@@ -48,6 +48,8 @@ export type AdminErrorKind =
   | 'field-not-found'
   | 'record-not-found'
   | 'invalid-query'
+  /** Application code refused the input. Its message reaches the client. */
+  | 'validation'
   | 'adapter'
   /** A subclass that declared no kind of its own. Treated as internal. */
   | 'unknown'
@@ -132,6 +134,23 @@ export class RecordNotFoundError extends NestAdminError {
  */
 export class InvalidQueryError extends NestAdminError {
   override readonly kind = 'invalid-query' as const
+}
+
+/**
+ * The input is not acceptable, and the caller should be told why.
+ *
+ * Raised by application code - a hook rejecting a value, a rule the schema
+ * cannot express - rather than by the framework. It exists because such a
+ * refusal has to reach the person who typed the value, and the alternatives are
+ * wrong in one direction or the other: `InvalidQueryError` claims the *query*
+ * was malformed, and anything unrecognised becomes a generic 500 with the
+ * message withheld.
+ *
+ * The message **is** forwarded to the client, which is the point of it and also
+ * the responsibility that comes with it: whatever goes in is published.
+ */
+export class ValidationError extends NestAdminError {
+  override readonly kind = 'validation' as const
 }
 
 /**

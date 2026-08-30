@@ -36,6 +36,7 @@ export type AdminErrorCode =
   | 'RECORD_NOT_FOUND'
   | 'FIELD_NOT_FOUND'
   | 'INVALID_QUERY'
+  | 'VALIDATION_ERROR'
   | 'INTERNAL_ERROR'
 
 export interface ErrorResponse {

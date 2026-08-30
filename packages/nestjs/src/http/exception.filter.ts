@@ -110,6 +110,15 @@ function mapError(error: unknown): MappedError {
         },
       }
 
+    // Raised by application code to refuse an input. The message is
+    // forwarded, which is what it is for.
+    case 'validation':
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        code: 'VALIDATION_ERROR',
+        message: error.message,
+      }
+
     case 'invalid-query':
       return {
         status: HttpStatus.BAD_REQUEST,
