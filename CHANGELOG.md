@@ -13,6 +13,78 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.6.0
+
+The seams an application writes into. People adopt an admin for what it does on
+the first day and leave it for what it will not let them do in the third month.
+
+### Added
+
+- **`hooks`** — application code around every write, per model:
+
+  ```ts
+  hooks: {
+    User: {
+      beforeCreate: async ({ data, context }) => ({ ...data, slug: slugify(data.name) }),
+      afterCreate: async ({ record, context }) => audit(record, context),
+      beforeDelete: async ({ id }) => {
+        if (await hasInvoices(id)) throw new ValidationError('This account has unsettled invoices.')
+      },
+    },
+  }
+  ```
+
+  They run after authorization and after validation, so a hook is never reached
+  by a request that would have been refused. What a `before` hook returns is
+  validated again, so it cannot write a hidden or read-only field by accident.
+
+  Nothing is transactional: an `after` hook that throws leaves the write done.
+
+- **`actions`** — buttons CRUD does not imply. Declared on the server, drawn by
+  the interface from metadata, so adding one needs no rebuild:
+
+  ```ts
+  actions: {
+    Post: [
+      { name: 'publish', label: 'Publish', scope: 'record',
+        confirm: 'Publish this post?', run: async ({ id }) => ({ message: 'Published.' }) },
+    ],
+  }
+  ```
+
+  A `'record'` action appears on the detail page and receives the id; a
+  `'list'` action appears above the list and does not. Actions the principal
+  may not run are absent from the metadata, so the button is never drawn.
+
+- **`'action'` is a distinct authorization operation**, not folded into
+  `update`. An action can do anything, so a policy should decide about it
+  separately — and a policy written before actions existed denies the value it
+  does not recognise, which is the safe direction.
+
+- **`ValidationError`** — the way application code refuses an input and has the
+  reason reach the person who typed it. Maps to `400 VALIDATION_ERROR` with the
+  message forwarded. Anything else a hook or action throws is still a 500 with
+  the message withheld: that is the right treatment for code that broke rather
+  than objected.
+
+- **`theme`** — an accent colour, a title and a logo, applied to the served page
+  without a rebuild. Values are validated at startup to shapes that cannot
+  carry markup; a `title` containing a tag, or a `logoUrl` with a `javascript:`
+  scheme, is a boot failure rather than a broken page.
+
+- **Dark mode**, following the viewer's system preference. Only the design
+  tokens are redefined, so every component follows without knowing a second
+  palette exists, and a configured brand colour still wins in both.
+
+### Fixed
+
+- `verify:package` could exit non-zero after reporting every check as passed,
+  when a killed child server emitted on its way out. The verdict is now the
+  checks and nothing else — a flaky check is worse than a slow one, because
+  people learn to re-run it rather than read it.
+
+---
+
 ## 0.5.0
 
 Per-field configuration, and an end to the interface offering buttons that
