@@ -13,6 +13,67 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.2.0
+
+Configuration and dependency injection. The admin now fits an application it
+did not have to be built around.
+
+### Added
+
+- **`AdminModule.forRootAsync`** — the adapter and the auth policy resolved
+  through DI, with `useFactory`, `useClass` or `useExisting`.
+
+  ```ts
+  AdminModule.forRootAsync({
+    imports: [DatabaseModule],
+    inject: [PrismaService],
+    useFactory: (prisma: PrismaService) => ({
+      adapter: new PrismaAdapter({ client: prisma }),
+      auth: myAdminAuth,
+    }),
+  })
+  ```
+
+  `forRoot` is unchanged. Previously the client had to exist where the module
+  was declared, which meant constructing it at import time — before
+  configuration was available and outside the application's own lifecycle.
+
+- **`path`** mounts the admin somewhere other than `/admin`, including nested
+  (`/internal/admin`). The API and the UI move together, and the served page is
+  rewritten to match: asset URLs point at the new path, and the base is handed
+  to the browser. It is rejected if empty or `/` — the routes end in `:model`,
+  so at the root they would capture every unmatched request in the application.
+
+  It sits on the options object rather than in the async factory, because routes
+  are registered before any provider exists.
+
+- **`resources`** with `include` / `exclude` chooses which models the admin
+  exposes at all. Structural rather than per-principal, so an excluded model
+  answers 404, not 403 — it is not part of the admin. A name matching no model
+  fails at startup: a typo in `exclude` would otherwise leave the model exposed.
+
+### Changed
+
+- **Model existence is checked before the resource policy** on every operation.
+  An unknown or excluded model now answers 404 where a denying policy would
+  previously have answered 403 first. A model that is not part of the admin
+  should not look like one the caller merely lacks access to.
+- `create`, `update` and `delete` validate the model name. Previously only
+  `list` did, so an unknown model reached the adapter on those routes.
+- ESM consumers get **one copy of the framework core** instead of one per
+  entrypoint. The Prisma package no longer inlines Core, so the published build
+  can share it. CommonJS still carries a copy per entrypoint — esbuild does not
+  code-split CJS — which is why framework errors are identified by a brand
+  rather than by `instanceof`.
+
+### Fixed
+
+- Two remaining `instanceof` checks on framework errors, in the Prisma adapter
+  and the resource-policy path, replaced with the brand check. Same defect class
+  as the 500-instead-of-400 bug found in 0.0.0; these had not yet caused one.
+
+---
+
 ## 0.1.0
 
 The first tagged milestone. Everything before it is recorded in `reports/`.
