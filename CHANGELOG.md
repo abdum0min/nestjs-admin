@@ -13,6 +13,58 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.4.0
+
+To-many relations. A record's children are visible from it, and can be linked
+and unlinked.
+
+### Added
+
+- **`GET /admin/:model/:id/:relation`** — a paginated page of the records on the
+  far side of a to-many relation. It is an ordinary list of the target model
+  with one extra condition, so pagination, sorting, filtering and relation
+  loading all behave exactly as they do on a top-level list.
+
+  Authorized against **both** models. The route returns records of the target,
+  so a principal who may read a `User` but not list `Post` does not receive
+  posts through it.
+
+- **`POST /admin/:model/:id/:relation`** with `{ "id": "..." }` to link an
+  existing record, and **`DELETE /admin/:model/:id/:relation/:targetId`** to
+  unlink one without deleting either. Both require `update` on both models:
+  across a one-to-many it is the _child's_ foreign key that changes.
+
+- **`relation.shape`** in the metadata — `to-one`, `one-to-many` or
+  `many-to-many`. Computed on the server, because working it out means pairing
+  the two halves of the relation and a rule implemented twice will eventually
+  disagree with itself.
+
+- **`relation.detachBlocked`** explains why records cannot be detached, when
+  they cannot: a child whose foreign key is required cannot exist without a
+  parent, so there is nothing to detach it to. The interface does not offer the
+  button, and the API refuses the request before the database does.
+
+- **`relation.targetForeignKey`** — the column on the target that points back.
+  It is what "all the posts by this author" is expressed as.
+
+- **`OrmAdapter` gains `listRelated`, `attachRelated` and `detachRelated`.**
+  A custom adapter must implement them.
+
+- **The detail page shows each to-many relation** as its own paginated section,
+  with a link into the child list filtered to that parent, and controls to
+  attach and detach where those are possible.
+
+- **A filtered list can be linked to.** `#/Post?filter=authorId:eq:u1` opens the
+  list already filtered, and survives a reload.
+
+### Changed
+
+- `RelationMetadata` gained `name`, shared by both halves of a relation. It is
+  the only reliable way to pair them: two relations between the same models
+  (`author` and `reviewer`, both to `User`) are otherwise indistinguishable.
+
+---
+
 ## 0.3.0
 
 To-one relations. The admin shows people's names where it used to show cuids.
