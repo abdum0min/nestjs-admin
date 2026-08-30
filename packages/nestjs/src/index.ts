@@ -65,6 +65,7 @@ export type {
 // type their own adapters and configuration without a second install.
 export type {
   AdminErrorKind,
+  ConstraintKind,
   FieldKind,
   FieldOverride,
   FieldWidget,
@@ -87,6 +88,7 @@ export type {
 
 export {
   AdapterError,
+  ConstraintError,
   FieldNotFoundError,
   ForbiddenError,
   InvalidQueryError,

@@ -37,6 +37,7 @@ export type AdminErrorCode =
   | 'FIELD_NOT_FOUND'
   | 'INVALID_QUERY'
   | 'VALIDATION_ERROR'
+  | 'CONSTRAINT_VIOLATION'
   | 'INTERNAL_ERROR'
 
 export interface ErrorResponse {

@@ -11,10 +11,12 @@
  */
 import {
   isNestAdminError,
+  type ConstraintError,
   type FieldNotFoundError,
   type ModelNotFoundError,
   type NestAdminError,
   type RecordNotFoundError,
+  type ValidationError,
 } from '@nest-admin/core'
 import {
   Catch,
@@ -112,12 +114,33 @@ function mapError(error: unknown): MappedError {
 
     // Raised by application code to refuse an input. The message is
     // forwarded, which is what it is for.
-    case 'validation':
+    case 'validation': {
+      const refusal = error as ValidationError
       return {
         status: HttpStatus.BAD_REQUEST,
         code: 'VALIDATION_ERROR',
         message: error.message,
+        // Only when it named them. An empty list would tell a client the
+        // refusal is about no field in particular, which is not the same as
+        // not saying - and the interface treats the two differently.
+        ...(refusal.fields.length > 0 ? { details: { fields: refusal.fields } } : {}),
       }
+    }
+
+    // The database refused the write for a reason the caller can act on. The
+    // message is built from field names rather than taken from the ORM, so it
+    // carries no paths or query fragments and is safe to forward.
+    case 'constraint': {
+      const failure = error as ConstraintError
+      return {
+        // A unique clash or a reference still in use is a conflict with data
+        // that already exists; a missing required value is a bad request.
+        status: failure.constraint === 'required' ? HttpStatus.BAD_REQUEST : HttpStatus.CONFLICT,
+        code: 'CONSTRAINT_VIOLATION',
+        message: error.message,
+        details: { constraint: failure.constraint, fields: failure.fields },
+      }
+    }
 
     case 'invalid-query':
       return {
@@ -131,6 +154,18 @@ function mapError(error: unknown): MappedError {
     default:
       return INTERNAL
   }
+}
+
+/**
+ * The message this error is allowed to show a client.
+ *
+ * Exported because a response can carry a failure without *being* one: a bulk
+ * delete reports what happened to each record, and one of those may have been
+ * refused. Forwarding the raw message there would hand a client exactly what
+ * the filter exists to withhold, through a 200.
+ */
+export function clientMessage(error: unknown): string {
+  return mapError(error).message
 }
 
 @Catch()
