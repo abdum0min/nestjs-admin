@@ -87,3 +87,41 @@ export function readIndexHtml(root: string = uiRoot()): Buffer | undefined {
   const indexPath = join(root, 'index.html')
   return existsSync(indexPath) ? readFileSync(indexPath) : undefined
 }
+
+/**
+ * The base path Vite is configured to emit into asset URLs.
+ *
+ * A placeholder rather than a real default, because the mount path is not known
+ * until the application calls `forRoot`. Matching on a plausible-looking value
+ * such as `/admin/` would risk rewriting something that merely resembled it;
+ * this string appears in the build for exactly one reason.
+ *
+ * Keep in step with `base` in `apps/admin-ui/vite.config.ts`.
+ */
+export const UI_BASE_PLACEHOLDER = '/__nest-admin-base__'
+
+/**
+ * The SPA shell with every URL pointed at the configured mount path.
+ *
+ * Two things in the shell need it. The asset tags Vite emits are absolute, so
+ * they carry the placeholder and are rewritten. The application also needs the
+ * base at runtime to build API URLs, and it cannot infer it: the SPA uses hash
+ * routing, so `/panel/User` and `/panel#/User` are indistinguishable from
+ * inside the page. It is injected as a global instead.
+ *
+ * `mountPath` is validated by `normaliseMountPath` down to unreserved URL
+ * characters, so it needs no escaping here - there is nothing in it that can
+ * close a script tag or a string literal.
+ */
+export function renderShell(mountPath: string, root: string = uiRoot()): Buffer | undefined {
+  const shell = readIndexHtml(root)
+  if (!shell) return undefined
+
+  const html = shell
+    .toString('utf8')
+    .split(`${UI_BASE_PLACEHOLDER}/`)
+    .join(`${mountPath}/`)
+    .replace('</head>', `  <script>window.__NEST_ADMIN_BASE__ = "${mountPath}"</script>\n  </head>`)
+
+  return Buffer.from(html, 'utf8')
+}

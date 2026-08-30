@@ -24,12 +24,26 @@ import type {
 /**
  * Where the admin API lives.
  *
- * Defaults to `/admin`, which is correct in production: the SPA is served from
- * the same origin, under the same prefix the API occupies. `VITE_ADMIN_API_BASE`
- * overrides it for development, where the SPA runs on the Vite dev server and
- * the API on the application's own port - see `vite.config.ts`.
+ * The server injects `window.__NEST_ADMIN_BASE__` into the shell it serves,
+ * because the mount path is the application's choice and this bundle is built
+ * long before it is made. The page cannot work it out for itself: routing is
+ * hash-based, so `/panel/User` and `/panel#/User` look the same from inside.
+ *
+ * `VITE_ADMIN_API_BASE` overrides it for development, where the SPA runs on the
+ * Vite dev server and the API on the application's own port - see
+ * `vite.config.ts`. The final `/admin` is the last resort, for a shell served
+ * by something that does not inject the global.
  */
-const API_BASE: string = (import.meta.env['VITE_ADMIN_API_BASE'] as string | undefined) ?? '/admin'
+declare global {
+  interface Window {
+    __NEST_ADMIN_BASE__?: string
+  }
+}
+
+const API_BASE: string =
+  (import.meta.env['VITE_ADMIN_API_BASE'] as string | undefined) ??
+  (typeof window === 'undefined' ? undefined : window.__NEST_ADMIN_BASE__) ??
+  '/admin'
 
 /**
  * A failed request, carrying the server's machine-readable code.

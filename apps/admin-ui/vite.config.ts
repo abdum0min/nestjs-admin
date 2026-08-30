@@ -5,14 +5,17 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
 
-  // The SPA is served by the consuming NestJS application under a base path,
-  // `/admin` by default. Asset URLs are emitted absolute against that path.
+  // A placeholder, not a real path. The mount point is chosen by the consuming
+  // application at runtime (`AdminModule.forRoot({ path })`), which is long
+  // after this build, so the asset URLs Vite emits absolute are rewritten when
+  // the shell is served - see `renderShell` in packages/nestjs/src/ui/assets.ts.
   //
-  // KNOWN LIMITATION: this hard-codes the mount point at build time, so a
-  // developer who configures `path: '/backoffice'` would get broken asset
-  // URLs. Making the base path configurable at runtime is an open decision
-  // recorded in docs/architecture.md.
-  base: '/admin/',
+  // It is deliberately not a plausible value such as `/admin/`: a placeholder
+  // that appears in the output for exactly one reason cannot be confused with
+  // something that merely resembles it.
+  //
+  // Keep in step with `UI_BASE_PLACEHOLDER` in packages/nestjs/src/ui/assets.ts.
+  base: '/__nest-admin-base__/',
 
   build: {
     outDir: 'dist',

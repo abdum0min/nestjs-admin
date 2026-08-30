@@ -1,7 +1,7 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import type { OrmAdapter } from '@nest-admin/core'
+import type { OrmAdapter, ResourceSelection } from '@nest-admin/core'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
@@ -16,7 +16,7 @@ import { AdminModule } from '../src/module.js'
  * `src/ui/admin-ui` and find nothing. Pointing at `dist/admin-ui` means the
  * static-serving tests exercise the real artefact rather than skipping.
  */
-const BUILT_UI_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../dist/admin-ui')
+export const BUILT_UI_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../dist/admin-ui')
 
 /**
  * Boot a Nest application containing only `AdminModule`.
@@ -33,6 +33,8 @@ export async function createAdminApp(
   adapter: OrmAdapter,
   auth: AdminAuth = unsafeAllowAllRequests(),
   resourceAuth?: AdminResourceAuth,
+  path?: string,
+  resources?: ResourceSelection,
 ): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -41,6 +43,8 @@ export async function createAdminApp(
         auth,
         uiRoot: BUILT_UI_ROOT,
         ...(resourceAuth ? { resourceAuth } : {}),
+        ...(path === undefined ? {} : { path }),
+        ...(resources === undefined ? {} : { resources }),
       }),
     ],
   }).compile()

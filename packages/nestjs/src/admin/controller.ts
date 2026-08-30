@@ -43,7 +43,7 @@ import type { RawQuery } from '../http/query-parser.js'
 import type { MetadataDto } from './metadata.dto.js'
 import { AdminService } from './service.js'
 
-@Controller('admin')
+@Controller()
 // Guards at controller scope cover every handler below, including `meta`.
 // Applied here rather than as an APP_GUARD so the host application's own
 // routes keep their own authentication - see auth/guard.ts.

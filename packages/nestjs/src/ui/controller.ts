@@ -41,12 +41,28 @@ import {
   StreamableFile,
 } from '@nestjs/common'
 
-import { ADMIN_UI_ROOT } from '../tokens.js'
-import { contentTypeFor, readAsset, readIndexHtml } from './assets.js'
+import { ADMIN_MOUNT_PATH, ADMIN_UI_ROOT } from '../tokens.js'
+import { contentTypeFor, readAsset, renderShell } from './assets.js'
 
-@Controller('admin')
+// No path here. The module registers this controller under the application's
+// configured mount path through `RouterModule`, so a path on the decorator
+// would nest it a second time.
+@Controller()
 export class AdminUiController {
-  constructor(@Inject(ADMIN_UI_ROOT) private readonly root: string) {}
+  /**
+   * The rendered shell, built on first use.
+   *
+   * It depends only on the bundled file and the mount path, and neither changes
+   * while the application runs. Held on the instance rather than in a
+   * module-level cache: the package ships two bundles that each inline their
+   * own copy of a module, so module-level state is not shared between them.
+   */
+  private shell?: Buffer | undefined
+
+  constructor(
+    @Inject(ADMIN_UI_ROOT) private readonly root: string,
+    @Inject(ADMIN_MOUNT_PATH) private readonly mountPath: string,
+  ) {}
 
   /**
    * `GET /admin` - the SPA shell.
@@ -57,7 +73,8 @@ export class AdminUiController {
   @Get()
   @Header('Cache-Control', 'no-cache')
   index(): StreamableFile {
-    const html = readIndexHtml(this.root)
+    this.shell ??= renderShell(this.mountPath, this.root)
+    const html = this.shell
     if (!html) {
       throw new NotFoundException(
         'The admin UI was not bundled with this package. ' +

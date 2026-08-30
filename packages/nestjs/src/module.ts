@@ -17,8 +17,17 @@
  * It is not `@Global()`: making a library's providers globally visible in
  * someone else's application is a decision the application should make.
  */
-import type { OrmAdapter } from '@nest-admin/core'
-import { Logger, Module, type DynamicModule } from '@nestjs/common'
+import type { OrmAdapter, ResourceSelection } from '@nest-admin/core'
+import {
+  Logger,
+  Module,
+  type DynamicModule,
+  type FactoryProvider,
+  type ModuleMetadata,
+  type Provider,
+  type Type,
+} from '@nestjs/common'
+import { RouterModule } from '@nestjs/core'
 
 import { AdminController } from './admin/controller.js'
 import { AdminService } from './admin/service.js'
@@ -26,9 +35,18 @@ import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
 import { AdminAuthGuard } from './auth/guard.js'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
 import { AdminExceptionFilter } from './http/exception.filter.js'
+import { normaliseMountPath } from './mount-path.js'
 import { uiAvailable, uiRoot } from './ui/assets.js'
 import { AdminUiController } from './ui/controller.js'
-import { ADMIN_ADAPTER, ADMIN_AUTH, ADMIN_RESOURCE_AUTH, ADMIN_UI_ROOT } from './tokens.js'
+import {
+  ADMIN_ADAPTER,
+  ADMIN_AUTH,
+  ADMIN_MOUNT_PATH,
+  ADMIN_OPTIONS,
+  ADMIN_RESOURCE_AUTH,
+  ADMIN_RESOURCES,
+  ADMIN_UI_ROOT,
+} from './tokens.js'
 
 export interface AdminModuleOptions {
   /**
@@ -71,6 +89,32 @@ export interface AdminModuleOptions {
   readonly resourceAuth?: AdminResourceAuth
 
   /**
+   * Where the admin is mounted. Defaults to `/admin`.
+   *
+   * Accepts `admin`, `/admin` and `/admin/` alike, and may be nested, as in
+   * `/internal/admin`. It cannot be empty or `/`: these routes end in
+   * `:model`, so mounting them at the root would capture every unmatched
+   * request in the host application.
+   *
+   * The API and the UI move together. There is one mount point, not two.
+   */
+  readonly path?: string
+
+  /**
+   * Which models the admin exposes at all. Defaults to every model the adapter
+   * reports.
+   *
+   * Structural, and not a substitute for `resourceAuth`: this is the same for
+   * every principal, so an excluded model answers 404 rather than 403. Use it
+   * for tables that are not domain data - session stores, migration
+   * bookkeeping, queues - and `resourceAuth` for who may do what.
+   *
+   * A name that matches no model fails at startup rather than being ignored: a
+   * typo in `exclude` would otherwise leave the model exposed.
+   */
+  readonly resources?: ResourceSelection
+
+  /**
    * Directory holding the built admin UI.
    *
    * Defaults to the copy bundled inside this package, which is what a consumer
@@ -82,75 +126,253 @@ export interface AdminModuleOptions {
   readonly uiRoot?: string
 }
 
+/**
+ * Reject options that cannot work, as early as the caller allows.
+ *
+ * For `forRoot` that is module construction; for `forRootAsync` it is whenever
+ * the factory resolves, which is still during application start-up. Either way
+ * it beats the alternative - an injection error on the first request, long
+ * after the mistake and nowhere near it.
+ *
+ * `caller` names the method in the message so the reader is pointed at the call
+ * they actually wrote.
+ */
+function assertUsableOptions(options: AdminModuleOptions, caller: string): void {
+  if (!options?.adapter) {
+    throw new Error(
+      `AdminModule.${caller}() requires an \`adapter\`. ` +
+        'Construct one in your application, for example ' +
+        '`new PrismaAdapter({ client: prisma })`.',
+    )
+  }
+
+  if (!options.auth || typeof options.auth.authorize !== 'function') {
+    throw new Error(
+      `AdminModule.${caller}() requires an \`auth\` implementation with an ` +
+        '`authorize(context)` method. The admin API exposes every record and ' +
+        'the whole schema, so it is never public by default. ' +
+        'For local development only, pass `unsafeAllowAllRequests()`.',
+    )
+  }
+
+  if (options.resourceAuth && typeof options.resourceAuth.authorize !== 'function') {
+    throw new Error(
+      `AdminModule.${caller}() was given a \`resourceAuth\` without an ` +
+        '`authorize(resource)` method. Omit it to allow every model, or ' +
+        'supply an implementation.',
+    )
+  }
+
+  warnIfUnsafe(options.auth)
+}
+
+/**
+ * What a `forRootAsync` factory returns.
+ *
+ * Everything except the structural options, which are decided when the module
+ * is defined and so cannot come from a provider - see `forRootAsync`.
+ */
+export type AdminModuleFactoryOptions = Omit<AdminModuleOptions, 'path' | 'uiRoot'>
+
+/** Supply options from a class rather than a factory function. */
+export interface AdminModuleOptionsFactory {
+  createAdminOptions(): AdminModuleFactoryOptions | Promise<AdminModuleFactoryOptions>
+}
+
+export interface AdminModuleAsyncOptions {
+  /** As `AdminModuleOptions.path`. Structural, so it is not from the factory. */
+  readonly path?: string
+
+  /** @internal As `AdminModuleOptions.uiRoot`. */
+  readonly uiRoot?: string
+
+  /** Modules whose providers the factory needs. */
+  readonly imports?: ModuleMetadata['imports']
+
+  /** Providers passed to `useFactory`, in order. */
+  readonly inject?: FactoryProvider['inject']
+
+  readonly useFactory?: (
+    ...args: never[]
+  ) => AdminModuleFactoryOptions | Promise<AdminModuleFactoryOptions>
+
+  /** Instantiated by Nest, then asked for the options. */
+  readonly useClass?: Type<AdminModuleOptionsFactory>
+
+  /** An options factory the application already provides elsewhere. */
+  readonly useExisting?: Type<AdminModuleOptionsFactory>
+}
+
+/** Say once, at startup, that the API works but the interface is not there. */
+function warnIfUiMissing(resolvedUiRoot: string, mountPath: string): void {
+  if (uiAvailable(resolvedUiRoot)) return
+
+  // Not fatal - the API is perfectly usable on its own, and a source checkout
+  // that has not run the UI build lands here. Said once, at startup, rather
+  // than as a 404 someone has to reverse-engineer.
+  new Logger('NestAdmin').warn(
+    `The admin UI was not found in this build; ${mountPath} will return 404. ` +
+      `The API under ${mountPath} is unaffected.`,
+  )
+}
+
+/**
+ * The parts of the module that do not depend on how the options arrived.
+ *
+ * Both entry points produce the same routes, controllers and services; they
+ * differ only in how the four option providers get their values, which is why
+ * those are passed in.
+ */
+function defineModule(
+  mountPath: string,
+  resolvedUiRoot: string,
+  optionProviders: readonly Provider[],
+  extraImports: ModuleMetadata['imports'] = [],
+): DynamicModule {
+  return {
+    module: AdminModule,
+    imports: [
+      ...extraImports,
+      // The mount path is applied here, not on the controllers: `@Controller()`
+      // is evaluated when the class is defined, long before either entry point
+      // sees any options. `RouterModule` prefixes the module's routes and
+      // preserves controller order, which the collision rule below depends on.
+      RouterModule.register([{ path: mountPath, module: AdminModule }]),
+    ],
+    // Order matters and is the whole answer to the route collision. The UI
+    // controller binds exactly two paths - the mount path itself and
+    // `assets/:file` - and is matched first, so `assets` can never be read as a
+    // model name. Everything else falls through to the API controller.
+    controllers: [AdminUiController, AdminController],
+    providers: [
+      ...optionProviders,
+      { provide: ADMIN_UI_ROOT, useValue: resolvedUiRoot },
+      { provide: ADMIN_MOUNT_PATH, useValue: mountPath },
+      AdminService,
+      // Provided so Nest can resolve them for `@UseGuards` / `@UseFilters` on
+      // the controller. Deliberately not APP_GUARD or APP_FILTER: either would
+      // take over behaviour for the whole host application rather than just the
+      // admin routes.
+      AdminAuthGuard,
+      AdminExceptionFilter,
+    ],
+    exports: [AdminService],
+  }
+}
+
+/**
+ * Providers that produce the resolved options object for `forRootAsync`.
+ *
+ * Validation happens here rather than in each derived provider, so a bad
+ * factory result is reported once, as the options resolve, and names the
+ * method the reader called.
+ */
+function optionsProviders(options: AdminModuleAsyncOptions): Provider[] {
+  const validate = (resolved: AdminModuleFactoryOptions): AdminModuleOptions => {
+    assertUsableOptions(resolved as AdminModuleOptions, 'forRootAsync')
+    return resolved as AdminModuleOptions
+  }
+
+  if (options.useFactory) {
+    return [
+      {
+        provide: ADMIN_OPTIONS,
+        useFactory: async (...args: never[]) => validate(await options.useFactory!(...args)),
+        inject: options.inject ?? [],
+      },
+    ]
+  }
+
+  const factoryClass = options.useExisting ?? options.useClass
+  return [
+    // `useClass` has to be instantiated by Nest before it can be asked;
+    // `useExisting` is already provided by the application.
+    ...(options.useClass ? [{ provide: options.useClass, useClass: options.useClass }] : []),
+    {
+      provide: ADMIN_OPTIONS,
+      useFactory: async (factory: AdminModuleOptionsFactory) =>
+        validate(await factory.createAdminOptions()),
+      inject: [factoryClass as Type<AdminModuleOptionsFactory>],
+    },
+  ]
+}
+
 @Module({})
 export class AdminModule {
   static forRoot(options: AdminModuleOptions): DynamicModule {
-    // Validated here, at module construction, rather than through DI. A missing
-    // provider surfaces as an injection error on the first request, long after
-    // the mistake and nowhere near it.
-    if (!options?.adapter) {
-      throw new Error(
-        'AdminModule.forRoot() requires an `adapter`. ' +
-          'Construct one in your application, for example ' +
-          '`new PrismaAdapter({ client: prisma })`.',
-      )
-    }
+    assertUsableOptions(options, 'forRoot')
 
-    if (!options.auth || typeof options.auth.authorize !== 'function') {
-      throw new Error(
-        'AdminModule.forRoot() requires an `auth` implementation with an ' +
-          '`authorize(context)` method. The admin API exposes every record and ' +
-          'the whole schema, so it is never public by default. ' +
-          'For local development only, pass `unsafeAllowAllRequests()`.',
-      )
-    }
-
-    if (options.resourceAuth && typeof options.resourceAuth.authorize !== 'function') {
-      throw new Error(
-        'AdminModule.forRoot() was given a `resourceAuth` without an ' +
-          '`authorize(resource)` method. Omit it to allow every model, or ' +
-          'supply an implementation.',
-      )
-    }
-
-    warnIfUnsafe(options.auth)
+    // Throws on an unusable value, so a bad path fails at startup rather than
+    // as a 404 on a route nobody can find.
+    const mountPath = normaliseMountPath(options.path)
 
     const resolvedUiRoot = options.uiRoot ?? uiRoot()
+    warnIfUiMissing(resolvedUiRoot, mountPath)
 
-    if (!uiAvailable(resolvedUiRoot)) {
-      // Not fatal - the API is perfectly usable on its own, and a source
-      // checkout that has not run the UI build lands here. Said once, at
-      // startup, rather than as a 404 someone has to reverse-engineer.
-      new Logger('NestAdmin').warn(
-        'The admin UI was not found in this build; /admin will return 404. ' +
-          'The API under /admin is unaffected.',
+    return defineModule(mountPath, resolvedUiRoot, [
+      { provide: ADMIN_ADAPTER, useValue: options.adapter },
+      { provide: ADMIN_RESOURCES, useValue: options.resources },
+      { provide: ADMIN_AUTH, useValue: options.auth },
+      // Always provided, so injection resolves whether or not the consumer
+      // supplied a policy. The default permits every model.
+      { provide: ADMIN_RESOURCE_AUTH, useValue: options.resourceAuth ?? allowAllResources() },
+    ])
+  }
+
+  /**
+   * The same module, with the adapter and the auth policy resolved through DI.
+   *
+   * For the ordinary case where those things are not available when the module
+   * is declared: a `PrismaService` that belongs to another module, a connection
+   * string that comes from `ConfigService`.
+   *
+   * ```ts
+   * AdminModule.forRootAsync({
+   *   imports: [PrismaModule, ConfigModule],
+   *   inject: [PrismaService, ConfigService],
+   *   useFactory: (prisma: PrismaService, config: ConfigService) => ({
+   *     adapter: new PrismaAdapter({ client: prisma }),
+   *     auth: new SessionAdminAuth(config.get('ADMIN_ROLE')),
+   *   }),
+   * })
+   * ```
+   *
+   * `path` stays on this object rather than coming from the factory. Routes are
+   * registered when the module is defined, which is before any provider has
+   * been instantiated, so the mount path cannot wait for an injection - and a
+   * `path` returned from the factory would be silently ignored, which is worse
+   * than not offering it.
+   */
+  static forRootAsync(options: AdminModuleAsyncOptions): DynamicModule {
+    if (!options?.useFactory && !options?.useClass && !options?.useExisting) {
+      throw new Error(
+        'AdminModule.forRootAsync() requires one of `useFactory`, `useClass` ' +
+          'or `useExisting`. To configure the admin directly, use forRoot().',
       )
     }
 
-    return {
-      module: AdminModule,
-      // Order matters and is the whole answer to the route collision. The UI
-      // controller binds exactly two paths - `/admin` and `/admin/assets/:file`
-      // - and is matched first, so `assets` can never be read as a model name.
-      // Everything else falls through to the API controller, including
-      // `/admin/meta` and every `/admin/:model` route.
-      controllers: [AdminUiController, AdminController],
-      providers: [
-        { provide: ADMIN_ADAPTER, useValue: options.adapter },
-        { provide: ADMIN_UI_ROOT, useValue: resolvedUiRoot },
-        { provide: ADMIN_AUTH, useValue: options.auth },
-        // Always provided, so injection resolves whether or not the consumer
-        // supplied a policy. The default permits every model.
-        { provide: ADMIN_RESOURCE_AUTH, useValue: options.resourceAuth ?? allowAllResources() },
-        AdminService,
-        // Provided so Nest can resolve them for `@UseGuards` / `@UseFilters` on
-        // the controller. Deliberately not APP_GUARD or APP_FILTER: either
-        // would take over behaviour for the whole host application rather than
-        // just the admin routes.
-        AdminAuthGuard,
-        AdminExceptionFilter,
+    const mountPath = normaliseMountPath(options.path)
+    const resolvedUiRoot = options.uiRoot ?? uiRoot()
+    warnIfUiMissing(resolvedUiRoot, mountPath)
+
+    // Each option provider reads from the single resolved object, so the
+    // factory runs once however many of its values are injected.
+    const derive = (
+      token: symbol,
+      read: (resolved: AdminModuleOptions) => unknown,
+    ): FactoryProvider => ({ provide: token, useFactory: read, inject: [ADMIN_OPTIONS] })
+
+    return defineModule(
+      mountPath,
+      resolvedUiRoot,
+      [
+        ...optionsProviders(options),
+        derive(ADMIN_ADAPTER, (resolved) => resolved.adapter),
+        derive(ADMIN_RESOURCES, (resolved) => resolved.resources),
+        derive(ADMIN_AUTH, (resolved) => resolved.auth),
+        derive(ADMIN_RESOURCE_AUTH, (resolved) => resolved.resourceAuth ?? allowAllResources()),
       ],
-      exports: [AdminService],
-    }
+      options.imports ?? [],
+    )
   }
 }
