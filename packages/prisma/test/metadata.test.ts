@@ -121,12 +121,29 @@ describe('relations', () => {
 
   it('represents a to-many relation', () => {
     const posts = field(model(models, 'User'), 'posts')
+    // No `from`: the column is on the other side. Filtering or writing this
+    // relation from here would have to go through Post, not through User.
     expect(posts.relation).toEqual({ targetModel: 'Post', cardinality: 'many' })
   })
 
-  it('represents a to-one relation', () => {
+  it('represents a to-one relation, and names the column it is stored in', () => {
     const author = field(model(models, 'Post'), 'author')
-    expect(author.relation).toEqual({ targetModel: 'User', cardinality: 'one' })
+
+    expect(author.relation).toEqual({
+      targetModel: 'User',
+      cardinality: 'one',
+      from: 'authorId',
+      to: 'id',
+    })
+  })
+
+  it('exposes the foreign key as a scalar field of its own', () => {
+    // It is a real column, so it stays queryable by name. The relation
+    // metadata says which relation it belongs to; it does not hide it.
+    const authorId = field(model(models, 'Post'), 'authorId')
+
+    expect(authorId.kind).toBe('string')
+    expect(authorId.relation).toBeUndefined()
   })
 
   it('leaves scalars without relation metadata', () => {
@@ -147,7 +164,7 @@ describe('multi-file schemas', () => {
 
   it('resolves relations declared across separate files', () => {
     const models = load(MULTI_FILE_DIR)
-    expect(field(model(models, 'Article'), 'author').relation).toEqual({
+    expect(field(model(models, 'Article'), 'author').relation).toMatchObject({
       targetModel: 'Author',
       cardinality: 'one',
     })

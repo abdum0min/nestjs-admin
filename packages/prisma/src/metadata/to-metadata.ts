@@ -93,6 +93,14 @@ function toFieldMetadata(
             // the generated Prisma Client does not expose at runtime, which is
             // why metadata comes from the schema rather than the client.
             cardinality: field.isList === true ? ('many' as const) : ('one' as const),
+            // Present only on the owning side of a to-one relation. Prisma
+            // gives both sides a relation field but only one of them a column,
+            // and these arrays are empty on the side that has none - so an
+            // empty array means "no foreign key here", not "unknown".
+            ...(field.relationFromFields?.[0] !== undefined
+              ? { from: field.relationFromFields[0] }
+              : {}),
+            ...(field.relationToFields?.[0] !== undefined ? { to: field.relationToFields[0] } : {}),
           },
         }
       : {}),

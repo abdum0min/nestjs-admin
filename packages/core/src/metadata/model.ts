@@ -24,10 +24,33 @@ export type FieldKind =
 /** Cardinality of a relation from the owning model's point of view. */
 export type RelationCardinality = 'one' | 'many'
 
+/**
+ * A relation, and how to act on it.
+ *
+ * `from` and `to` are what turn a relation from something an admin can only
+ * display into something it can filter and write. A to-one relation is stored
+ * as an ordinary scalar column - `Post.authorId` - and that column is what a
+ * query has to be expressed in terms of. Without knowing its name, a filter on
+ * `author` cannot be translated, and a form has no field to submit.
+ *
+ * Both are absent on to-many relations, which have no column on this side.
+ */
 export interface RelationMetadata {
   /** `name` of the {@link ModelMetadata} on the other side of the relation. */
   readonly targetModel: string
   readonly cardinality: RelationCardinality
+
+  /**
+   * Scalar field on **this** model holding the foreign key, for a to-one
+   * relation - `authorId` on `Post.author`.
+   *
+   * Absent when the relation has no column on this side: every to-many, and
+   * the non-owning half of a one-to-one.
+   */
+  readonly from?: string
+
+  /** Field on the target model that `from` points at - usually its id. */
+  readonly to?: string
 }
 
 export interface FieldMetadata {

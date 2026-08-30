@@ -16,6 +16,8 @@ export type {
   RelationMetadata,
 } from './metadata/model.js'
 
+export { displayFieldFor } from './metadata/display-field.js'
+
 export type {
   FilterOperator,
   FilterRule,
