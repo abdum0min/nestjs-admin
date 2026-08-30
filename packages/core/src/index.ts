@@ -36,8 +36,21 @@ export type {
 
 export type { OrmAdapter, RecordData, RecordId } from './adapter/orm-adapter.js'
 
+export type {
+  FieldOverride,
+  FieldWidget,
+  ModelOverride,
+  ModelOverrides,
+} from './config/overrides.js'
 export type { ResourceSelection } from './config/resources.js'
 export { selectModels, unknownSelectionNames } from './config/resources.js'
+export {
+  applyOverrides,
+  fieldOverride,
+  isReadOnly,
+  unknownOverrideNames,
+  unwritableHiddenFields,
+} from './config/overrides.js'
 
 export type { AdminErrorKind } from './errors/errors.js'
 

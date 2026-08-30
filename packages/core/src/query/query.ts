@@ -36,6 +36,18 @@ export interface ListQuery {
   readonly filters?: readonly FilterRule[]
   /** Free-text term the adapter applies across searchable string fields. */
   readonly search?: string
+
+  /**
+   * The fields this query may touch, and the only ones it should return.
+   *
+   * Set by the caller that knows which fields the admin exposes - the adapter
+   * reads a schema, not a configuration. Without it, a field the application
+   * hid would still be searched by free text, sortable, filterable and
+   * returned, because from the adapter's side it is an ordinary column.
+   *
+   * Omitted means "every field the model has".
+   */
+  readonly fields?: readonly string[]
 }
 
 export interface Page<T> {

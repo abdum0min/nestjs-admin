@@ -51,6 +51,10 @@ function isReadable(field: FieldMetadata): boolean {
  * result; this is the default, not a rule.
  */
 export function displayFieldFor(model: ModelMetadata): string {
+  // A declared choice wins outright. The rule below is a guess, and the
+  // application knows things the schema does not.
+  if (model.displayField !== undefined) return model.displayField
+
   const readable = model.fields.filter(isReadable)
 
   for (const candidate of CONVENTIONAL) {

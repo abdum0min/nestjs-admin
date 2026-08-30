@@ -117,4 +117,15 @@ export interface ModelMetadata {
    */
   readonly primaryKey: readonly string[]
   readonly fields: readonly FieldMetadata[]
+
+  /**
+   * Field that names a record of this model in one line, when the application
+   * has declared one.
+   *
+   * A slot rather than a value: left unset, `displayFieldFor` works it out from
+   * the fields. It is here so that a declared choice travels with the model and
+   * reaches the adapter and the metadata document alike, without either of them
+   * having to read configuration.
+   */
+  readonly displayField?: string
 }
