@@ -66,5 +66,5 @@ configuration is needed.
 pnpm --filter @nest-admin/prisma exec vitest run
 ```
 
-See [../../reports/003-prisma-adapter.md](../../reports/003-prisma-adapter.md)
+See [../../docs/adapters.md](../../docs/adapters.md)
 for the design decisions and known limitations.

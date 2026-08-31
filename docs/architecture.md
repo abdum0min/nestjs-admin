@@ -67,7 +67,7 @@ controller serving every model under `/admin`, HTTP query parsing into Core's
 `ListQuery`, a public metadata DTO, a shared response envelope, a centralised
 exception filter mapping Core errors to status codes, and a host-supplied
 authentication boundary protecting every route. The full contract is in the
-package README, reports/004-http-api.md and reports/005-authentication.md.
+package README.
 
 Not implemented: serving the SPA, resource-level permissions, runtime
 configuration.
@@ -228,8 +228,7 @@ asset URLs without a second build.
 Was the largest technical risk. Settled by the Phase 1 spike: metadata comes
 from `@prisma/get-dmmf`, confined to one module in `packages/prisma`, with a
 custom Prisma generator as the long-term successor. Summary in
-[prisma-metadata.md](prisma-metadata.md); full evidence in
-[../reports/002-prisma-metadata-spike.md](../reports/002-prisma-metadata-spike.md).
+[prisma-metadata.md](prisma-metadata.md).
 
 Related: Prisma 7 builds clients from driver adapters, so the Nest Admin
 Prisma adapter must accept an already-constructed `PrismaClient` and never

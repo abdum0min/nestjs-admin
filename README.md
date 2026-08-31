@@ -107,17 +107,16 @@ else. That claim was checked by doing it: see
 
 ## Repository layout
 
-| Path                | Responsibility                                                   |
-| ------------------- | ---------------------------------------------------------------- |
-| `packages/core`     | ORM-agnostic contracts: adapter, metadata, query, errors         |
-| `packages/prisma`   | Prisma adapter                                                   |
-| `packages/drizzle`  | Drizzle adapter                                                  |
-| `packages/nestjs`   | NestJS integration — **the single published package**            |
-| `packages/admin-ui` | The admin interface (React + Vite), bundled into that package    |
-| `packages/cli`      | `nest-admin init` and future commands — not implemented yet      |
-| `examples/basic`    | A reference consumer, eleven models, used to verify releases     |
-| `docs/`             | Guides, reference, and the decisions behind the design           |
-| `reports/`          | One report per release: what was built, what it cost, what broke |
+| Path                | Responsibility                                                |
+| ------------------- | ------------------------------------------------------------- |
+| `packages/core`     | ORM-agnostic contracts: adapter, metadata, query, errors      |
+| `packages/prisma`   | Prisma adapter                                                |
+| `packages/drizzle`  | Drizzle adapter                                               |
+| `packages/nestjs`   | NestJS integration — **the single published package**         |
+| `packages/admin-ui` | The admin interface (React + Vite), bundled into that package |
+| `packages/cli`      | `nest-admin init` and future commands — not implemented yet   |
+| `examples/basic`    | A reference consumer, eleven models, used to verify releases  |
+| `docs/`             | Guides, reference, and the decisions behind the design        |
 
 Everything except `packages/nestjs` is `private: true` and bundled into it at
 build time, so a consumer installs one package and gets one copy of everything.

@@ -17,8 +17,10 @@
  *   DELETE /admin/:model/:id
  *
  * `:model` is the model name exactly as the adapter reports it - `User`, not
- * `users`. Declaring `meta` before `:model` is what keeps it reachable; see
- * the route-collision note in reports/004-http-api.md.
+ * `users`. Declaring the literal segments - `meta`, `dashboard`, `actions` -
+ * before `:model` is what keeps them reachable: route order decides, so a
+ * literal declared afterwards is swallowed by the parameter and answers 404.
+ * The cost is that a model of that name would be unreachable.
  */
 import { InvalidQueryError, type RecordData, type RecordId } from '@nest-admin/core'
 import type { ExecutionContext } from '@nestjs/common'

@@ -504,7 +504,8 @@ describe('composition with request-level authentication', () => {
 /**
  * What the metadata says this principal may do.
  *
- * `reports/009` found the interface offering `New`, `Edit` and `Delete` to a
+ * A consumer walkthrough found the interface offering `New`, `Edit` and
+ * `Delete` to a
  * principal every one of which would be refused. The document now carries the
  * answers, so a client can stop promising what the server will not do.
  */

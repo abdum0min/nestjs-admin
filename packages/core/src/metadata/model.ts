@@ -89,8 +89,10 @@ export interface FieldMetadata {
    * has a field called `isGenerated`, and it does NOT mean this. Measured
    * against Prisma 7.10.0, DMMF reports `isGenerated: false` for
    * `id String @id @default(cuid())`. Mapping it across directly produces
-   * editable primary keys.
-   * See reports/003-prisma-adapter.md for the correct derivation.
+   * editable primary keys. The correct derivation - a *function* default, or
+   * an updated-at column - is in `packages/prisma/src/metadata/to-metadata.ts`
+   * and `packages/drizzle/src/metadata/to-metadata.ts`, which state it in each
+   * ORM's own terms.
    */
   readonly isGenerated: boolean
 

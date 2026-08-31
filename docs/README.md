@@ -20,9 +20,8 @@
 | [prisma-metadata.md](prisma-metadata.md) | How Prisma model metadata is obtained, and the rejected alternatives |
 | [mvp-scope.md](mvp-scope.md)             | Historical: the frozen 0.1-0.7 scope                                 |
 
-## Release reports
+## Release history
 
-One per release, in [../reports/](../reports/): what was built, what it cost,
-what broke, and what was deliberately left out. They are written as evidence
-rather than as announcements - every measurement in them was taken, and every
-defect found along the way is recorded whether or not it was flattering.
+[CHANGELOG.md](../CHANGELOG.md) records every release: what was added, what
+changed, and what was deliberately left out - including the defects each
+release found before shipping.

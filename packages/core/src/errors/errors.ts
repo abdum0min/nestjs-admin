@@ -22,7 +22,9 @@
  * `Symbol.for` brand, which duplicate copies agree on by definition, plus a
  * stable `kind` string. Neither depends on which copy created the object.
  *
- * See reports/009-consumer-acceptance.md.
+ * `scripts/verify-packed-consumer.mjs` asserts the arrangement every release:
+ * one shared copy in ESM, one per entrypoint in CJS. If that ever changes, the
+ * count changes there first.
  *
  * @experimental Draft contract. Expected to change during MVP implementation.
  */

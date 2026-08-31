@@ -17,7 +17,7 @@ change.
 
 ## Delivered
 
-0.1.0 through 0.7.0 are complete. Detail is in [`reports/`](../reports/); the
+0.1.0 through 0.7.0 are complete. Detail is in [CHANGELOG.md](../CHANGELOG.md); the
 one-line version:
 
 | Release | What it settled                                                             |
@@ -206,8 +206,7 @@ not to make people do — refused since 0.6.0 and still refused.
 configuration; a declared widget appears without a UI change; a widget the
 policy denies is absent from the document, not merely hidden.
 
-**As shipped** (see [reports/020-dashboard.md](../reports/020-dashboard.md)),
-with two deviations from the plan above:
+**As shipped**, with two deviations from the plan above:
 
 - The kinds are `count`, `list`, `chart`, `stat` — `table` was dropped. A table
   on a dashboard is a list screen with fewer features and a worse place to put
@@ -319,7 +318,7 @@ Prisma and only mostly true of a raw driver.
 
 ## Rules that hold across every phase
 
-- **The rhythm does not change.** Brief, implementation, `reports/NNN`, commit
+- **The rhythm does not change.** Brief, implementation, changelog entry, commit
   with explicit paths. No AI co-author trailer. No `git add -A`.
 - **Metadata-driven stays metadata-driven.** The UI never learns the schema.
   Any new capability is expressed in metadata, never as a model name in UI

@@ -332,9 +332,8 @@ looking at it.
 
 ### Known limitations
 
-- The interface bundle grew from **104 KB to 134 KB gzipped**, itemised in
-  `reports/018-interface-polish.md` — including the 20 KB not spent by writing
-  the calendar instead of installing one.
+- The interface bundle grew from **104 KB to 134 KB gzipped** — including the
+  20 KB not spent by writing the calendar instead of installing one.
 - No column sorting from table headers.
 - The calendar changes the day; a datetime's time is edited in the text box.
 
@@ -398,8 +397,7 @@ worked before works the same way and looks like a different product.
 
 ### Known limitations
 
-- The interface bundle grew from **68 KB to 104 KB gzipped**. Itemised in
-  `reports/017-design-system.md`.
+- The interface bundle grew from **68 KB to 104 KB gzipped**.
 - No per-model icons in the sidebar, and no sortable table headers.
 - The command palette finds resources, not records.
 - `repository`, `homepage` and `bugs` are still absent from the manifest:
@@ -618,9 +616,9 @@ always fail.
 
 - **`/admin/meta` reports what the principal may do**, per model, as
   `can: { list, read, create, update, delete }`. The interface withholds `New`,
-  `Edit`, `Delete` and the relation controls accordingly — closing the gap
-  `reports/009` recorded, where a read-only principal was shown three buttons
-  that all returned 403. It is a description, not the enforcement: every request
+  `Edit`, `Delete` and the relation controls accordingly — closing a gap a consumer
+  walkthrough found, where a read-only principal was shown three buttons that
+  all returned 403. It is a description, not the enforcement: every request
   is still checked when it arrives.
 
 - **`ListQuery.fields`** tells an adapter which fields a query may touch and
@@ -824,7 +822,7 @@ did not have to be built around.
 
 ## 0.1.0
 
-The first tagged milestone. Everything before it is recorded in `reports/`.
+The first tagged milestone: the workspace, the build, and the package name.
 
 ### Changed
 

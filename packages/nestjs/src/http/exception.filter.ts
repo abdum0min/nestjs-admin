@@ -53,8 +53,7 @@ const INTERNAL: MappedError = {
  * two CommonJS entrypoints that each inline their own copy of Core, so an error
  * thrown inside the Prisma adapter is an instance of a different class object
  * than the one imported here - `instanceof` answered `false` and mapped every
- * adapter-raised error to a generic 500. See `errors.ts` in Core, and
- * reports/009-consumer-acceptance.md.
+ * adapter-raised error to a generic 500. See `errors.ts` in Core.
  *
  * Only errors on this allowlist have their message forwarded to the client.
  * That is a security decision, not a stylistic one: `AdapterError` wraps raw

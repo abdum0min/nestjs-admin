@@ -2,7 +2,8 @@
  * Labels, widgets, and not offering what will be refused.
  *
  * The interface used to show `New`, `Edit` and `Delete` to every principal,
- * including ones for whom all three returned 403 - the gap `reports/009` left
+ * including ones for whom all three returned 403 - the gap a consumer
+ * walkthrough left
  * open. The metadata now says what the policy will allow, and these assert the
  * interface believes it.
  *

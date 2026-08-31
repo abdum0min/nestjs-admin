@@ -206,7 +206,7 @@ describe('permitted requests still work', () => {
 
     expect(seenPath).toContain('/admin/User/u1')
     // The model is reachable, which is what makes host-side per-model checks
-    // possible today without any new API. See reports/005-authentication.md.
+    // possible today without any new API.
     expect(seenModel).toBe('User')
   })
 })

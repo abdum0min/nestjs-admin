@@ -606,8 +606,9 @@ export class AdminService implements OnModuleInit {
    * as a denial, exactly as `isVisible` reads it; anything else it throws is a
    * bug and propagates.
    *
-   * This closes the gap `reports/009` left open: the interface used to offer
-   * `New`, `Edit` and `Delete` to a principal every one of which would refuse.
+   * Without this the interface offers `New`, `Edit` and `Delete` to a
+   * principal for whom every one of them would be refused - a button that
+   * exists only to produce a 403 is worse than no button.
    */
   private async permissionsFor(
     context: ExecutionContext,

@@ -4,8 +4,7 @@
  * This is the ONLY module in the repository permitted to import
  * `@prisma/get-dmmf`. Everything downstream consumes the returned
  * `DMMF.Document` and nothing else, which is what keeps the eventual switch to
- * a build-time Prisma generator (see reports/002-prisma-metadata-spike.md) a
- * change to this file alone.
+ * a build-time Prisma generator a change to this file alone.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'

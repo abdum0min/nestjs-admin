@@ -1,7 +1,7 @@
 # Decision: how Prisma model metadata is obtained
 
 **Status: decided.** Full evidence, experiments and rejected alternatives are in
-[../reports/002-prisma-metadata-spike.md](../reports/002-prisma-metadata-spike.md).
+a spike run against Prisma 7.
 This page is the summary; the report is the authority.
 
 > This document previously recorded a preliminary Phase 0 investigation that
