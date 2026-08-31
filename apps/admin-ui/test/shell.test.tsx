@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { isSessionProbe, NO_LOGIN_ROUTES } from './no-login.js'
 
 const fetchMock = vi.fn()
 
@@ -52,17 +53,21 @@ const MODELS = [{ name: 'User', label: 'People' }, { name: 'Post' }, { name: 'Ta
 )
 
 function serve(models: readonly unknown[] = MODELS) {
-  fetchMock.mockImplementation(async (url: string) => ({
-    status: 200,
-    json: async () =>
-      String(url).includes('/meta')
-        ? { success: true, data: { models } }
-        : {
-            success: true,
-            data: [{ id: 'u1', name: 'Ada' }],
-            meta: { total: 1, page: 1, perPage: 25 },
-          },
-  })) as unknown as Response
+  fetchMock.mockImplementation(async (url: string) => {
+    if (isSessionProbe(url)) return NO_LOGIN_ROUTES
+
+    return {
+      status: 200,
+      json: async () =>
+        String(url).includes('/meta')
+          ? { success: true, data: { models } }
+          : {
+              success: true,
+              data: [{ id: 'u1', name: 'Ada' }],
+              meta: { total: 1, page: 1, perPage: 25 },
+            },
+    } as unknown as Response
+  })
 }
 
 async function open(): Promise<void> {

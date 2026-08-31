@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { isSessionProbe, NO_LOGIN_ROUTES } from './no-login.js'
 import { optionsOf } from './radix.js'
 
 const fetchMock = vi.fn()
@@ -52,6 +53,7 @@ const POST_MODEL = { name: 'Post', primaryKey: ['id'], fields: [field('id', { is
 /** Route every request by URL, so a screen can drive several endpoints. */
 function routeFetch(handlers: Record<string, unknown>): void {
   fetchMock.mockImplementation(async (url: string) => {
+    if (isSessionProbe(url)) return NO_LOGIN_ROUTES
     const path = String(url).replace('/admin', '')
     const key = Object.keys(handlers).find((candidate) => path.startsWith(candidate))
     const body = key

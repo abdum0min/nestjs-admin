@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { isSessionProbe, NO_LOGIN_ROUTES } from './no-login.js'
 
 const fetchMock = vi.fn()
 
@@ -52,6 +53,7 @@ function server(over: Record<string, unknown> = {}) {
   const calls: string[] = []
 
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (isSessionProbe(url)) return NO_LOGIN_ROUTES
     const path = String(url).replace('/admin', '')
     calls.push(`${init?.method ?? 'GET'} ${path}`)
 

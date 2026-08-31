@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { isSessionProbe, NO_LOGIN_ROUTES } from './no-login.js'
 import type { ModelDescriptor } from '../src/api/types.js'
 import { foreignKeyNames, relationForForeignKey, relationLink } from '../src/metadata/relations.js'
 
@@ -74,6 +75,7 @@ const POSTS = [
 
 function routeFetch(handlers: Record<string, unknown>): void {
   fetchMock.mockImplementation(async (url: string) => {
+    if (isSessionProbe(url)) return NO_LOGIN_ROUTES
     const path = String(url).replace('/admin', '')
     const key = Object.keys(handlers)
       .sort((a, b) => b.length - a.length)
@@ -169,6 +171,7 @@ describe('the form', () => {
     const created = vi.fn()
 
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (isSessionProbe(url)) return NO_LOGIN_ROUTES
       const path = String(url).replace('/admin', '')
       if (init?.method === 'POST') {
         created(JSON.parse(String(init.body)))

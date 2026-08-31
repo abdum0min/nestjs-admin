@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { isSessionProbe, NO_LOGIN_ROUTES } from './no-login.js'
 
 const fetchMock = vi.fn()
 
@@ -57,6 +58,7 @@ function server(actions: unknown[]): { calls: string[] } {
   const calls: string[] = []
 
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (isSessionProbe(url)) return NO_LOGIN_ROUTES
     const path = String(url).replace('/admin', '')
     calls.push(`${init?.method ?? 'GET'} ${path}`)
 
@@ -157,6 +159,7 @@ describe('running one', () => {
     // Silence after a button press is indistinguishable from a button that did
     // not respond.
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (isSessionProbe(url)) return NO_LOGIN_ROUTES
       const path = String(url).replace('/admin', '')
       if (path.startsWith('/actions/')) {
         return { status: 201, json: async () => envelope({}) } as unknown as Response
@@ -245,6 +248,7 @@ describe('confirmation', () => {
 describe('when it fails', () => {
   it('shows the server message for a refusal', async () => {
     fetchMock.mockImplementation(async (url: string) => {
+      if (isSessionProbe(url)) return NO_LOGIN_ROUTES
       const path = String(url).replace('/admin', '')
       if (path.startsWith('/actions/')) {
         return {

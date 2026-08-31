@@ -14,6 +14,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { isSessionProbe, NO_LOGIN_ROUTES } from './no-login.js'
 
 const fetchMock = vi.fn()
 
@@ -62,6 +63,7 @@ const envelope = (data: unknown, meta?: unknown) => ({
 
 function server(models: unknown[], record: unknown = { id: 'u1', name: 'Ada' }): void {
   fetchMock.mockImplementation(async (url: string) => {
+    if (isSessionProbe(url)) return NO_LOGIN_ROUTES
     const path = String(url).replace('/admin', '')
     const body = path.startsWith('/meta')
       ? envelope({ models })
@@ -193,6 +195,7 @@ describe('read-only fields', () => {
   it('do not reach the request when a form is submitted', async () => {
     const sent: unknown[] = []
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (isSessionProbe(url)) return NO_LOGIN_ROUTES
       const path = String(url).replace('/admin', '')
       if (init?.method === 'POST') {
         sent.push(JSON.parse(String(init.body)))

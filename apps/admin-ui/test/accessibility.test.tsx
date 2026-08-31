@@ -11,6 +11,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { isSessionProbe, NO_LOGIN_ROUTES } from './no-login.js'
 
 const fetchMock = vi.fn()
 
@@ -45,13 +46,17 @@ const MODELS = ['User', 'Post', 'Tag'].map((name) => ({
 }))
 
 function server(records: unknown[] = [{ id: 'u1', name: 'Ada' }]) {
-  fetchMock.mockImplementation(async (url: string) => ({
-    status: 200,
-    json: async () =>
-      String(url).includes('/meta')
-        ? { success: true, data: { models: MODELS } }
-        : { success: true, data: records, meta: { total: records.length, page: 1, perPage: 25 } },
-  })) as unknown as Response
+  fetchMock.mockImplementation(async (url: string) => {
+    if (isSessionProbe(url)) return NO_LOGIN_ROUTES
+
+    return {
+      status: 200,
+      json: async () =>
+        String(url).includes('/meta')
+          ? { success: true, data: { models: MODELS } }
+          : { success: true, data: records, meta: { total: records.length, page: 1, perPage: 25 } },
+    } as unknown as Response
+  })
 }
 
 async function openList(): Promise<void> {
@@ -132,6 +137,8 @@ describe('states a reader is told about rather than shown', () => {
     let listCalls = 0
 
     fetchMock.mockImplementation(async (url: string) => {
+      if (isSessionProbe(url)) return NO_LOGIN_ROUTES
+
       const body = String(url).includes('/meta')
         ? { success: true, data: { models: MODELS } }
         : {
@@ -162,13 +169,17 @@ describe('states a reader is told about rather than shown', () => {
   })
 
   it('announces a failure rather than only colouring it', async () => {
-    fetchMock.mockImplementation(async (url: string) => ({
-      status: String(url).includes('/meta') ? 200 : 500,
-      json: async () =>
-        String(url).includes('/meta')
-          ? { success: true, data: { models: MODELS } }
-          : { success: false, error: { code: 'INTERNAL_ERROR', message: 'Nope.' } },
-    })) as unknown as Response
+    fetchMock.mockImplementation(async (url: string) => {
+      if (isSessionProbe(url)) return NO_LOGIN_ROUTES
+
+      return {
+        status: String(url).includes('/meta') ? 200 : 500,
+        json: async () =>
+          String(url).includes('/meta')
+            ? { success: true, data: { models: MODELS } }
+            : { success: false, error: { code: 'INTERNAL_ERROR', message: 'Nope.' } },
+      } as unknown as Response
+    })
 
     window.location.hash = '#/User'
     render(<App />)

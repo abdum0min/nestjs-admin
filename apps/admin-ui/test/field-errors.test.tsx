@@ -15,6 +15,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { isSessionProbe, NO_LOGIN_ROUTES } from './no-login.js'
 
 const fetchMock = vi.fn()
 
@@ -55,6 +56,7 @@ const MODEL = {
 /** A server that accepts the metadata request and refuses every write. */
 function refusing(error: { code: string; message: string; details?: unknown }, status = 409) {
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (isSessionProbe(url)) return NO_LOGIN_ROUTES
     const path = String(url).replace('/admin', '')
 
     if (init?.method === 'POST') {
