@@ -43,3 +43,8 @@ pnpm-debug.log*
 # SQL emitted by `pnpm prisma:setup` to build a database from a schema.
 # Regenerated on demand; never edited by hand.
 **/prisma/.schema.sql
+
+# Private working notes. Never committed, never pushed - they are for whoever
+# is working on this machine, not for the repository. `.local.` in the name is
+# the signal; the rule below is what enforces it.
+*.local.md
