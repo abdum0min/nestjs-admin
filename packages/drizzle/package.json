@@ -1,0 +1,40 @@
+{
+  "name": "@nest-admin/drizzle",
+  "version": "0.10.0",
+  "private": true,
+  "description": "Drizzle adapter for Nest Admin. Implements the Core OrmAdapter contract.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nest-admin/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "drizzle-orm": ">=0.44.0 <1"
+  },
+  "devDependencies": {
+    "better-sqlite3": "12.11.1",
+    "@types/better-sqlite3": "7.6.13",
+    "drizzle-orm": "0.45.2",
+    "tsup": "catalog:",
+    "typescript": "catalog:"
+  }
+}
