@@ -1,58 +1,41 @@
-import { Monitor, Moon, Sun } from 'lucide-react'
+import { Moon, Sun } from 'lucide-react'
 
-import { cn } from '../lib/utils.js'
-import { useTheme, type Appearance } from '../hooks/use-theme.js'
-
-const OPTIONS: readonly { value: Appearance; label: string; Icon: typeof Sun }[] = [
-  { value: 'light', label: 'Light', Icon: Sun },
-  { value: 'dark', label: 'Dark', Icon: Moon },
-  { value: 'system', label: 'System', Icon: Monitor },
-]
+import { useTheme } from '../hooks/use-theme.js'
+import { Button } from './ui/button.jsx'
 
 /**
- * Three choices, all visible.
+ * One button.
  *
- * "System" is a real answer and the default one. A two-state switch forces
- * everyone who has expressed no preference into having expressed one, and
- * their machine switching at dusk quietly stops working.
+ * It started as three - light, dark, and follow the system - on the argument
+ * that "system" is a real answer and collapsing it forces a choice on people
+ * who have not made one. That argument is about the *default*, and the default
+ * still works exactly that way: nothing is stored until this is pressed, and
+ * until then the admin follows the operating system and keeps following it as
+ * it changes at dusk.
  *
- * A segmented control rather than a menu, and the reason is measured rather
- * than aesthetic: a dropdown for this brought in Radix's menu, floating-ui,
- * a collection, a popper and a scroll lock - over 150 KB of source to place
- * one small list. Three buttons cost nothing, take one click instead of two,
- * and show the current choice without being opened.
+ * What the three-way control got wrong was the other half. Switching is
+ * something people do often and idly - to read something in bright sun, to stop
+ * a white page at midnight - and asking them to pick from a list of three to do
+ * it is three times the interaction for the same outcome. Pressing it once is
+ * the whole feature.
+ *
+ * The icon shows what pressing it will do rather than what is currently on. A
+ * sun on a dark page means "make it light", which is the question someone
+ * looking at the button is actually asking.
  */
 export function ThemeToggle() {
-  const { appearance, setAppearance } = useTheme()
+  const { resolved, setAppearance } = useTheme()
+  const next = resolved === 'dark' ? 'light' : 'dark'
 
   return (
-    <div
-      role="radiogroup"
-      aria-label="Appearance"
-      className="bg-muted flex items-center gap-0.5 rounded-md p-0.5"
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={`Switch to ${next} mode`}
+      title={`Switch to ${next} mode`}
+      onClick={() => setAppearance(next)}
     >
-      {OPTIONS.map(({ value, label, Icon }) => {
-        const current = appearance === value
-        return (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={current}
-            aria-label={label}
-            title={label}
-            className={cn(
-              'flex size-7 items-center justify-center rounded-[5px] transition-colors',
-              current
-                ? 'bg-background text-foreground shadow-xs'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-            onClick={() => setAppearance(value)}
-          >
-            <Icon className="size-4" />
-          </button>
-        )
-      })}
-    </div>
+      {resolved === 'dark' ? <Sun /> : <Moon />}
+    </Button>
   )
 }

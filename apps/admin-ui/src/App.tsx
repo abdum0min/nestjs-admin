@@ -6,7 +6,7 @@
  * authorization simply is not in the document and therefore is not in the UI -
  * no client-side filtering, and nothing to keep in sync.
  */
-import { PanelLeft, Search } from 'lucide-react'
+import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { fetchMetadata } from './api/client.js'
@@ -22,7 +22,9 @@ import { ConfirmProvider } from './components/ui/confirm.jsx'
 import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog.jsx'
 import { useAsync } from './hooks/use-async.js'
 import { href, useRoute } from './hooks/use-route.js'
+import { cn } from './lib/utils.js'
 import { modelLabel } from './metadata/fields.js'
+import { modelIcon } from './metadata/icons.jsx'
 import { theme } from './metadata/theme.js'
 
 export function App() {
@@ -122,8 +124,17 @@ function Shell({
   const palette = useCommandPalette()
   const [drawer, setDrawer] = useState(false)
 
-  // Collapsing is for width: a table with a dozen columns wants the whole
-  // screen, and the resource list is not what someone reading it is looking at.
+  /**
+   * Collapsed to a rail, not to nothing.
+   *
+   * A table with a dozen columns wants the width, and the resource list is not
+   * what someone reading it is looking at. But hiding the navigation outright
+   * takes it out of the page, out of the tab order, and out of reach - and
+   * makes the collapse an all-or-nothing choice nobody makes twice.
+   *
+   * A rail keeps every link where it was, one click away, and lets the change
+   * be a width transition rather than an element appearing and disappearing.
+   */
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(SIDEBAR_KEY) === 'collapsed'
@@ -142,8 +153,6 @@ function Shell({
 
   // Following a link should not leave the drawer open over the thing it opened.
   useEffect(() => setDrawer(false), [activeModel])
-
-  const nav = <ResourceNav models={models} activeModel={activeModel} />
 
   return (
     <ConfirmProvider>
@@ -168,21 +177,25 @@ function Shell({
             aria-label="Open navigation"
             onClick={() => setDrawer(true)}
           >
-            <PanelLeft />
+            <PanelLeftOpen />
           </Button>
 
           <Button
             variant="ghost"
             size="icon"
             className="hidden md:inline-flex"
-            aria-label={collapsed ? 'Show navigation' : 'Hide navigation'}
+            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
             aria-expanded={!collapsed}
+            aria-controls="admin-nav"
             onClick={() => setCollapsed((value) => !value)}
           >
-            <PanelLeft />
+            {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
           </Button>
 
-          <a href="#/" className="flex items-center gap-2 font-semibold">
+          <a
+            href="#/"
+            className="hover:text-primary flex items-center gap-2 font-semibold transition-colors"
+          >
             {theme.logoUrl === undefined ? null : (
               <img className="size-6 rounded" src={theme.logoUrl} alt="" />
             )}
@@ -198,23 +211,33 @@ function Shell({
             >
               <Search />
               <span className="hidden sm:inline">Search resources</span>
-              {/* Not a `<kbd>` with a hard-coded ⌘: the shortcut is Ctrl on
-                  most machines, and naming the wrong one is worse than naming
-                  none. The label says what it does; the palette lists both. */}
             </Button>
             <ThemeToggle />
           </div>
         </header>
 
         <div className="flex flex-1">
-          {collapsed ? null : (
-            <nav
-              aria-label="Resources"
-              className="bg-sidebar text-sidebar-foreground border-sidebar-border hidden w-56 shrink-0 border-r p-3 md:block"
-            >
-              {nav}
-            </nav>
-          )}
+          {/*
+           * Its own scroll, and it stays put.
+           *
+           * Without `sticky` the navigation is part of the page and scrolls
+           * away with it: on a long table the links end up somewhere above the
+           * viewport and getting back to them means scrolling to the top first.
+           * `top-14` parks it under the header, and `h-[calc(100svh-3.5rem)]`
+           * with `overflow-y-auto` gives it a scrollbar of its own for a schema
+           * with more models than fit.
+           */}
+          <nav
+            id="admin-nav"
+            aria-label="Resources"
+            className={cn(
+              'bg-sidebar text-sidebar-foreground border-sidebar-border sticky top-14 hidden h-[calc(100svh-3.5rem)] shrink-0 overflow-x-hidden overflow-y-auto border-r p-2 md:block',
+              'transition-[width] duration-200 ease-out',
+              collapsed ? 'w-14' : 'w-56',
+            )}
+          >
+            <ResourceNav models={models} activeModel={activeModel} collapsed={collapsed} />
+          </nav>
 
           {/* `tabIndex={-1}` so the skip link can move focus here. It makes the
               element programmatically focusable without adding it to the tab
@@ -229,9 +252,14 @@ function Shell({
         </div>
 
         <Dialog open={drawer} onOpenChange={setDrawer}>
-          <DialogContent className="top-0 left-0 h-svh max-w-64 translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 p-4">
-            <DialogTitle className="sr-only">Resources</DialogTitle>
-            <nav aria-label="Resources">{nav}</nav>
+          <DialogContent
+            data-slot="nav-drawer"
+            className="top-0 left-0 h-svh max-w-64 translate-x-0 translate-y-0 gap-3 overflow-y-auto rounded-none border-y-0 border-l-0 p-3"
+          >
+            <DialogTitle className="px-2 text-sm font-semibold">Resources</DialogTitle>
+            <nav aria-label="Resources">
+              <ResourceNav models={models} activeModel={activeModel} collapsed={false} />
+            </nav>
           </DialogContent>
         </Dialog>
 
@@ -244,17 +272,21 @@ function Shell({
 /**
  * The resource list.
  *
- * No icons. Every entry would get the same one, and a symbol repeated down a
- * column is decoration rather than information - it costs a bundle and buys
- * nothing a reader can use. Per-model icons need the application to choose
- * them, which is 0.11.0.
+ * An icon only where the application chose one - it is a `ModelIcon` in the
+ * configuration, from a closed set. The same icon on every entry would be
+ * decoration rather than information, so the fallback is the resource's initial
+ * rather than a generic shape: on the collapsed rail something has to
+ * distinguish one row from the next, and a letter does that while a repeated
+ * symbol does not.
  */
 function ResourceNav({
   models,
   activeModel,
+  collapsed,
 }: {
   readonly models: readonly ModelDescriptor[]
   readonly activeModel?: string
+  readonly collapsed: boolean
 }) {
   if (models.length === 0) return null
 
@@ -262,18 +294,37 @@ function ResourceNav({
     <ul className="flex flex-col gap-0.5">
       {models.map((model) => {
         const current = model.name === activeModel
+        const label = modelLabel(model)
+        const Icon = modelIcon(model.icon)
+
         return (
           <li key={model.name}>
             <a
               href={href({ kind: 'list', model: model.name })}
               aria-current={current ? 'page' : undefined}
-              className={
+              // The label is the accessible name whether or not it is drawn,
+              // so a rail is not a column of unlabelled letters to a reader.
+              aria-label={collapsed ? label : undefined}
+              title={collapsed ? label : undefined}
+              className={cn(
+                'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
+                collapsed && 'justify-center px-0',
                 current
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground block truncate rounded-md px-2.5 py-1.5 text-sm font-medium'
-                  : 'hover:bg-sidebar-accent/60 block truncate rounded-md px-2.5 py-1.5 text-sm transition-colors'
-              }
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                  : 'hover:bg-sidebar-accent/60',
+              )}
             >
-              {modelLabel(model)}
+              {Icon ? (
+                <Icon className="size-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <span
+                  className="flex size-4 shrink-0 items-center justify-center text-xs font-semibold opacity-70"
+                  aria-hidden="true"
+                >
+                  {label.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              {collapsed ? null : <span className="truncate">{label}</span>}
             </a>
           </li>
         )
