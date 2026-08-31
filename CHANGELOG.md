@@ -13,6 +13,73 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.8.0
+
+A visual rebuild on Tailwind and shadcn/ui. No new capability: every screen that
+worked before works the same way and looks like a different product.
+
+### Added
+
+- **A dark mode toggle**, with three states rather than two — light, dark, and
+  follow the system. Remembered per browser. Closes a limitation carried since
+  0.6.0.
+- **A command palette** on `Ctrl+K` / `Cmd+K`, listing every resource the
+  policy allows and offering to create one.
+- **A collapsible sidebar**, remembered, and a drawer below 768px.
+- **Real confirmation dialogs** replacing `window.confirm` — focus-trapped,
+  announced as `alertdialog`, dismissable by escape, and returning focus to
+  the button that opened them.
+- **`theme.appearance`** — which appearance the admin starts from, before a
+  viewer chooses. `'system'` by default.
+
+### Changed
+
+- **`theme.brandColor` now sets `--primary`, and is adjusted per palette.**
+  The server measures the colour and emits a readable text colour for it, plus
+  a variant lifted or lowered until it clears 4.5:1 against the page it sits
+  on. A dark navy is unchanged on white and lightened for dark mode; a bright
+  yellow is the other way round. The hue is preserved.
+
+  Previously the value was written into `--brand` and `--accent` unchanged. If
+  you relied on either variable name in custom CSS, it is now `--primary`.
+
+- **The whole palette is token-based** (`--background`, `--foreground`,
+  `--primary`, `--muted`, …), defined for light and dark. Anything that
+  overrode the old hand-written class names will need rewriting.
+- **The sidebar calls a resource by its configured label**, not its model name.
+
+### Fixed
+
+- **A structural option returned from `useFactory` was silently dropped.**
+  `path`, `uiRoot` and `theme` are read when the module is defined, before any
+  provider exists, so they belong beside `imports` in `forRootAsync` — not in
+  the factory. TypeScript cannot catch this (excess property checks do not run
+  through a function's return type), so it is now a startup error naming the
+  option and where it goes.
+- **An unknown `theme` key did nothing and said nothing.** Now a startup error,
+  as unknown `resources` and `models` names already were.
+- **Two contrast failures**, found by measuring the new palette: the warning
+  colour against its own text (4.05:1), and the border of a text field against
+  the page (1.41:1, where WCAG 1.4.11 asks 3:1 for a control boundary). Both
+  are now held by a test that reads the stylesheet.
+- **The `@prisma/client` peer range** said `>=6.0.0 <9` while the version gate
+  accepts major 7 only — a consumer on Prisma 6 installed with no warning and
+  failed at startup. Narrowed to `^7.0.0`.
+- **`engines` and `keywords`** are declared in the published manifest. CI
+  described itself as testing a Node floor that only the unpublished root
+  manifest declared.
+
+### Known limitations
+
+- The interface bundle grew from **68 KB to 104 KB gzipped**. Itemised in
+  `reports/017-design-system.md`.
+- No per-model icons in the sidebar, and no sortable table headers.
+- The command palette finds resources, not records.
+- `repository`, `homepage` and `bugs` are still absent from the manifest:
+  there is no git remote to read them from.
+
+---
+
 ## 0.7.0
 
 Everything an ordinary mistake does. Before this release a duplicate email, a

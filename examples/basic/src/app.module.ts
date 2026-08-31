@@ -196,19 +196,19 @@ class DatabaseModule {}
       imports: [DatabaseModule],
       inject: [PrismaService],
 
-      // Structural, so it stays out of the factory: routes are registered
-      // before any provider exists. `/admin` is the default and is spelled out
-      // here only to show where it goes.
+      // Structural, so they stay out of the factory: routes are registered
+      // and the shell is rendered before any provider exists. `/admin` is the
+      // default and is spelled out here only to show where it goes.
       path: '/admin',
+
+      theme: {
+        title: 'Nest Admin Example',
+        brandColor: '#3f6212',
+      },
 
       useFactory: (prisma: PrismaService) => ({
         adapter: new PrismaAdapter({ client: prisma }),
         auth: adminAuth,
-
-        theme: {
-          title: 'Nest Admin Example',
-          accent: '#3f6212',
-        },
 
         models,
 

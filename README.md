@@ -1,8 +1,10 @@
 # Nest Admin
 
-> **Status: foundation only.** The repository structure, package boundaries and
-> build tooling exist. **No MVP functionality is implemented yet.** See
-> [docs/status.md](docs/status.md) for the precise implemented-vs-planned list.
+> **Status: 0.8.0, not published.** Generic CRUD, relations, per-field
+> configuration, hooks, actions and a metadata-driven interface all work
+> against a real Prisma schema. Nothing is on npm yet; the first publish is
+> 1.0.0. See [docs/project-state.md](docs/project-state.md) for what exists,
+> what does not, and the open risks.
 
 An open-source admin framework for NestJS applications.
 
@@ -13,8 +15,7 @@ generated automatically from their ORM schema — no hand-written CRUD
 controllers, services, tables or forms.
 
 ```bash
-npm install @our-org/nest-admin   # placeholder name
-npx nest-admin init
+npm install @nest-admin/nestjs   # not published yet
 ```
 
 Start the NestJS app, open `http://localhost:3000/admin`, and the models

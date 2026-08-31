@@ -313,10 +313,15 @@ its documentation is honest, that is a real cost. It should either be rewritten
 against this document or replaced by a pointer to it; two overlapping status
 pages will drift again.
 
-The rest of the documentation is current. `README.md`, `CHANGELOG.md`,
-`docs/roadmap.md`, `docs/architecture.md` and `docs/publishing.md` all match the
-code as of 0.7.0, and `examples/basic` is a working consumer that imports only
-the public package.
+**`README.md`'s banner said "no MVP functionality is implemented yet"** and
+offered a placeholder install name, at 0.7.0. Corrected in 0.8.0 - the full
+rewrite is 0.12.0. An earlier version of this document asserted the README was
+current; it was not, and the claim was made without reading past its first
+section.
+
+`CHANGELOG.md`, `docs/roadmap.md`, `docs/architecture.md` and
+`docs/publishing.md` do match the code, and `examples/basic` is a working
+consumer that imports only the public package.
 
 ---
 
