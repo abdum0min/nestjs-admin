@@ -9,7 +9,6 @@ export default defineConfig({
     passWithNoTests: true,
     projects: [
       'packages/*',
-      'apps/*',
       {
         test: {
           name: 'architecture',

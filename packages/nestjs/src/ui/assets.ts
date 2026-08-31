@@ -1,7 +1,7 @@
 /**
  * Locating and reading the built admin UI.
  *
- * The UI is compiled by `apps/admin-ui` and copied into this package's `dist`
+ * The UI is compiled by `packages/admin-ui` and copied into this package's `dist`
  * at build time, so a consumer who installs the published package gets the
  * interface without cloning the repository or running Vite.
  */
@@ -98,7 +98,7 @@ export function readIndexHtml(root: string = uiRoot()): Buffer | undefined {
  * such as `/admin/` would risk rewriting something that merely resembled it;
  * this string appears in the build for exactly one reason.
  *
- * Keep in step with `base` in `apps/admin-ui/vite.config.ts`.
+ * Keep in step with `base` in `packages/admin-ui/vite.config.ts`.
  */
 export const UI_BASE_PLACEHOLDER = '/__nest-admin-base__'
 

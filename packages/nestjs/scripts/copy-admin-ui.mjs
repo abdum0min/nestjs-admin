@@ -14,7 +14,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const source = resolve(packageRoot, '../../apps/admin-ui/dist')
+const source = resolve(packageRoot, '../../packages/admin-ui/dist')
 const destination = join(packageRoot, 'dist', 'admin-ui')
 
 if (!existsSync(join(source, 'index.html'))) {

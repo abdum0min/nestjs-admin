@@ -272,7 +272,7 @@ describe('resource authorization on the real stack', () => {
 
 describe('the wire format the admin UI generates', () => {
   /**
-   * The UI builds query strings itself (apps/admin-ui/src/api/query.ts) and is
+   * The UI builds query strings itself (packages/admin-ui/src/api/query.ts) and is
    * tested against mocked responses. These are the exact strings that builder
    * produces, sent to the real server, so a drift between the two surfaces
    * here rather than in a browser.

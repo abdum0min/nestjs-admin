@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest'
 
 import { contrastRatio, isReadable, readableInk, visibleOn } from '../src/ui/colour.js'
 
-/** Kept in step with the palette in apps/admin-ui/src/index.css. */
+/** Kept in step with the palette in packages/admin-ui/src/index.css. */
 const PAGE = { light: '#f9fafb', dark: '#171a1f' }
 
 /** A deliberately awkward spread: very dark, very light, saturated, muted. */
