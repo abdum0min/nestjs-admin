@@ -220,7 +220,7 @@ export function Calendar({
               className={cn(
                 'flex size-8 items-center justify-center rounded-md text-sm transition-colors',
                 outside && 'text-muted-foreground/50',
-                sameDay(day, today) && !isSelected && 'text-primary font-semibold',
+                sameDay(day, today) && !isSelected && 'text-link font-semibold',
                 isSelected
                   ? 'bg-primary text-primary-foreground font-medium'
                   : 'hover:bg-accent hover:text-accent-foreground',

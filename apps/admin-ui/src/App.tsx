@@ -194,7 +194,7 @@ function Shell({
 
           <a
             href="#/"
-            className="hover:text-primary flex items-center gap-2 font-semibold transition-colors"
+            className="hover:text-link flex items-center gap-2 font-semibold transition-colors"
           >
             {theme.logoUrl === undefined ? null : (
               <img className="size-6 rounded" src={theme.logoUrl} alt="" />

@@ -26,8 +26,17 @@
  * perception.
  */
 
-/** WCAG AA for normal text. The floor everything below aims at. */
+/** WCAG AA for normal text: anything read as words on the page. */
 const READABLE = 4.5
+
+/**
+ * WCAG AA for a shape rather than for words.
+ *
+ * A filled button is identified by the label on it, and that label carries its
+ * own contrast - so the fill itself only has to be distinguishable from the
+ * page, not readable against it.
+ */
+const VISIBLE = 3
 
 /** `#rgb` or `#rrggbb` to channel values in 0..1. Assumes it has been validated. */
 function channels(hex: string): [number, number, number] {
@@ -109,14 +118,18 @@ function mix(
  * opposite in small steps until it clears the floor - keeping its hue, which
  * is what "our brand colour" means to whoever chose it.
  *
- * ## Why the text floor rather than the surface one
+ * ## Two floors, because there are two jobs
  *
- * 3:1 would be enough if this colour were only ever a filled button, where the
- * label carries the contrast. It is not: the same token is the focus ring, the
- * active navigation item, and the colour of every link in a table. A ring
- * nobody can see is an accessibility failure outright, and link text at 3:1
- * fails the floor for body text. One token used in four roles has to satisfy
- * the strictest of them.
+ * `role: 'fill'` is a button or a badge, where the label carries the contrast
+ * and the fill only has to be a distinguishable shape - 3:1. `role: 'text'` is
+ * a link on the page, which has to be read - 4.5:1.
+ *
+ * They were one token until an interface reviewer said the buttons looked
+ * washed out in dark mode. They were right, and the measurement said so too:
+ * holding a fill to the text floor forces it light enough that only near-black
+ * text is readable on it, which is legible and looks faded. Separating them
+ * lets a dark-mode button be a saturated fill with a light label, and lets link
+ * text stay light enough to read.
  *
  * The cost is honest and worth stating: a very light or very dark brand comes
  * out shifted. That is preferable to shipping a colour the interface cannot
@@ -125,15 +138,21 @@ function mix(
  * Returns the colour unchanged when it already contrasts, which is the common
  * case and the reason most applications never see any of this.
  */
-export function visibleOn(hex: string, page: 'light' | 'dark'): string {
+export function visibleOn(
+  hex: string,
+  page: 'light' | 'dark',
+  role: 'fill' | 'text' = 'text',
+): string {
   const background = page === 'dark' ? DARK_PAGE : LIGHT_PAGE
   const towards = page === 'dark' ? 1 : 0
+
+  const floor = role === 'fill' ? VISIBLE : READABLE
 
   let colour = channels(hex)
   // Sixteen steps of 5%: enough to travel the whole range, small enough that a
   // colour that barely fails is barely changed.
   for (let step = 0; step < 16; step++) {
-    if (contrast(colour, background) >= READABLE) break
+    if (contrast(colour, background) >= floor) break
     colour = mix(colour, towards, 0.05)
   }
 

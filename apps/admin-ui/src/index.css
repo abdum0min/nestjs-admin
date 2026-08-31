@@ -61,6 +61,8 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
 
+  --color-link: var(--link);
+
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
 
@@ -115,9 +117,25 @@
   --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
 
-  /* Overridden by the server when an application sets `theme.brandColor`. */
+  /*
+   * Two tokens, because one colour cannot do both jobs.
+   *
+   * `--primary` fills a button, and whatever is written on it carries the
+   * contrast - so it can be as dark as it likes. `--link` is text on the page
+   * itself, so it has to be readable against the page.
+   *
+   * In light mode these are the same value and the split costs nothing. In dark
+   * they pull apart hard: a fill dark enough for white text sits at 3.8:1
+   * against a near-black page, and text needs 4.5:1. Making one colour satisfy
+   * both is what produced buttons with near-black labels, which is legible,
+   * measurable, and looks washed out - which is what it was reported as.
+   *
+   * Both are overridden by the server when an application sets
+   * `theme.brandColor`; see colour.ts, which computes each against its own floor.
+   */
   --primary: oklch(0.48 0.16 258);
   --primary-foreground: oklch(0.985 0.002 255);
+  --link: var(--primary);
 
   --secondary: oklch(0.968 0.004 255);
   --secondary-foreground: oklch(0.28 0.02 258);
@@ -187,8 +205,11 @@
   --popover: oklch(0.225 0.015 258);
   --popover-foreground: var(--foreground);
 
-  --primary: oklch(0.72 0.13 258);
-  --primary-foreground: oklch(0.17 0.012 258);
+  /* 4.8:1 for white text on it, 3.8:1 against the page - a fill, not text. */
+  --primary: oklch(0.55 0.18 262);
+  --primary-foreground: oklch(0.985 0.002 255);
+  /* The same hue, light enough to read as text on a near-black page. */
+  --link: oklch(0.76 0.12 262);
 
   --secondary: oklch(0.27 0.016 258);
   --secondary-foreground: oklch(0.93 0.008 255);
@@ -199,14 +220,15 @@
   --accent: oklch(0.29 0.018 258);
   --accent-foreground: oklch(0.93 0.008 255);
 
-  --destructive: oklch(0.71 0.16 22);
-  --destructive-foreground: oklch(0.17 0.012 258);
+  /* Solid fills with light labels, for the reason given on --primary above. */
+  --destructive: oklch(0.55 0.19 25);
+  --destructive-foreground: oklch(0.985 0.002 255);
 
-  --success: oklch(0.72 0.14 158);
-  --success-foreground: oklch(0.17 0.012 258);
+  --success: oklch(0.52 0.14 155);
+  --success-foreground: oklch(0.985 0.002 255);
 
-  --warning: oklch(0.79 0.13 80);
-  --warning-foreground: oklch(0.17 0.012 258);
+  --warning: oklch(0.55 0.14 70);
+  --warning-foreground: oklch(0.985 0.002 255);
 
   --border: oklch(0.3 0.016 258);
   /* 3.5:1 against the dark page - see the note in the light palette. */

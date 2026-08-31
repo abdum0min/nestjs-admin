@@ -150,23 +150,25 @@ export function renderTheme(theme: AdminTheme | undefined): string {
  * button, and `--accent` is the pale surface a row takes on hover. Writing a
  * brand colour into the second turns every hover into a solid block of it.
  *
- * ## Why one hex becomes four values
+ * ## Why one hex becomes six values
  *
- * A single colour cannot answer the three questions the interface has to ask
- * of it - what text can be read on top of it, and whether it can be seen
- * against a light page and against a dark one. `colour.ts` answers them, and
- * says there why the server does this rather than the stylesheet.
+ * A single colour cannot answer the questions the interface asks of it: what
+ * text can be read on top of it, whether it can be seen against a light page
+ * and against a dark one, and - separately - whether it can be *read* as link
+ * text on each. A fill and a piece of text have different floors, so they get
+ * different values. `colour.ts` answers all of it, and says there why the
+ * server does this rather than the stylesheet.
  *
  * The dark rule is scoped to `.dark`, the class the stylesheet already keys
  * off. Specificity is on its side - a class beats `:root` - so the dark
  * variant wins where it applies without either rule needing `!important`.
  */
 function brandRules(brand: string): string {
-  const light = visibleOn(brand, 'light')
-  const dark = visibleOn(brand, 'dark')
+  const rules = (page: 'light' | 'dark'): string => {
+    const fill = visibleOn(brand, page, 'fill')
+    const text = visibleOn(brand, page, 'text')
+    return `--primary:${fill};--primary-foreground:${readableInk(fill)};--link:${text}`
+  }
 
-  return (
-    `:root{--primary:${light};--primary-foreground:${readableInk(light)}}` +
-    `.dark{--primary:${dark};--primary-foreground:${readableInk(dark)}}`
-  )
+  return `:root{${rules('light')}}.dark{${rules('dark')}}`
 }
