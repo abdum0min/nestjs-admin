@@ -16,16 +16,28 @@
  *                 the server refuses it otherwise; the button is not offered
  *                 when it is known to be impossible.
  */
+import { ArrowUpRight, Info, Link2, Unlink } from 'lucide-react'
 import { useState } from 'react'
 
 import { attachRelated, detachRelated, listRelated } from '../api/client.js'
 import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href } from '../hooks/use-route.js'
+import { fieldLabel, listColumns, modelLabel, recordId } from '../metadata/fields.js'
 import { formatCell } from '../metadata/format.js'
-import { listColumns, recordId } from '../metadata/fields.js'
 import { RelationPicker } from './RelationPicker.jsx'
 import { ErrorState, Loading } from './States.jsx'
+import { Badge } from './ui/badge.jsx'
+import { Button } from './ui/button.jsx'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableWrap,
+} from './ui/table.jsx'
 
 const PER_PAGE = 5
 
@@ -75,10 +87,18 @@ export function RelatedList({
   const pages = Math.max(1, Math.ceil(total / PER_PAGE))
 
   return (
-    <section className="related">
-      <header className="related__header">
-        <h3>
-          {field.name} <span className="muted">({total})</span>
+    <section className="flex flex-col gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-base font-semibold">
+          {fieldLabel(field)}
+          <Badge data-slot="related-count" variant="secondary" className="tabular">
+            {total}
+          </Badge>
+          {/* Which kind of relation this is, because attaching means different
+              things and the buttons below behave differently. */}
+          <Badge variant="outline" className="font-normal">
+            {shape}
+          </Badge>
         </h3>
 
         {/* Only a one-to-many can be expressed as a filter on the child list:
@@ -90,71 +110,86 @@ export function RelatedList({
 
       {error !== undefined ? <ErrorState error={error} /> : null}
 
-      {state.loading ? (
-        <Loading label={`Loading ${field.name}…`} />
+      {state.loading && state.data === undefined ? (
+        <Loading label={`Loading ${fieldLabel(field)}…`} />
       ) : state.error !== undefined ? (
         <ErrorState error={state.error} onRetry={state.reload} />
       ) : total === 0 ? (
-        <p className="muted">No {target.name} records.</p>
+        <p className="text-muted-foreground text-sm">No {modelLabel(target)} records.</p>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
+        <TableWrap aria-busy={state.loading ? true : undefined}>
+          <Table aria-label={fieldLabel(field)}>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
                 {columns.map((column) => (
-                  <th key={column.name} scope="col">
-                    {column.name}
-                  </th>
+                  <TableHead key={column.name} scope="col">
+                    {fieldLabel(column)}
+                  </TableHead>
                 ))}
-                <th scope="col" aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
+                <TableHead scope="col" aria-label="Actions" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {state.data?.records.map((record, index) => {
                 const id = recordId(target, record)
                 return (
-                  <tr key={id ?? index}>
+                  <TableRow key={id ?? index}>
                     {columns.map((column) => (
-                      <td key={column.name}>{formatCell(column, record[column.name])}</td>
+                      <TableCell key={column.name}>
+                        {formatCell(column, record[column.name])}
+                      </TableCell>
                     ))}
-                    <td className="cell--actions">
+                    <TableCell className="w-px text-right whitespace-nowrap">
                       {id === undefined ? null : (
-                        <>
-                          <a href={href({ kind: 'detail', model: target.name, id })}>View</a>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={href({ kind: 'detail', model: target.name, id })}>View</a>
+                          </Button>
                           {detachBlocked === undefined && parent.can?.update !== false ? (
-                            <button
-                              type="button"
-                              className="link"
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               disabled={busy}
                               onClick={() =>
                                 void run(() => detachRelated(parent.name, parentId, field.name, id))
                               }
                             >
+                              <Unlink />
                               Detach
-                            </button>
+                            </Button>
                           ) : null}
-                        </>
+                        </div>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )
               })}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </TableWrap>
       )}
 
       {pages > 1 ? (
-        <div className="related__pager">
-          <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage(page - 1)}
+          >
             Previous
-          </button>
-          <span className="muted">
+          </Button>
+          <span className="text-muted-foreground text-sm tabular">
             Page {page} of {pages}
           </span>
-          <button type="button" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= pages}
+            onClick={() => setPage(page + 1)}
+          >
             Next
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -167,8 +202,18 @@ export function RelatedList({
         />
       )}
 
-      {detachBlocked === undefined ? null : <p className="muted related__note">{detachBlocked}</p>}
+      {detachBlocked === undefined ? null : <Note>{detachBlocked}</Note>}
     </section>
+  )
+}
+
+/** A quiet explanation of why something is the way it is. */
+function Note({ children }: { readonly children: React.ReactNode }) {
+  return (
+    <p className="text-muted-foreground flex items-start gap-2 text-sm">
+      <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>{children}</span>
+    </p>
   )
 }
 
@@ -195,15 +240,18 @@ function ViewAllLink({
   if (filterField === undefined) return null
 
   return (
-    <a
-      href={href({
-        kind: 'list',
-        model: target.name,
-        filter: `${filterField}:eq:${parentId}`,
-      })}
-    >
-      View all {target.name} for this {parent.name}
-    </a>
+    <Button variant="ghost" size="sm" asChild>
+      <a
+        href={href({
+          kind: 'list',
+          model: target.name,
+          filter: `${filterField}:eq:${parentId}`,
+        })}
+      >
+        View all {modelLabel(target)} for this {modelLabel(parent)}
+        <ArrowUpRight />
+      </a>
+    </Button>
   )
 }
 
@@ -222,29 +270,35 @@ function Attach({
   const [chosen, setChosen] = useState('')
 
   return (
-    <div className="related__attach">
-      <RelationPicker
-        target={target}
-        value={chosen}
-        required={false}
-        onChange={(value) => setChosen(value)}
-      />
-      <button
-        type="button"
-        disabled={busy || chosen === ''}
-        onClick={() => {
-          onAttach(chosen)
-          setChosen('')
-        }}
-      >
-        Attach
-      </button>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="w-full sm:max-w-xs">
+          <RelationPicker
+            target={target}
+            value={chosen}
+            required={false}
+            onChange={(value) => setChosen(value)}
+          />
+        </div>
+        <Button
+          variant="outline"
+          disabled={busy || chosen === ''}
+          onClick={() => {
+            onAttach(chosen)
+            setChosen('')
+          }}
+        >
+          <Link2 />
+          Attach
+        </Button>
+      </div>
       {shape === 'one-to-many' ? (
         // Worth saying before the click rather than after: this is a move, not
         // a copy, and it changes a record that is not on this page.
-        <p className="muted related__note">
-          Attaching moves the {target.name} record here, away from whatever it belongs to now.
-        </p>
+        <Note>
+          Attaching moves the {modelLabel(target)} record here, away from whatever it belongs to
+          now.
+        </Note>
       ) : null}
     </div>
   )

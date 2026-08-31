@@ -15,6 +15,8 @@ import { useState } from 'react'
 import { runAction } from '../api/client.js'
 import type { ActionDescriptor, ModelDescriptor } from '../api/types.js'
 import { ErrorState } from './States.jsx'
+import { Button } from './ui/button.jsx'
+import { useConfirm } from './ui/confirm.jsx'
 
 export function Actions({
   model,
@@ -29,6 +31,7 @@ export function Actions({
   /** Called after a successful run, so the screen can re-read what changed. */
   readonly onDone?: () => void
 }) {
+  const confirm = useConfirm()
   const [busy, setBusy] = useState<string | undefined>(undefined)
   const [message, setMessage] = useState<string | undefined>(undefined)
   const [error, setError] = useState<unknown>(undefined)
@@ -37,7 +40,14 @@ export function Actions({
   if (available.length === 0) return null
 
   const run = async (action: ActionDescriptor): Promise<void> => {
-    if (action.confirm !== undefined && !window.confirm(action.confirm)) return
+    if (action.confirm !== undefined) {
+      const agreed = await confirm({
+        title: action.confirm,
+        confirmLabel: action.label,
+        destructive: action.danger === true,
+      })
+      if (!agreed) return
+    }
 
     setBusy(action.name)
     setError(undefined)
@@ -57,21 +67,20 @@ export function Actions({
   }
 
   return (
-    <div className="actions">
+    <div className="flex flex-wrap items-center gap-2">
       {available.map((action) => (
-        <button
+        <Button
           key={action.name}
-          type="button"
-          className={action.danger === true ? 'danger' : undefined}
+          variant={action.danger === true ? 'destructive' : 'outline'}
           disabled={busy !== undefined}
           onClick={() => void run(action)}
         >
           {busy === action.name ? `${action.label}…` : action.label}
-        </button>
+        </Button>
       ))}
 
       {message === undefined ? null : (
-        <p className="actions__result" role="status">
+        <p className="text-muted-foreground text-sm" role="status">
           {message}
         </p>
       )}

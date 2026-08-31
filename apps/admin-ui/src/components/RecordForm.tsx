@@ -25,6 +25,7 @@
  * gets the banner. It has to: the alternative is a submission that appears to
  * do nothing.
  */
+import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
 
 import { AdminApiError, createRecord, fetchRecord, updateRecord } from '../api/client.js'
@@ -33,15 +34,21 @@ import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
 import {
   fieldLabel,
-  modelLabel,
   inputTypeFor,
   isEditable,
+  modelLabel,
   toFormValue,
   toRequestValue,
 } from '../metadata/fields.js'
 import { relationForForeignKey } from '../metadata/relations.js'
 import { RelationPicker } from './RelationPicker.jsx'
 import { ErrorState, Loading } from './States.jsx'
+import { Button } from './ui/button.jsx'
+import { Card, CardContent } from './ui/card.jsx'
+import { Checkbox } from './ui/checkbox.jsx'
+import { Input } from './ui/input.jsx'
+import { Select } from './ui/select.jsx'
+import { Textarea } from './ui/textarea.jsx'
 
 type FormValues = Record<string, string | boolean>
 
@@ -169,42 +176,52 @@ function Form({
   }
 
   return (
-    <section className="record">
-      <header className="list__header">
-        <div>
-          <a className="record__back" href={href({ kind: 'list', model: model.name })}>
-            ← {modelLabel(model)}
-          </a>
-          <h1>{id === undefined ? `New ${modelLabel(model)}` : `Edit ${modelLabel(model)}`}</h1>
-        </div>
+    <section className="flex max-w-2xl flex-col gap-4">
+      <header className="flex flex-col gap-1">
+        <a
+          className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm transition-colors"
+          href={href({ kind: 'list', model: model.name })}
+        >
+          <ArrowLeft className="size-4" />
+          {modelLabel(model)}
+        </a>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {id === undefined ? `New ${modelLabel(model)}` : `Edit ${modelLabel(model)}`}
+        </h1>
       </header>
 
       {banner !== undefined ? <ErrorState error={banner} /> : null}
 
-      <form className="form" onSubmit={(event) => void onSubmit(event)}>
-        {editable.length === 0 ? (
-          <p className="muted">This resource has no editable fields.</p>
-        ) : null}
+      <Card>
+        <CardContent className="pt-5">
+          <form className="flex flex-col gap-5" onSubmit={(event) => void onSubmit(event)}>
+            {editable.length === 0 ? (
+              <p className="text-muted-foreground text-sm">This resource has no editable fields.</p>
+            ) : null}
 
-        {editable.map((field) => (
-          <FieldInput
-            key={field.name}
-            field={field}
-            model={model}
-            models={models}
-            value={values[field.name] ?? ''}
-            error={messageFor(field.name)}
-            onChange={(next) => change(field.name, next)}
-          />
-        ))}
+            {editable.map((field) => (
+              <FieldInput
+                key={field.name}
+                field={field}
+                model={model}
+                models={models}
+                value={values[field.name] ?? ''}
+                error={messageFor(field.name)}
+                onChange={(next) => change(field.name, next)}
+              />
+            ))}
 
-        <div className="form__actions">
-          <button type="submit" disabled={submitting || editable.length === 0}>
-            {submitting ? 'Saving…' : 'Save'}
-          </button>
-          <a href={href({ kind: 'list', model: model.name })}>Cancel</a>
-        </div>
-      </form>
+            <div className="flex items-center gap-2 border-t pt-4">
+              <Button type="submit" disabled={submitting || editable.length === 0}>
+                {submitting ? 'Saving…' : 'Save'}
+              </Button>
+              <Button variant="ghost" asChild>
+                <a href={href({ kind: 'list', model: model.name })}>Cancel</a>
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </section>
   )
 }
@@ -271,7 +288,7 @@ function FieldInput({
     )
   } else if (field.kind === 'enum' && field.enumValues) {
     control = (
-      <select
+      <Select
         {...described}
         value={String(value)}
         required={field.isRequired}
@@ -283,28 +300,30 @@ function FieldInput({
             {option}
           </option>
         ))}
-      </select>
+      </Select>
     )
   } else if (field.widget === 'textarea' || field.widget === 'json') {
     // A widget is the application saying what the column actually holds. The
     // schema cannot tell a sentence from a password from a colour.
     control = (
-      <textarea
+      <Textarea
         {...described}
         value={String(value)}
         required={field.isRequired}
         rows={field.widget === 'json' ? 8 : 4}
         spellCheck={field.widget !== 'json'}
+        className={field.widget === 'json' ? 'font-mono text-xs' : undefined}
         onChange={(event) => onChange(event.target.value)}
       />
     )
   } else if (field.widget !== undefined && field.kind !== 'boolean') {
     control = (
-      <input
+      <Input
         {...described}
         type={field.widget}
         value={String(value)}
         required={field.isRequired}
+        className={field.widget === 'color' ? 'h-9 w-20 p-1' : undefined}
         // A password box must not be offered to a password manager as the
         // visitor's own credential: it belongs to someone else's record.
         {...(field.widget === 'password' ? { autoComplete: 'new-password' } : {})}
@@ -314,16 +333,15 @@ function FieldInput({
   } else if (field.kind === 'boolean') {
     inline = true
     control = (
-      <input
+      <Checkbox
         {...described}
-        type="checkbox"
         checked={value === true}
         onChange={(event) => onChange(event.target.checked)}
       />
     )
   } else {
     control = (
-      <input
+      <Input
         {...described}
         type={inputTypeFor(field)}
         value={String(value)}
@@ -334,17 +352,24 @@ function FieldInput({
   }
 
   const text = (
-    <label className="form__label" htmlFor={id}>
+    <label className="text-sm font-medium" htmlFor={id}>
       {label}
     </label>
   )
 
   return (
-    <div className={inline ? 'form__row form__row--inline' : 'form__row'}>
+    <div
+      data-slot="field"
+      className={inline ? 'flex flex-wrap items-center gap-2' : 'flex flex-col gap-1.5'}
+    >
       {inline ? control : text}
       {inline ? text : control}
       {error === undefined ? null : (
-        <span className="form__error" id={errorId} role="alert">
+        <span
+          className={inline ? 'text-destructive w-full text-sm' : 'text-destructive text-sm'}
+          id={errorId}
+          role="alert"
+        >
           {error}
         </span>
       )}

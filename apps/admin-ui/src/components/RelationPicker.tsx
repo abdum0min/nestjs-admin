@@ -13,10 +13,13 @@
  * time, so the cost does not depend on how many records exist. The trade is
  * that the current value has to be resolved separately - see `label` below.
  */
+import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { fetchRecord, listRecords } from '../api/client.js'
 import type { AdminRecord, ModelDescriptor } from '../api/types.js'
+import { Button } from './ui/button.jsx'
+import { Input } from './ui/input.jsx'
 
 /** How many suggestions to show. Enough to choose from, few enough to scan. */
 const SUGGESTIONS = 8
@@ -113,19 +116,26 @@ export function RelationPicker({
   const chosen = value ? (label ?? value) : undefined
 
   return (
-    <div className="picker">
+    <div className="relative flex flex-col gap-1.5">
       {chosen === undefined ? null : (
-        <p className="picker__chosen">
-          <span>{chosen}</span>{' '}
+        <p className="bg-muted flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm">
+          <span className="truncate">{chosen}</span>
           {required ? null : (
-            <button type="button" className="link" onClick={() => onChange('')}>
-              Clear
-            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-6 px-1.5"
+              aria-label="Clear selection"
+              onClick={() => onChange('')}
+            >
+              <X />
+            </Button>
           )}
         </p>
       )}
 
-      <input
+      <Input
         {...inputProps}
         type="search"
         value={term}
@@ -138,11 +148,13 @@ export function RelationPicker({
       />
 
       {open ? (
-        <ul className="picker__options">
+        <ul className="bg-popover absolute top-full right-0 left-0 z-20 mt-1 max-h-56 overflow-y-auto rounded-md border p-1 shadow-md">
           {failed ? (
-            <li className="muted">No access to {target.name}.</li>
+            <li className="text-muted-foreground px-2 py-1.5 text-sm">
+              No access to {target.name}.
+            </li>
           ) : options.length === 0 ? (
-            <li className="muted">No matches.</li>
+            <li className="text-muted-foreground px-2 py-1.5 text-sm">No matches.</li>
           ) : (
             options.map((record) => {
               const id = idOf(record)
@@ -151,6 +163,7 @@ export function RelationPicker({
                 <li key={String(id)}>
                   <button
                     type="button"
+                    className="hover:bg-accent focus-visible:bg-accent w-full truncate rounded-sm px-2 py-1.5 text-left text-sm"
                     onClick={() => {
                       onChange(String(id))
                       setLabel(labelOf(record))

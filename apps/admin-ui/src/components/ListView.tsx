@@ -5,7 +5,8 @@
  * link all come from the model descriptor the server sent - there is no branch
  * anywhere on a model or field name.
  */
-import { useEffect, useRef, useState } from 'react'
+import { ArrowUpDown, Plus, Trash2, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { deleteRecords, listRecords } from '../api/client.js'
 import type {
@@ -19,17 +20,32 @@ import type {
 import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
 import {
+  fieldLabel,
   filterableFields,
   listColumns,
+  modelLabel,
   operatorsFor,
   recordId,
   sortableFields,
 } from '../metadata/fields.js'
-import { fieldLabel, modelLabel } from '../metadata/fields.js'
 import { formatCell } from '../metadata/format.js'
 import { relationForForeignKey, relationLink } from '../metadata/relations.js'
 import { Actions } from './Actions.jsx'
 import { Empty, ErrorState, Loading } from './States.jsx'
+import { Button } from './ui/button.jsx'
+import { Checkbox } from './ui/checkbox.jsx'
+import { useConfirm } from './ui/confirm.jsx'
+import { Input } from './ui/input.jsx'
+import { Select } from './ui/select.jsx'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableWrap,
+} from './ui/table.jsx'
 
 const PER_PAGE = 25
 
@@ -48,6 +64,8 @@ export function ListView({
    */
   readonly initialFilter?: string
 }) {
+  const confirm = useConfirm()
+
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
@@ -62,6 +80,8 @@ export function ListView({
    */
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
   const [deleting, setDeleting] = useState(false)
+  const [outcome, setOutcome] = useState<BulkDeleteResult | undefined>(undefined)
+
   /**
    * Bumped to rebuild the filter row.
    *
@@ -71,7 +91,6 @@ export function ListView({
    * applied, so the row is remounted instead.
    */
   const [filterKey, setFilterKey] = useState(0)
-  const [outcome, setOutcome] = useState<BulkDeleteResult | undefined>(undefined)
 
   // Reset view state when the model changes; a page number or sort field from
   // the previous model is meaningless here and would produce a 400.
@@ -162,13 +181,14 @@ export function ListView({
   const removeSelected = async (): Promise<void> => {
     const chosen = ids.filter((id) => selected.has(id))
     if (chosen.length === 0) return
-    if (
-      !window.confirm(
-        `Delete ${chosen.length} ${chosen.length === 1 ? 'record' : 'records'}? This cannot be undone.`,
-      )
-    ) {
-      return
-    }
+
+    const agreed = await confirm({
+      title: `Delete ${chosen.length} ${chosen.length === 1 ? 'record' : 'records'}?`,
+      description: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
+    if (!agreed) return
 
     setDeleting(true)
     setOutcome(undefined)
@@ -190,24 +210,35 @@ export function ListView({
   }
 
   return (
-    <section className="list">
-      <header className="list__header">
-        <h1>{modelLabel(model)}</h1>
-        {/* Not offered when the policy would refuse it. The request is checked
-            again when it arrives; this only stops the interface promising
-            something it cannot deliver. */}
-        <Actions model={model} scope="list" onDone={state.reload} />
-        {model.can?.create === false ? null : (
-          <button type="button" onClick={() => navigate({ kind: 'create', model: model.name })}>
-            New {modelLabel(model)}
-          </button>
-        )}
+    <section className="flex flex-col gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-2xl font-semibold tracking-tight">{modelLabel(model)}</h1>
+          {state.data ? (
+            <p className="text-muted-foreground text-sm tabular">
+              {state.data.meta.total} {state.data.meta.total === 1 ? 'record' : 'records'}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Not offered when the policy would refuse it. The request is checked
+              again when it arrives; this only stops the interface promising
+              something it cannot deliver. */}
+          <Actions model={model} scope="list" onDone={state.reload} />
+          {model.can?.create === false ? null : (
+            <Button onClick={() => navigate({ kind: 'create', model: model.name })}>
+              <Plus />
+              New {modelLabel(model)}
+            </Button>
+          )}
+        </div>
       </header>
 
-      <div className="toolbar">
-        <input
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
           type="search"
-          className="toolbar__search"
+          className="w-full sm:max-w-xs"
           placeholder={`Search ${modelLabel(model)}…`}
           aria-label={`Search ${modelLabel(model)}`}
           value={searchInput}
@@ -235,21 +266,25 @@ export function ListView({
       />
 
       {selectable && selected.size > 0 ? (
-        <div className="bulk">
-          <p className="bulk__count" role="status">
+        <div
+          data-slot="bulk-bar"
+          className="bg-card flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2"
+        >
+          <p className="text-sm font-medium" role="status">
             {selected.size} selected
           </p>
-          <button
-            type="button"
-            className="danger"
+          <Button
+            variant="destructive"
+            size="sm"
             disabled={deleting}
             onClick={() => void removeSelected()}
           >
+            <Trash2 />
             {deleting ? 'Deleting…' : 'Delete selected'}
-          </button>
-          <button type="button" className="link" onClick={() => setSelected(new Set())}>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
             Clear selection
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -271,62 +306,64 @@ export function ListView({
             {narrowed ? (
               <>
                 <p>No {modelLabel(model)} matches this search.</p>
-                <button type="button" onClick={clearView}>
+                <Button variant="outline" size="sm" onClick={clearView}>
+                  <X />
                   Clear search and filters
-                </button>
+                </Button>
               </>
             ) : (
               <>
                 <p>No {modelLabel(model)} records yet.</p>
                 {model.can?.create === false ? null : (
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => navigate({ kind: 'create', model: model.name })}
                   >
+                    <Plus />
                     Create the first one
-                  </button>
+                  </Button>
                 )}
               </>
             )}
           </Empty>
         ) : (
           <>
-            <div className="table-wrap" aria-busy={state.loading ? true : undefined}>
+            <TableWrap aria-busy={state.loading ? true : undefined}>
               {/* Named, because a page can hold more than one table - a detail
                   page shows related records beside the record itself - and
                   "table" alone does not say which. */}
-              <table aria-label={modelLabel(model)}>
-                <thead>
-                  <tr>
+              <Table aria-label={modelLabel(model)}>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
                     {selectable ? (
-                      <th scope="col" className="cell--select">
+                      <TableHead className="w-px whitespace-nowrap">
                         <SelectAll
                           ids={ids}
                           selected={selected}
                           model={modelLabel(model)}
                           onChange={setSelected}
                         />
-                      </th>
+                      </TableHead>
                     ) : null}
                     {columns.map((column) => (
-                      <th key={column.name} scope="col">
+                      <TableHead key={column.name} scope="col">
                         {columnLabel(model, column)}
-                      </th>
+                      </TableHead>
                     ))}
-                    <th scope="col" aria-label="Actions" />
-                  </tr>
-                </thead>
-                <tbody>
+                    <TableHead scope="col" aria-label="Actions" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {state.data.records.map((record, index) => {
                     const id = recordId(model, record)
                     const ticked = id !== undefined && selected.has(id)
                     return (
-                      <tr key={id ?? index} className={ticked ? 'row--selected' : undefined}>
+                      <TableRow key={id ?? index} data-selected={ticked || undefined}>
                         {selectable ? (
-                          <td className="cell--select">
+                          <TableCell className="w-px whitespace-nowrap">
                             {id === undefined ? null : (
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 checked={ticked}
                                 // Named per row, because "checkbox" repeated
                                 // forty times tells a screen reader nothing.
@@ -334,24 +371,26 @@ export function ListView({
                                 onChange={() => toggle(id)}
                               />
                             )}
-                          </td>
+                          </TableCell>
                         ) : null}
                         {columns.map((column) => (
-                          <td key={column.name}>
+                          <TableCell key={column.name}>
                             <Cell model={model} models={models} column={column} record={record} />
-                          </td>
+                          </TableCell>
                         ))}
-                        <td className="cell--actions">
+                        <TableCell className="w-px text-right whitespace-nowrap">
                           {id === undefined ? null : (
-                            <a href={href({ kind: 'detail', model: model.name, id })}>View</a>
+                            <Button variant="ghost" size="sm" asChild>
+                              <a href={href({ kind: 'detail', model: model.name, id })}>View</a>
+                            </Button>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     )
                   })}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </TableWrap>
 
             <Pagination meta={state.data.meta} onPage={setPage} />
           </>
@@ -365,9 +404,9 @@ export function ListView({
  * The header checkbox.
  *
  * Three states, not two: none of this page selected, all of it, or some. The
- * third has no HTML attribute - `indeterminate` is a property, set through a
- * ref - and without it a partial selection looks identical to an empty one,
- * which makes the next click do the opposite of what it appears to.
+ * third has no HTML attribute - `indeterminate` is a property - and without it
+ * a partial selection looks identical to an empty one, which makes the next
+ * click do the opposite of what it appears to.
  */
 function SelectAll({
   ids,
@@ -380,19 +419,13 @@ function SelectAll({
   readonly model: string
   readonly onChange: (next: ReadonlySet<string>) => void
 }) {
-  const box = useRef<HTMLInputElement>(null)
   const chosen = ids.filter((id) => selected.has(id)).length
   const all = chosen === ids.length && ids.length > 0
 
-  useEffect(() => {
-    if (box.current) box.current.indeterminate = chosen > 0 && !all
-  }, [chosen, all])
-
   return (
-    <input
-      ref={box}
-      type="checkbox"
+    <Checkbox
       checked={all}
+      indeterminate={chosen > 0 && !all}
       aria-label={all ? `Deselect all ${model}` : `Select all ${model} on this page`}
       onChange={() => onChange(all ? new Set() : new Set(ids))}
     />
@@ -417,23 +450,33 @@ function BulkOutcome({
   const failed = outcome.failed.length
 
   return (
-    <div className={failed > 0 ? 'state state--error' : 'state'} role="status">
-      <p>
+    <div
+      data-slot={failed > 0 ? 'error-state' : 'bulk-outcome'}
+      className={
+        failed > 0
+          ? 'border-destructive/40 bg-destructive/8 flex flex-col gap-2 rounded-lg border px-4 py-3 text-sm'
+          : 'border-success/40 bg-success/8 flex flex-col gap-2 rounded-lg border px-4 py-3 text-sm'
+      }
+      role="status"
+    >
+      <p className="font-medium">
         {outcome.deleted.length} deleted
         {failed > 0 ? `, ${failed} could not be` : ''}.
       </p>
       {failed > 0 ? (
-        <ul className="bulk__failures">
+        <ul className="list-disc pl-5">
           {outcome.failed.map((entry, index) => (
             <li key={entry.id || index}>
-              {entry.id ? <code>{entry.id}</code> : null} {entry.message}
+              {entry.id ? <code className="opacity-70">{entry.id}</code> : null} {entry.message}
             </li>
           ))}
         </ul>
       ) : null}
-      <button type="button" className="link" onClick={onDismiss}>
-        Dismiss
-      </button>
+      <div>
+        <Button variant="ghost" size="sm" onClick={onDismiss}>
+          Dismiss
+        </Button>
+      </div>
     </div>
   )
 }
@@ -461,9 +504,10 @@ function SortControl({
   if (fields.length === 0) return null
 
   return (
-    <label className="toolbar__control">
-      <span>Sort</span>
-      <select
+    <div className="flex items-center gap-2">
+      <ArrowUpDown className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+      <Select
+        className="w-48"
         aria-label="Sort by"
         value={value ? `${value.field}:${value.direction}` : ''}
         onChange={(event) => {
@@ -476,15 +520,15 @@ function SortControl({
           })
         }}
       >
-        <option value="">Default</option>
+        <option value="">Default order</option>
         {fields.map((field) => (
           <optgroup key={field.name} label={field.name}>
             <option value={`${field.name}:asc`}>{field.name} ascending</option>
             <option value={`${field.name}:desc`}>{field.name} descending</option>
           </optgroup>
         ))}
-      </select>
-    </label>
+      </Select>
+    </div>
   )
 }
 
@@ -501,7 +545,7 @@ function FilterControl({
   value,
   onChange,
 }: {
-  readonly fields: readonly import('../api/types.js').FieldDescriptor[]
+  readonly fields: readonly FieldDescriptor[]
   readonly value: FilterRule | undefined
   readonly onChange: (next: FilterRule | undefined) => void
 }) {
@@ -525,32 +569,31 @@ function FilterControl({
   }
 
   return (
-    <div className="filters">
-      <label className="toolbar__control">
-        <span>Filter</span>
-        <select
-          aria-label="Filter field"
-          value={field}
-          onChange={(event) => {
-            const next = event.target.value
-            setField(next)
-            setOperator('')
-            setText('')
-            onChange(undefined)
-          }}
-        >
-          <option value="">None</option>
-          {fields.map((candidate) => (
-            <option key={candidate.name} value={candidate.name}>
-              {candidate.name}
-            </option>
-          ))}
-        </select>
-      </label>
+    <div className="flex flex-wrap items-center gap-2">
+      <Select
+        className="w-40"
+        aria-label="Filter field"
+        value={field}
+        onChange={(event) => {
+          const next = event.target.value
+          setField(next)
+          setOperator('')
+          setText('')
+          onChange(undefined)
+        }}
+      >
+        <option value="">Filter by…</option>
+        {fields.map((candidate) => (
+          <option key={candidate.name} value={candidate.name}>
+            {candidate.name}
+          </option>
+        ))}
+      </Select>
 
       {selected ? (
         <>
-          <select
+          <Select
+            className="w-36"
             aria-label="Filter operator"
             value={operator}
             onChange={(event) => {
@@ -564,10 +607,11 @@ function FilterControl({
                 {candidate}
               </option>
             ))}
-          </select>
+          </Select>
 
           {selected.kind === 'enum' && selected.enumValues && operator !== 'in' ? (
-            <select
+            <Select
+              className="w-40"
               aria-label="Filter value"
               value={text}
               onChange={(event) => {
@@ -581,9 +625,10 @@ function FilterControl({
                   {option}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
-            <input
+            <Input
+              className="w-40"
               aria-label="Filter value"
               type={selected.kind === 'number' ? 'number' : 'text'}
               placeholder={operator === 'in' ? 'comma,separated' : 'value'}
@@ -596,8 +641,9 @@ function FilterControl({
           )}
 
           {value ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setField('')
                 setOperator('')
@@ -605,8 +651,9 @@ function FilterControl({
                 onChange(undefined)
               }}
             >
+              <X />
               Clear
-            </button>
+            </Button>
           ) : null}
         </>
       ) : null}
@@ -624,16 +671,28 @@ function Pagination({
   const lastPage = Math.max(1, Math.ceil(meta.total / Math.max(1, meta.perPage)))
 
   return (
-    <nav className="pagination" aria-label="Pagination">
-      <button type="button" disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)}>
-        Previous
-      </button>
-      <span>
+    <nav className="flex items-center justify-between gap-3" aria-label="Pagination">
+      <p className="text-muted-foreground text-sm tabular">
         Page {meta.page} of {lastPage} · {meta.total} total
-      </span>
-      <button type="button" disabled={meta.page >= lastPage} onClick={() => onPage(meta.page + 1)}>
-        Next
-      </button>
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={meta.page <= 1}
+          onClick={() => onPage(meta.page - 1)}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={meta.page >= lastPage}
+          onClick={() => onPage(meta.page + 1)}
+        >
+          Next
+        </Button>
+      </div>
     </nav>
   )
 }
@@ -660,7 +719,14 @@ function Cell({
   const link = relationField ? relationLink(relationField, models, record) : undefined
 
   if (link) {
-    return <a href={href({ kind: 'detail', model: link.model, id: link.id })}>{link.label}</a>
+    return (
+      <a
+        className="text-primary underline-offset-4 hover:underline"
+        href={href({ kind: 'detail', model: link.model, id: link.id })}
+      >
+        {link.label}
+      </a>
+    )
   }
 
   return <>{formatCell(column, record[column.name])}</>

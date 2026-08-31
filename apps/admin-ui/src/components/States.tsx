@@ -4,23 +4,41 @@
  * Error rendering branches on the server's `code`, never on message text. Each
  * code gets a heading that says what the reader can do about it; the server's
  * message is shown underneath only because its exception filter already
- * guarantees it is safe - the four 4xx codes carry a real message and
- * everything internal is replaced with a generic string before it leaves the
- * server. No stack trace, path or ORM detail can reach here.
+ * guarantees it is safe - the 4xx codes carry a real message and everything
+ * internal is replaced with a generic string before it leaves the server. No
+ * stack trace, path or ORM detail can reach here.
  */
+import { CircleAlert, Inbox, Lock, RefreshCw, ShieldOff, TriangleAlert } from 'lucide-react'
+import type { ComponentType } from 'react'
+
 import { AdminApiError } from '../api/client.js'
 import type { AdminErrorCode } from '../api/types.js'
+import { Button } from './ui/button.jsx'
+import { Skeleton } from './ui/skeleton.jsx'
 
 export function Loading({ label = 'Loading…' }: { readonly label?: string }) {
   return (
-    <div className="state" role="status">
-      {label}
+    <div data-slot="loading" className="flex flex-col gap-3" role="status">
+      {/* The shape of what is coming, rather than a spinner: it says how much
+          is arriving and keeps the layout from jumping when it does. */}
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-64 w-full" />
+      <span className="sr-only">{label}</span>
     </div>
   )
 }
 
 export function Empty({ children }: { readonly children: React.ReactNode }) {
-  return <div className="state state--empty">{children}</div>
+  return (
+    <div
+      data-slot="empty"
+      className="bg-card text-muted-foreground flex flex-col items-center gap-3 rounded-xl border px-6 py-14 text-center text-sm"
+    >
+      <Inbox className="size-8 opacity-50" aria-hidden="true" />
+      {children}
+    </div>
+  )
 }
 
 const HEADINGS: Readonly<Record<AdminErrorCode, string>> = {
@@ -49,6 +67,19 @@ const HINTS: Readonly<Record<AdminErrorCode, string>> = {
   INTERNAL_ERROR: 'Try again. If it keeps happening, contact an administrator.',
 }
 
+/** The icon carries the same distinction the heading does, for a faster read. */
+const ICONS: Readonly<Record<AdminErrorCode, ComponentType<{ className?: string }>>> = {
+  UNAUTHORIZED: Lock,
+  FORBIDDEN: ShieldOff,
+  MODEL_NOT_FOUND: CircleAlert,
+  RECORD_NOT_FOUND: CircleAlert,
+  FIELD_NOT_FOUND: CircleAlert,
+  INVALID_QUERY: CircleAlert,
+  VALIDATION_ERROR: TriangleAlert,
+  CONSTRAINT_VIOLATION: TriangleAlert,
+  INTERNAL_ERROR: TriangleAlert,
+}
+
 export function ErrorState({
   error,
   onRetry,
@@ -61,16 +92,27 @@ export function ErrorState({
     error instanceof AdminApiError
       ? error.message
       : 'The admin interface hit an unexpected problem.'
+  const Icon = ICONS[code]
 
   return (
-    <div className="state state--error" role="alert">
-      <h2>{HEADINGS[code]}</h2>
-      <p>{HINTS[code]}</p>
-      <p className="state__detail">{detail}</p>
+    <div
+      data-slot="error-state"
+      className="border-destructive/40 bg-destructive/8 flex flex-col gap-2 rounded-xl border px-4 py-3"
+      role="alert"
+    >
+      <div className="text-destructive flex items-center gap-2 font-medium">
+        <Icon className="size-4 shrink-0" />
+        {HEADINGS[code]}
+      </div>
+      <p className="text-sm">{HINTS[code]}</p>
+      <p className="text-muted-foreground text-sm">{detail}</p>
       {onRetry && code !== 'UNAUTHORIZED' && code !== 'FORBIDDEN' ? (
-        <button type="button" onClick={onRetry}>
-          Try again
-        </button>
+        <div>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            <RefreshCw />
+            Try again
+          </Button>
+        </div>
       ) : null}
     </div>
   )
