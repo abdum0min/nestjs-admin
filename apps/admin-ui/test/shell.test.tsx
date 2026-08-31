@@ -182,14 +182,15 @@ describe('the resource list', () => {
     await open()
 
     const links = () => within(screen.getAllByRole('navigation', { name: 'Resources' })[0]!)
-    expect(links().getAllByRole('link')).toHaveLength(3)
+    // Three models, plus the dashboard the sidebar leads with since 0.10.0.
+    expect(links().getAllByRole('link')).toHaveLength(4)
 
     fireEvent.click(screen.getByLabelText('Collapse navigation'))
     await waitFor(() => expect(screen.getByLabelText('Expand navigation')).toBeTruthy())
 
     // Still there, still reachable, still named - the label is what a screen
     // reader gets whether or not it is drawn.
-    expect(links().getAllByRole('link')).toHaveLength(3)
+    expect(links().getAllByRole('link')).toHaveLength(4)
     expect(links().getByRole('link', { name: 'People' })).toBeTruthy()
     expect(window.localStorage.getItem('nest-admin.sidebar')).toBe('collapsed')
   })

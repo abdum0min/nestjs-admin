@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing'
 
 import { unsafeAllowAllRequests, type AdminAuth } from '../src/auth/contract.js'
 import type { AdminResourceAuth } from '../src/auth/resource.js'
+import type { AdminDashboard } from '../src/dashboard/contract.js'
 import { AdminModule } from '../src/module.js'
 
 /**
@@ -36,6 +37,7 @@ export async function createAdminApp(
   path?: string,
   resources?: ResourceSelection,
   models?: ModelOverrides,
+  dashboard?: AdminDashboard,
 ): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -47,6 +49,7 @@ export async function createAdminApp(
         ...(path === undefined ? {} : { path }),
         ...(resources === undefined ? {} : { resources }),
         ...(models === undefined ? {} : { models }),
+        ...(dashboard === undefined ? {} : { dashboard }),
       }),
     ],
   }).compile()
