@@ -1,8 +1,22 @@
 {
   "name": "@nest-admin/nestjs",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "NestJS integration for Nest Admin. This is the single package published to npm.",
+  "keywords": [
+    "nestjs",
+    "admin",
+    "admin-panel",
+    "admin-dashboard",
+    "prisma",
+    "crud",
+    "backoffice",
+    "generator",
+    "typescript"
+  ],
   "license": "MIT",
+  "engines": {
+    "node": ">=20.11.0"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -55,7 +69,7 @@
   "peerDependencies": {
     "@nestjs/common": ">=10.0.0 <13",
     "@nestjs/core": ">=10.0.0 <13",
-    "@prisma/client": ">=6.0.0 <9",
+    "@prisma/client": "^7.0.0",
     "reflect-metadata": "^0.1.13 || ^0.2.0",
     "rxjs": "^7.0.0"
   },
