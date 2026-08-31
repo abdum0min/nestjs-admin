@@ -447,17 +447,20 @@ export function ListView({
  * What can be done to one row.
  *
  * Opening a record to delete it is two navigations to reach a button that was
- * always going to be pressed, so the row carries its own. But a row cannot
- * carry *every* action: view, edit, delete and however many the application
- * declared do not fit in a cell, and five icons in a line is worse than a menu
- * even when they do.
+ * always going to be pressed, so the row carries its own.
  *
- * So the split is by frequency and by risk. View and Edit are one click,
- * because they are what the row is usually for and neither is destructive.
- * Everything else - delete, and anything the application added - is one click
- * further, behind a menu. That is not only about space: a destructive control
- * sitting under the cursor of a control people click all day is how records
- * get deleted by muscle memory.
+ * ## The same actions, arranged for the screen
+ *
+ * On a screen with room, view, edit and delete are three buttons: one click
+ * each, and you can see what a row offers without opening anything. On a phone
+ * three buttons per row is most of the width, so they collapse into one menu.
+ *
+ * The set is identical either way. A control that exists on a desktop and not
+ * on a phone is a feature people cannot find on the device they happen to be
+ * holding, which is worse than either arrangement.
+ *
+ * Anything the application declared lives in the menu on both, because there
+ * can be any number of them and a row cannot grow.
  */
 function RowActions({
   model,
@@ -478,7 +481,6 @@ function RowActions({
   const recordActions = (model.actions ?? []).filter((action) => action.scope === 'record')
   const canEdit = model.can?.update !== false
   const canDelete = model.can?.delete !== false
-  const hasMenu = canDelete || recordActions.length > 0
 
   const remove = async (): Promise<void> => {
     const agreed = await confirm({
@@ -533,21 +535,43 @@ function RowActions({
         </span>
       )}
 
-      <Button variant="ghost" size="icon-sm" aria-label={`View ${label}`} asChild>
-        <a href={href({ kind: 'detail', model: model.name, id })}>
-          <Eye />
-        </a>
-      </Button>
-
-      {canEdit ? (
-        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${label}`} asChild>
-          <a href={href({ kind: 'edit', model: model.name, id })}>
-            <Pencil />
+      {/* Wide enough for buttons. */}
+      <div className="hidden items-center gap-0.5 md:flex">
+        <Button variant="ghost" size="icon-sm" aria-label={`View ${label}`} asChild>
+          <a href={href({ kind: 'detail', model: model.name, id })}>
+            <Eye />
           </a>
         </Button>
-      ) : null}
 
-      {hasMenu ? (
+        {canEdit ? (
+          <Button variant="ghost" size="icon-sm" aria-label={`Edit ${label}`} asChild>
+            <a href={href({ kind: 'edit', model: model.name, id })}>
+              <Pencil />
+            </a>
+          </Button>
+        ) : null}
+
+        {canDelete ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="hover:text-destructive"
+            disabled={busy}
+            aria-label={`Delete ${label}`}
+            onClick={() => void remove()}
+          >
+            <Trash2 />
+          </Button>
+        ) : null}
+      </div>
+
+      {/*
+       * One menu, holding everything.
+       *
+       * Always on a phone; on a wider screen only when the application declared
+       * actions, since the three above already cover the rest.
+       */}
+      <div className={recordActions.length > 0 ? 'flex' : 'flex md:hidden'}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -560,6 +584,31 @@ function RowActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
+            {/* The same three, for a screen that is not showing them. */}
+            <div className="md:hidden">
+              <DropdownMenuItem asChild>
+                <a href={href({ kind: 'detail', model: model.name, id })}>
+                  <Eye />
+                  View
+                </a>
+              </DropdownMenuItem>
+              {canEdit ? (
+                <DropdownMenuItem asChild>
+                  <a href={href({ kind: 'edit', model: model.name, id })}>
+                    <Pencil />
+                    Edit
+                  </a>
+                </DropdownMenuItem>
+              ) : null}
+              {canDelete ? (
+                <DropdownMenuItem variant="destructive" onSelect={() => void remove()}>
+                  <Trash2 />
+                  Delete
+                </DropdownMenuItem>
+              ) : null}
+              {recordActions.length > 0 ? <DropdownMenuSeparator /> : null}
+            </div>
+
             {recordActions.map((action) => (
               <DropdownMenuItem
                 key={action.name}
@@ -569,16 +618,9 @@ function RowActions({
                 {action.label}
               </DropdownMenuItem>
             ))}
-            {recordActions.length > 0 && canDelete ? <DropdownMenuSeparator /> : null}
-            {canDelete ? (
-              <DropdownMenuItem variant="destructive" onSelect={() => void remove()}>
-                <Trash2 />
-                Delete
-              </DropdownMenuItem>
-            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : null}
+      </div>
     </div>
   )
 }
@@ -838,7 +880,7 @@ function Cell({
   if (link) {
     return (
       <a
-        className="text-primary underline-offset-4 hover:underline"
+        className="text-link underline-offset-4 hover:underline"
         href={href({ kind: 'detail', model: link.model, id: link.id })}
       >
         {link.label}
