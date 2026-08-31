@@ -1,83 +1,149 @@
 # Nest Admin
 
-> **Status: 0.8.0, not published.** Generic CRUD, relations, per-field
-> configuration, hooks, actions and a metadata-driven interface all work
-> against a real Prisma schema. Nothing is on npm yet; the first publish is
-> 1.0.0. See [docs/project-state.md](docs/project-state.md) for what exists,
-> what does not, and the open risks.
+An admin panel for NestJS applications, generated from your ORM schema.
 
-An open-source admin framework for NestJS applications.
+> **Status: 0.11.0, not published.** Everything described below works and is
+> tested against a real database, a real NestJS HTTP server and the built
+> interface. Nothing is on npm yet — the first publish is 1.0.0. See
+> [docs/project-state.md](docs/project-state.md) for what exists, what does
+> not, and the open risks.
 
-## The idea
+Add one module to an existing application and get list, create, read, update
+and delete screens for every model in your schema — with search, filters,
+sorting, pagination, relation pickers, a dashboard and a login page. No
+generated files, no scaffolding to maintain, no build step in your project.
 
-A developer installs one package, runs one command, and gets an admin panel
-generated automatically from their ORM schema — no hand-written CRUD
-controllers, services, tables or forms.
+```ts
+import { AdminModule } from '@nest-admin/nestjs'
+import { PrismaAdapter } from '@nest-admin/nestjs/prisma'
+
+@Module({
+  imports: [
+    AdminModule.forRoot({
+      adapter: new PrismaAdapter({ client: prisma }),
+      auth: builtInAuth({ store, session: { secret } }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+Open `/admin`.
+
+**[Getting started →](docs/getting-started.md)** ·
+**[Configuration reference →](docs/configuration.md)** ·
+**[Architecture →](docs/architecture.md)**
+
+---
+
+## What you get
+
+|                           |                                                                                                          |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **CRUD, from the schema** | Every model, every field, with types read from the schema — no column lists to maintain                  |
+| **Relations**             | To-one pickers, to-many lists with their own pagination, attach and detach, join tables                  |
+| **Search, filter, sort**  | `field:operator:value` in the URL, coerced against the schema, ten operators                             |
+| **A dashboard**           | Counts, lists, charts, and statistics your own code computes — or a generated one if you declare nothing |
+| **A login**               | Optional, with its own account table so admin credentials never touch your users                         |
+| **Authorization**         | Per model and per operation, enforced in one place, invisible resources absent from the API              |
+| **Per-field control**     | Labels, widgets, ordering, hidden, read-only, write-only                                                 |
+| **Your own rules**        | Hooks around every write, and buttons the interface draws from configuration                             |
+| **Two ORMs**              | Prisma and Drizzle, behind one contract                                                                  |
+
+## Installing
 
 ```bash
-npm install @nest-admin/nestjs   # not published yet
+npm install @nest-admin/nestjs        # not published yet
 ```
 
-Start the NestJS app, open `http://localhost:3000/admin`, and the models
-declared in `schema.prisma` are there with list / create / read / update /
-delete, pagination and basic search.
+One package. The adapter you use is a subpath of it:
 
-**None of the above works yet.** It is the target the foundation was built for.
+```ts
+import { PrismaAdapter } from '@nest-admin/nestjs/prisma'
+import { DrizzleAdapter } from '@nest-admin/nestjs/drizzle'
+```
 
-## MVP scope (frozen)
+An application that never imports one never loads its code. Requires Node
+≥ 20.11, NestJS 10–12.
 
-One goal: **Prisma model → automatic CRUD API → automatic Admin UI.**
+## What it is not
 
-Explicitly _not_ in the MVP: authentication, authorization, RBAC, permissions,
-file uploads, rich text, charts, analytics, audit logs, webhooks, custom pages,
-plugins, multi-tenancy, SaaS features, advanced relations/validation/filtering,
-SSR, a Next.js admin app, and any ORM adapter other than Prisma.
+Stated plainly, because the alternative is finding out later:
 
-## Architecture
+- **Not a CMS.** It administers the schema you have; it does not define one.
+- **Not a page builder.** Widgets and actions are declared in configuration and
+  drawn by the interface. There is no way to ship your own React component into
+  it, and there deliberately never has been — that would mean every consumer
+  runs a front-end build.
+- **Not row-level security yet.** You can say who may list `Order`. You cannot
+  yet say "only their own orders". Planned before 1.0.
+- **Not published.** See the status note above.
+
+## How it fits together
 
 ```text
-                    ┌──────────────┐
-                    │     Core     │   ORM-agnostic. Never imports Prisma.
-                    └──────▲───────┘   Never imports NestJS.
-                           │
-                 ┌─────────┴─────────┐
-                 │                   │
-          Prisma Adapter       NestJS Adapter
-                 │                   │
-                 └─────────┬─────────┘
-                           │
-                          CLI
+                        ┌──────────────┐
+                        │     Core     │   Contracts, metadata, errors.
+                        └──────▲───────┘   Imports no ORM and no framework.
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+      Prisma adapter    Drizzle adapter    NestJS integration
+              │                │                │
+              └────────────────┴────────┬───────┘
+                                        │
+                                   Admin UI (React)
+                          renders from /admin/meta alone
 ```
 
-The Admin UI is a React/Vite SPA that talks to the NestJS integration over an
-HTTP contract. It has no knowledge of Prisma.
+The interface has no knowledge of any ORM, and neither does the HTTP layer.
+Both facts are asserted by tests rather than left to discipline —
+[`tests/boundaries.test.ts`](tests/boundaries.test.ts) fails the build if an
+import ever crosses one of those lines.
 
-Full reasoning: [docs/architecture.md](docs/architecture.md).
+Adding an ORM means writing one implementation of `OrmAdapter` and nothing
+else. That claim was checked by doing it: see
+[docs/adapters.md](docs/adapters.md).
 
 ## Repository layout
 
-| Path              | Responsibility                                               |
-| ----------------- | ------------------------------------------------------------ |
-| `packages/core`   | ORM-agnostic engine: adapter contract, metadata, query types |
-| `packages/prisma` | Prisma adapter implementing the Core contract                |
-| `packages/nestjs` | NestJS integration + **the single published package**        |
-| `packages/cli`    | `nest-admin init` and future commands                        |
-| `packages/ui`     | Reusable React components for the admin                      |
-| `apps/admin-ui`   | The admin SPA (React + TypeScript + Vite)                    |
-| `examples/basic`  | Reference NestJS + Prisma consumer project                   |
-| `docs/`           | Architecture, scope and publishing decisions                 |
+| Path                | Responsibility                                                   |
+| ------------------- | ---------------------------------------------------------------- |
+| `packages/core`     | ORM-agnostic contracts: adapter, metadata, query, errors         |
+| `packages/prisma`   | Prisma adapter                                                   |
+| `packages/drizzle`  | Drizzle adapter                                                  |
+| `packages/nestjs`   | NestJS integration — **the single published package**            |
+| `packages/admin-ui` | The admin interface (React + Vite), bundled into that package    |
+| `packages/cli`      | `nest-admin init` and future commands — not implemented yet      |
+| `examples/basic`    | A reference consumer, eleven models, used to verify releases     |
+| `docs/`             | Guides, reference, and the decisions behind the design           |
+| `reports/`          | One report per release: what was built, what it cost, what broke |
+
+Everything except `packages/nestjs` is `private: true` and bundled into it at
+build time, so a consumer installs one package and gets one copy of everything.
+The reasoning is in [docs/publishing.md](docs/publishing.md).
 
 ## Development
 
 ```bash
 pnpm install
-pnpm build       # topological build of every package + the admin UI
+pnpm build          # topological: every package, then the interface, then the bundle
 pnpm typecheck
 pnpm test
+pnpm verify:package # packs the tarball and installs it into a throwaway consumer
 pnpm format
 ```
 
-Requires Node >= 20.11 and pnpm >= 10.
+Requires Node ≥ 20.11 and pnpm ≥ 10.
+
+The example application is the fastest way to see a change:
+
+```bash
+cd examples/basic
+pnpm prisma:generate && pnpm prisma:push && pnpm seed
+pnpm create-admin you@example.com your-password
+pnpm start          # http://localhost:5000/admin
+```
 
 ## Contributing
 

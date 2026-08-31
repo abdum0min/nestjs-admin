@@ -1,21 +1,28 @@
 # Documentation
 
-| Document                                 | Contents                                              |
-| ---------------------------------------- | ----------------------------------------------------- |
-| [status.md](status.md)                   | Exactly what is implemented and what is not           |
-| [architecture.md](architecture.md)       | Components, dependency direction, open decisions      |
-| [mvp-scope.md](mvp-scope.md)             | The frozen MVP definition and its acceptance test     |
-| [publishing.md](publishing.md)           | Single-public-package strategy; nothing published yet |
-| [prisma-metadata.md](prisma-metadata.md) | Decision: how Prisma model metadata is obtained       |
+## Using it
 
-Phase reports with full experimental evidence live in [../reports/](../reports/):
+| Document                                 | Contents                                                                 |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| [getting-started.md](getting-started.md) | From an existing NestJS application to a working admin                   |
+| [configuration.md](configuration.md)     | Every option, in one place                                               |
+| [adapters.md](adapters.md)               | The `OrmAdapter` contract, the two shipped adapters, and writing a third |
 
-| Report                                                                    | Contents                                                              |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [002-prisma-metadata-spike.md](../reports/002-prisma-metadata-spike.md)   | How Prisma model metadata is obtained, and the rejected alternatives  |
-| [003-prisma-adapter.md](../reports/003-prisma-adapter.md)                 | The Prisma adapter and generic CRUD                                   |
-| [004-http-api.md](../reports/004-http-api.md)                             | The generic admin HTTP API                                            |
-| [005-authentication.md](../reports/005-authentication.md)                 | The authentication boundary and 401/403 semantics                     |
-| [006-resource-authorization.md](../reports/006-resource-authorization.md) | Per-model authorization and metadata filtering                        |
-| [007-admin-ui.md](../reports/007-admin-ui.md)                             | Publishing fix and the metadata-driven admin UI                       |
-| [008-package-runtime.md](../reports/008-package-runtime.md)               | Serving the UI, the consumer example, and packed-package verification |
+## Understanding it
+
+| Document                                 | Contents                                                             |
+| ---------------------------------------- | -------------------------------------------------------------------- |
+| [architecture.md](architecture.md)       | Components, dependency direction, and the rules that hold them apart |
+| [project-state.md](project-state.md)     | An honest assessment: what exists, what does not, the open risks     |
+| [status.md](status.md)                   | The implemented/not-implemented list                                 |
+| [roadmap.md](roadmap.md)                 | What is planned, in what order, and why in that order                |
+| [publishing.md](publishing.md)           | Why one package is published, and how the others get into it         |
+| [prisma-metadata.md](prisma-metadata.md) | How Prisma model metadata is obtained, and the rejected alternatives |
+| [mvp-scope.md](mvp-scope.md)             | Historical: the frozen 0.1-0.7 scope                                 |
+
+## Release reports
+
+One per release, in [../reports/](../reports/): what was built, what it cost,
+what broke, and what was deliberately left out. They are written as evidence
+rather than as announcements - every measurement in them was taken, and every
+defect found along the way is recorded whether or not it was flattering.

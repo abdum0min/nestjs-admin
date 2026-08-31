@@ -74,14 +74,15 @@ far side of it is no longer the consumer's problem to solve from scratch.
 
 ## Releases
 
-| Release | Name                               | Why in this position                                                                     |
-| ------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| 0.8.0   | Design system                      | Everything after it is drawn with it. Doing it later means building the dashboard twice  |
-| 0.9.0   | Authentication                     | The single largest adoption barrier, and it needs the design system for its login screen |
-| 0.10.0  | Dashboard                          | The landing page. Needs the design system; independent of auth                           |
-| 0.11.0  | Customisation                      | You cannot design a customisation API before you know what needs customising             |
-| 0.12.0  | Docs, demo, publishing preparation | Once there is something worth showing                                                    |
-| 1.0.0   | API freeze and first publish       | Only after all of the above is stable                                                    |
+| Release | Name                               | Why in this position                                                                           |
+| ------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 0.8.0   | Design system                      | Everything after it is drawn with it. Doing it later means building the dashboard twice        |
+| 0.9.0   | Authentication                     | The single largest adoption barrier, and it needs the design system for its login screen       |
+| 0.10.0  | Dashboard                          | The landing page. Needs the design system; independent of auth                                 |
+| 0.11.0  | Second adapter, and the docs       | The contract had one implementation and 1.0 freezes it; docs had drifted three releases behind |
+| 0.11.5  | Customisation                      | You cannot design a customisation API before you know what needs customising                   |
+| 0.12.0  | Docs, demo, publishing preparation | Once there is something worth showing                                                          |
+| 1.0.0   | API freeze and first publish       | Only after all of the above is stable                                                          |
 
 ---
 
@@ -93,7 +94,7 @@ works today works the same way afterwards, and looks like a different product.
 - **Tailwind CSS**, compiled at _our_ build time into the CSS we already ship.
   The consumer installs nothing and runs no build step; that constraint does not
   move.
-- **shadcn/ui components, vendored** into `apps/admin-ui/src/components/ui/`.
+- **shadcn/ui components, vendored** into `packages/admin-ui/src/components/ui/`.
   Copied rather than depended on, which is the point of shadcn: we own the code
   and are not tied to a component library's release cycle. It brings Radix
   primitives as real dependencies — bundled into the SPA, never into the
@@ -219,7 +220,31 @@ widget's model is never queried, not merely omitted from the response.
 
 ---
 
-### 0.11.0 — Customisation
+### 0.11.0 — A second adapter, and the documentation
+
+Two pieces of work that were both scheduled later and both moved forward, for
+the same reason: 1.0 freezes things, and neither of these gets easier by
+waiting.
+
+- **A Drizzle adapter.** `OrmAdapter` had exactly one implementation, which made
+  "contract" and "description of Prisma" indistinguishable. Drizzle is the
+  useful opposite of Prisma: a query builder with no generated client, no
+  schema artefact and no normalised errors. Published as
+  `@nest-admin/nestjs/drizzle`, beside the Prisma subpath.
+- **The documentation, rebuilt.** The README claimed 0.8.0, `status.md` claimed
+  304 tests, and `project-state.md` analysed 0.7.0. Replaced with a
+  getting-started guide, a configuration reference, an adapter guide, and an
+  honest state document.
+- **One `packages` tree.** `packages/ui` was twelve lines of comment and was
+  removed; `apps/admin-ui` moved to `packages/admin-ui`, so `apps/` is gone.
+
+**Result:** Core needed no changes, and nothing above the adapter did either.
+What that did and did not prove is recorded in
+[adapters.md](adapters.md#what-the-second-adapter-proved).
+
+---
+
+### 0.11.5 — Customisation
 
 Everything that turns "the admin" into "our admin", now that there is enough
 built to know what needs bending.
@@ -231,10 +256,15 @@ built to know what needs bending.
 - **Saved views** — a named filter and sort a person returns to.
 - **Theming to the full token set**: fonts, radius, density, a complete palette
   rather than one accent.
+- **Row-level authorization.** Moved here from "after 1.0", because it is
+  API-shaped and 1.0 freezes APIs. `AdminResourceAuth` can say who may list
+  `Order`; it cannot say "only their own". Adding it afterwards is either a
+  breaking change or a bolt-on.
 - **Carried debt, closed here**: the non-owning half of a one-to-one is
   currently invisible (`User.profile` is absent from the record and its nested
-  route answers 400), and `packages/ui` and `packages/cli` are empty packages
-  that are versioned every release and should either gain content or go.
+  route answers 400); composite primary keys can be listed but not addressed,
+  because `RecordId` is a single value; and `packages/cli` is still an empty
+  package that is versioned every release and should either gain content or go.
 
 **Out of scope:** custom pages, plugins, a component API.
 
@@ -252,9 +282,13 @@ domain, using configuration only — no forked component, no build step.
 - README rewrite: a recording, a three-line install, and an honest list of what
   is still missing.
 - Changesets and the publishing pipeline; a final review of `npm pack` contents.
-- **Claim the `@nest-admin` npm scope.** This is free and irreversible if
-  someone else does it first, so it should happen before this release rather
-  than in it.
+- **Claim the `@nest-admin` npm scope.** Free, and irreversible if someone
+  else takes it first, so it should happen well before this release. Checked
+  in 0.11.0: the scoped name is available, while the unscoped `nest-admin` and
+  `nestjs-admin` are both taken by packages abandoned in 2022 — which is
+  itself the argument for the scope.
+- **A `repository` field in the published manifest**, which it does not yet
+  have. The npm page would otherwise have no link to the source.
 
 **Acceptance:** a stranger installs the admin from the documentation alone.
 
@@ -268,12 +302,16 @@ domain, using configuration only — no forked component, no build step.
   on.
 - The first npm publish.
 
-**Before the freeze**, a thin second adapter — Drizzle or TypeORM — even if it
-is never shipped. The contract has exactly one real implementation, and the
-in-memory test double is written against the same assumptions, so it is weaker
-evidence of generality than it looks. Freezing an interface with one
-implementation is the standard way to discover at 1.1 that it needed a breaking
-change.
+**Done in 0.11.0**: the second adapter this section asked for. It is not thin
+and it is shipped — Drizzle, with its own suite and an end-to-end HTTP suite
+that drives the whole admin over it. Core needed no changes, and neither did
+anything above the adapter, which is the evidence this freeze needed and did not
+previously have.
+
+What it left for the freeze to settle is small and specific: `RecordId` is a
+single value, so composite keys cannot be addressed; and the contract assumed
+every adapter could name the columns in a constraint violation, which is true of
+Prisma and only mostly true of a raw driver.
 
 **Out of scope:** new features. Any at all.
 

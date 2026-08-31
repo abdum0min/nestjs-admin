@@ -1,5 +1,15 @@
 # MVP scope (frozen)
 
+> **Historical.** This was the scope for 0.1.0 through 0.7.0, and it was met -
+> the acceptance test below passes, against a much larger schema than the one it
+> names. Several things listed as out of scope have since been built
+> deliberately and in order: authentication and authorization in 0.5.0-0.9.0, a
+> dashboard in 0.10.0, a Drizzle adapter in 0.11.0.
+>
+> It is kept because the reasoning at the bottom is why the seams held. For what
+> is planned now, see [roadmap.md](roadmap.md); for what exists, see
+> [status.md](status.md).
+
 One goal:
 
 > **Prisma model -> automatic CRUD API -> automatic Admin UI**

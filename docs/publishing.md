@@ -15,14 +15,14 @@ npm install @our-org/nest-admin
 But the repository is split for development. The two are reconciled by
 bundling rather than by publishing five packages:
 
-| Package                                  | Published?           | Fate                              |
-| ---------------------------------------- | -------------------- | --------------------------------- |
-| `packages/nestjs` (`@nest-admin/nestjs`) | **yes**              | the tarball                       |
-| `packages/core`                          | no (`private: true`) | bundled into it                   |
-| `packages/prisma`                        | no (`private: true`) | bundled into it                   |
-| `packages/cli`                           | no (`private: true`) | bundled into it                   |
-| `packages/ui`                            | no (`private: true`) | bundled into `apps/admin-ui`      |
-| `apps/admin-ui`                          | no (`private: true`) | built to static assets, copied in |
+| Package                                  | Published?           | Fate                               |
+| ---------------------------------------- | -------------------- | ---------------------------------- |
+| `packages/nestjs` (`@nest-admin/nestjs`) | **yes**              | the tarball                        |
+| `packages/core`                          | no (`private: true`) | bundled into it                    |
+| `packages/prisma`                        | no (`private: true`) | bundled into it                    |
+| `packages/cli`                           | no (`private: true`) | bundled into it                    |
+| `packages/drizzle`                       | no (`private: true`) | bundled into the published package |
+| `packages/admin-ui`                      | no (`private: true`) | built to static assets, copied in  |
 
 The mechanism is tsup `noExternal`: see
 `packages/nestjs/tsup.config.ts`, which bundles `@nest-admin/core` and
