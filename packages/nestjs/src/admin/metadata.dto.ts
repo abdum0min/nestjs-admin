@@ -18,6 +18,7 @@
 import {
   detachBlockedReason,
   displayFieldFor,
+  type ModelIcon,
   fieldOverride,
   isReadOnly,
   inverseRelationField,
@@ -186,6 +187,15 @@ export interface ModelDto {
 
   /** What to call the model. Absent unless the application said so. */
   readonly label?: string
+
+  /**
+   * Which icon to draw beside it in the navigation.
+   *
+   * One of a closed set the interface knows how to render - see `ModelIcon` in
+   * Core. Absent unless the application named one, and absent is a real answer:
+   * the same icon repeated down a column is decoration.
+   */
+  readonly icon?: ModelIcon
 }
 
 export interface MetadataDto {
@@ -318,6 +328,7 @@ export function toMetadataDto(
       ...(overrides?.[model.name]?.label !== undefined
         ? { label: overrides[model.name]?.label }
         : {}),
+      ...(overrides?.[model.name]?.icon !== undefined ? { icon: overrides[model.name]?.icon } : {}),
       fields: byOrder(
         model.fields.filter((field) => !field.relation || present.has(field.relation.targetModel)),
         (field) => fieldOverride(overrides, model.name, field.name)?.order,

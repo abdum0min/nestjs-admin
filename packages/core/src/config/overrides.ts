@@ -55,9 +55,65 @@ export interface FieldOverride {
   readonly order?: number
 }
 
+/**
+ * Icons a model may be given in the navigation.
+ *
+ * A closed list, for the same reason `FieldWidget` is one: the interface has to
+ * know how to draw each name, so an open string would mean silently rendering
+ * nothing and no way to notice. It is also a bundle decision - the icon set has
+ * about fifteen hundred entries, and only the ones named here are shipped.
+ *
+ * Chosen to cover what an admin's resources usually are rather than to be
+ * complete. A model with no icon is drawn without one, which is the default and
+ * is not a lesser state: identical icons down a column are decoration, and the
+ * navigation reads better with none than with thirty of the same shape.
+ */
+export type ModelIcon =
+  | 'users'
+  | 'user'
+  | 'building'
+  | 'box'
+  | 'package'
+  | 'tag'
+  | 'shopping-cart'
+  | 'credit-card'
+  | 'receipt'
+  | 'file-text'
+  | 'folder'
+  | 'image'
+  | 'calendar'
+  | 'clock'
+  | 'mail'
+  | 'message-square'
+  | 'bell'
+  | 'star'
+  | 'map-pin'
+  | 'globe'
+  | 'settings'
+  | 'key'
+  | 'shield'
+  | 'database'
+  | 'table'
+  | 'layers'
+  | 'list'
+  | 'chart-bar'
+  | 'activity'
+  | 'truck'
+  | 'gift'
+  | 'bookmark'
+  | 'link'
+
 export interface ModelOverride {
   /** What to call the model. */
   readonly label?: string
+
+  /**
+   * Which icon to show beside it in the navigation.
+   *
+   * Presentational: the client may ignore it, and nothing depends on it being
+   * honoured. See {@link ModelIcon} for why the list is closed.
+   */
+  readonly icon?: ModelIcon
 
   /**
    * Which field names a record, overriding what would be detected.

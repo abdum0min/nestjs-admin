@@ -77,6 +77,48 @@ export interface FieldDescriptor {
   readonly relation?: RelationDescriptor
 }
 
+/**
+ * Icons a model may be given in the navigation.
+ *
+ * A closed list, mirroring `ModelIcon` in the server's metadata. Closed for two
+ * reasons: the interface has to know how to draw each name, and only the names
+ * here are bundled - the icon set has about fifteen hundred entries.
+ */
+export type ModelIcon =
+  | 'users'
+  | 'user'
+  | 'building'
+  | 'box'
+  | 'package'
+  | 'tag'
+  | 'shopping-cart'
+  | 'credit-card'
+  | 'receipt'
+  | 'file-text'
+  | 'folder'
+  | 'image'
+  | 'calendar'
+  | 'clock'
+  | 'mail'
+  | 'message-square'
+  | 'bell'
+  | 'star'
+  | 'map-pin'
+  | 'globe'
+  | 'settings'
+  | 'key'
+  | 'shield'
+  | 'database'
+  | 'table'
+  | 'layers'
+  | 'list'
+  | 'chart-bar'
+  | 'activity'
+  | 'truck'
+  | 'gift'
+  | 'bookmark'
+  | 'link'
+
 export interface ModelDescriptor {
   readonly name: string
   readonly primaryKey: readonly string[]
@@ -85,6 +127,8 @@ export interface ModelDescriptor {
   readonly displayField: string
   /** What to call the model. */
   readonly label?: string
+  /** Which icon to draw beside it in the navigation, if the application chose one. */
+  readonly icon?: ModelIcon
   /**
    * What this principal may do. Not the enforcement - every request is checked
    * again - but what the interface should offer.

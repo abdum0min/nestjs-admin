@@ -16,6 +16,7 @@ export type {
   RelationMetadata,
 } from './metadata/model.js'
 
+export type { ModelIcon } from './config/overrides.js'
 export { displayFieldFor } from './metadata/display-field.js'
 
 export type { RelationShape } from './metadata/relation-shape.js'
