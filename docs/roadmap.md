@@ -205,6 +205,18 @@ not to make people do — refused since 0.6.0 and still refused.
 configuration; a declared widget appears without a UI change; a widget the
 policy denies is absent from the document, not merely hidden.
 
+**As shipped** (see [reports/020-dashboard.md](../reports/020-dashboard.md)),
+with two deviations from the plan above:
+
+- The kinds are `count`, `list`, `chart`, `stat` — `table` was dropped. A table
+  on a dashboard is a list screen with fewer features and a worse place to put
+  it; `list` covers the case that was actually wanted.
+- `range` is `buckets`, because it is a count of buckets rather than a span of
+  days, and the two only coincide when `bucket` is `'day'`.
+
+The plan's stronger reading of authorization is what was built: a denied
+widget's model is never queried, not merely omitted from the response.
+
 ---
 
 ### 0.11.0 — Customisation

@@ -13,6 +13,79 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.10.0
+
+A landing page that answers a question, and a table that shows as many rows as
+you want it to.
+
+### Added
+
+- **A dashboard.** `GET /admin/dashboard` returns a document of widgets and the
+  interface draws four shapes from it. An admin that declares nothing still
+  gets one, built from the schema:
+
+  ```ts
+  AdminModule.forRoot({
+    adapter,
+    auth,
+    dashboard: [
+      { kind: 'count', title: 'Customers', model: 'User', compareDays: 30 },
+      { kind: 'count', title: 'Awaiting payment', model: 'Order', filter: 'status:eq:PENDING' },
+      { kind: 'chart', title: 'New customers', model: 'User', bucket: 'day', buckets: 30 },
+      { kind: 'list', title: 'Latest orders', model: 'Order', limit: 6 },
+      { kind: 'stat', title: 'Revenue', load: async () => ({ value: '$12,400' }) },
+    ],
+  })
+  ```
+
+  `count`, `list` and `chart` name a model and a filter, and the server does the
+  work — which is also what makes them _authorizable_: a widget over a resource
+  the reader cannot list is absent from the document, never merely hidden by the
+  interface, and its model is never queried. `stat` is the escape hatch; it runs
+  application code, so the application's own rules apply to it.
+
+  A widget that fails is one widget that says it could not load. The rest of the
+  page still answers.
+
+- **`AdminDashboard`, `DashboardWidget`** and the four widget types are exported
+  from `@nest-admin/nestjs`.
+
+- **A rows-per-page control.** Every table now offers 10, 25, 50 or 100 rows.
+  The choice is remembered per browser and applies across the admin — 25 was a
+  guess about a screen and a schema whoever picked it had never seen.
+
+- **A dashboard entry in the sidebar**, above the resources, so the landing page
+  is reachable from anywhere rather than only by clearing the URL.
+
+### Changed
+
+- **The landing page is the dashboard.** It used to say "Select a resource to
+  begin", which is an instruction rather than an answer.
+
+- **A declared filter is parsed by the same code a URL filter is.** `filter:
+'active:eq:true'` on a widget means the boolean `true`, exactly as
+  `?filter=active:eq:true` on the list screen does. A second parser would have
+  drifted, and its drift would have been silent: a filter that coerces wrongly
+  returns no rows rather than an error.
+
+- **Numbers are formatted in the viewer's locale**, read from
+  `navigator.language` rather than from whatever locale the runtime defaults to.
+
+### Notes
+
+- A dashboard has no `OrmAdapter` changes behind it. Counts read the page total
+  the adapter already returns, and a chart is one count per bucket run
+  concurrently — thirty parallel counts against an indexed column, rather than a
+  `groupBy` on a contract that is about to be frozen at 1.0.
+
+- The generated dashboard needs to know when a record was created, and no
+  metadata says so: Prisma reports `@default(now())` and `@updatedAt`
+  identically. It reads field names, and refuses to guess where the convention
+  is not followed — a model with no recognisable creation timestamp gets a count
+  and nothing else, rather than a chart of the wrong column.
+
+---
+
 ## 0.9.0
 
 A login, shipped in the box — without moving the boundary that kept

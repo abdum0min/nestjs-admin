@@ -1,6 +1,6 @@
 {
   "name": "@nest-admin/prisma",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "description": "Prisma adapter for Nest Admin. Implements the Core OrmAdapter contract.",
   "license": "MIT",
