@@ -6,7 +6,7 @@
  * sends that record's label alongside the key. A to-many gets its own
  * paginated section below the fields.
  */
-import { ArrowLeft, Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { deleteRecord, fetchRecord } from '../api/client.js'
@@ -18,7 +18,8 @@ import { formatDetail } from '../metadata/format.js'
 import { relationLink } from '../metadata/relations.js'
 import { Actions } from './Actions.jsx'
 import { RelatedList } from './RelatedList.jsx'
-import { ErrorState, Loading } from './States.jsx'
+import { ErrorState, FormSkeleton } from './States.jsx'
+import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Button } from './ui/button.jsx'
 import { Card, CardContent } from './ui/card.jsx'
 import { useConfirm } from './ui/confirm.jsx'
@@ -56,7 +57,15 @@ export function RecordView({
     }
   }
 
-  if (state.loading) return <Loading label="Loading record…" />
+  if (state.loading) {
+    return (
+      <Card>
+        <CardContent className="pt-5">
+          <FormSkeleton fields={Math.min(model.fields.length, 8)} />
+        </CardContent>
+      </Card>
+    )
+  }
   if (state.error !== undefined) return <ErrorState error={state.error} onRetry={state.reload} />
   if (!state.data) return null
 
@@ -66,15 +75,16 @@ export function RecordView({
 
   return (
     <section className="flex flex-col gap-4">
+      <Breadcrumb
+        trail={[
+          { label: 'Home', href: '#/' },
+          { label: modelLabel(model), href: href({ kind: 'list', model: model.name }) },
+          { label: named },
+        ]}
+      />
+
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <a
-            className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm transition-colors"
-            href={href({ kind: 'list', model: model.name })}
-          >
-            <ArrowLeft className="size-4" />
-            {modelLabel(model)}
-          </a>
           <h1 className="truncate text-2xl font-semibold tracking-tight">{named}</h1>
           <p className="text-muted-foreground font-mono text-xs">{id}</p>
         </div>

@@ -25,7 +25,6 @@
  * gets the banner. It has to: the alternative is a submission that appears to
  * do nothing.
  */
-import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
 
 import { AdminApiError, createRecord, fetchRecord, updateRecord } from '../api/client.js'
@@ -41,13 +40,16 @@ import {
   toRequestValue,
 } from '../metadata/fields.js'
 import { relationForForeignKey } from '../metadata/relations.js'
+import { cn } from '../lib/utils.js'
 import { RelationPicker } from './RelationPicker.jsx'
-import { ErrorState, Loading } from './States.jsx'
+import { ErrorState, FormSkeleton } from './States.jsx'
+import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Button } from './ui/button.jsx'
 import { Card, CardContent } from './ui/card.jsx'
 import { Checkbox } from './ui/checkbox.jsx'
+import { DatePicker } from './ui/date-picker.jsx'
 import { Input } from './ui/input.jsx'
-import { Select } from './ui/select.jsx'
+import { SimpleSelect } from './ui/select.jsx'
 import { Textarea } from './ui/textarea.jsx'
 
 type FormValues = Record<string, string | boolean>
@@ -69,7 +71,15 @@ export function RecordForm({
     [model.name, id],
   )
 
-  if (existing.loading) return <Loading label="Loading record…" />
+  if (existing.loading) {
+    return (
+      <Card>
+        <CardContent className="pt-5">
+          <FormSkeleton fields={Math.min(editable.length || 5, 8)} />
+        </CardContent>
+      </Card>
+    )
+  }
   if (existing.error !== undefined) {
     return <ErrorState error={existing.error} onRetry={existing.reload} />
   }
@@ -176,15 +186,16 @@ function Form({
   }
 
   return (
-    <section className="flex max-w-2xl flex-col gap-4">
+    <section className="flex w-full flex-col gap-4">
+      <Breadcrumb
+        trail={[
+          { label: 'Home', href: '#/' },
+          { label: modelLabel(model), href: href({ kind: 'list', model: model.name }) },
+          { label: id === undefined ? 'Create new' : 'Edit' },
+        ]}
+      />
+
       <header className="flex flex-col gap-1">
-        <a
-          className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm transition-colors"
-          href={href({ kind: 'list', model: model.name })}
-        >
-          <ArrowLeft className="size-4" />
-          {modelLabel(model)}
-        </a>
         <h1 className="text-2xl font-semibold tracking-tight">
           {id === undefined ? `New ${modelLabel(model)}` : `Edit ${modelLabel(model)}`}
         </h1>
@@ -199,17 +210,28 @@ function Form({
               <p className="text-muted-foreground text-sm">This resource has no editable fields.</p>
             ) : null}
 
-            {editable.map((field) => (
-              <FieldInput
-                key={field.name}
-                field={field}
-                model={model}
-                models={models}
-                value={values[field.name] ?? ''}
-                error={messageFor(field.name)}
-                onChange={(next) => change(field.name, next)}
-              />
-            ))}
+            {/*
+             * Two columns once there is room for them.
+             *
+             * A form that stops at half the window leaves the other half empty,
+             * and one that runs the whole width gives a two-character number an
+             * input a thousand pixels wide. Pairing short fields uses the space
+             * and shortens the form; anything with a paragraph in it takes the
+             * full row, because a narrow textarea is worse than a wide one.
+             */}
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              {editable.map((field) => (
+                <FieldInput
+                  key={field.name}
+                  field={field}
+                  model={model}
+                  models={models}
+                  value={values[field.name] ?? ''}
+                  error={messageFor(field.name)}
+                  onChange={(next) => change(field.name, next)}
+                />
+              ))}
+            </div>
 
             <div className="flex items-center gap-2 border-t pt-4">
               <Button type="submit" disabled={submitting || editable.length === 0}>
@@ -275,8 +297,12 @@ function FieldInput({
   let control: React.ReactNode
   // A checkbox reads left of its label; everything else reads below it.
   let inline = false
+  // A field with a paragraph in it takes the whole row: a narrow textarea is
+  // worse than a wide one, and a relation picker needs room for its results.
+  let wide = false
 
   if (relationField && target) {
+    wide = true
     control = (
       <RelationPicker
         target={target}
@@ -288,21 +314,28 @@ function FieldInput({
     )
   } else if (field.kind === 'enum' && field.enumValues) {
     control = (
-      <Select
+      <SimpleSelect
+        {...described}
+        value={String(value)}
+        placeholder="Choose…"
+        options={field.enumValues.map((option) => ({ value: option, label: option }))}
+        onValueChange={onChange}
+      />
+    )
+  } else if (field.kind === 'datetime') {
+    // A calendar drawn by this design system rather than by the operating
+    // system, which draws its own in its own font and its own light palette.
+    // The value on the wire is unchanged - see date-picker.tsx.
+    control = (
+      <DatePicker
         {...described}
         value={String(value)}
         required={field.isRequired}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">—</option>
-        {field.enumValues.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </Select>
+        onChange={onChange}
+      />
     )
   } else if (field.widget === 'textarea' || field.widget === 'json') {
+    wide = true
     // A widget is the application saying what the column actually holds. The
     // schema cannot tell a sentence from a password from a colour.
     control = (
@@ -360,7 +393,10 @@ function FieldInput({
   return (
     <div
       data-slot="field"
-      className={inline ? 'flex flex-wrap items-center gap-2' : 'flex flex-col gap-1.5'}
+      className={cn(
+        inline ? 'flex flex-wrap items-center gap-2' : 'flex flex-col gap-1.5',
+        wide && 'lg:col-span-2',
+      )}
     >
       {inline ? control : text}
       {inline ? text : control}

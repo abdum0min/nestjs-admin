@@ -5,11 +5,12 @@
  * link all come from the model descriptor the server sent - there is no branch
  * anywhere on a model or field name.
  */
-import { ArrowUpDown, Plus, Trash2, X } from 'lucide-react'
+import { Eye, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { deleteRecords, listRecords } from '../api/client.js'
+import { deleteRecord, deleteRecords, listRecords, runAction } from '../api/client.js'
 import type {
+  ActionDescriptor,
   AdminRecord,
   BulkDeleteResult,
   FieldDescriptor,
@@ -31,12 +32,21 @@ import {
 import { formatCell } from '../metadata/format.js'
 import { relationForForeignKey, relationLink } from '../metadata/relations.js'
 import { Actions } from './Actions.jsx'
-import { Empty, ErrorState, Loading } from './States.jsx'
+import { Empty, ErrorState, TableSkeleton } from './States.jsx'
+import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Button } from './ui/button.jsx'
 import { Checkbox } from './ui/checkbox.jsx'
 import { useConfirm } from './ui/confirm.jsx'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu.jsx'
 import { Input } from './ui/input.jsx'
-import { Select } from './ui/select.jsx'
+import { Pagination } from './ui/pagination.jsx'
+import { NONE, SimpleSelect } from './ui/select.jsx'
 import {
   Table,
   TableBody,
@@ -209,16 +219,21 @@ export function ListView({
     }
   }
 
+  const total = state.data?.meta.total
+  const lastPage = Math.max(1, Math.ceil((total ?? 0) / PER_PAGE))
+
   return (
     <section className="flex flex-col gap-4">
+      <Breadcrumb trail={[{ label: 'Home', href: '#/' }, { label: modelLabel(model) }]} />
+
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-2xl font-semibold tracking-tight">{modelLabel(model)}</h1>
-          {state.data ? (
+          {total === undefined ? null : (
             <p className="text-muted-foreground text-sm tabular">
-              {state.data.meta.total} {state.data.meta.total === 1 ? 'record' : 'records'}
+              {total} {total === 1 ? 'record' : 'records'}
             </p>
-          ) : null}
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -235,10 +250,18 @@ export function ListView({
         </div>
       </header>
 
+      {/*
+       * One row, wrapping only when it has to.
+       *
+       * Search, sort and filter were on two rows regardless of how much space
+       * there was, so a wide screen showed a half-empty line above a lonely
+       * filter control. They are one flex row now: they sit together when they
+       * fit and wrap in the order they are read when they do not.
+       */}
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="search"
-          className="w-full sm:max-w-xs"
+          className="w-full min-w-48 sm:w-auto sm:flex-1 sm:max-w-sm"
           placeholder={`Search ${modelLabel(model)}…`}
           aria-label={`Search ${modelLabel(model)}`}
           value={searchInput}
@@ -253,17 +276,24 @@ export function ListView({
             setPage(1)
           }}
         />
-      </div>
 
-      <FilterControl
-        key={filterKey}
-        fields={filterable}
-        value={filter}
-        onChange={(next) => {
-          setFilter(next)
-          setPage(1)
-        }}
-      />
+        <FilterControl
+          key={filterKey}
+          fields={filterable}
+          value={filter}
+          onChange={(next) => {
+            setFilter(next)
+            setPage(1)
+          }}
+        />
+
+        {narrowed ? (
+          <Button variant="ghost" size="sm" onClick={clearView}>
+            <X />
+            Clear
+          </Button>
+        ) : null}
+      </div>
 
       {selectable && selected.size > 0 ? (
         <div
@@ -296,7 +326,10 @@ export function ListView({
           flash reads as a bug. `aria-busy` says the same thing to a reader
           that cannot see the dimming. */}
       {state.loading && state.data === undefined ? (
-        <Loading label={`Loading ${modelLabel(model)}…`} />
+        <TableSkeleton
+          columns={columns.length + (selectable ? 2 : 1)}
+          label={`Loading ${modelLabel(model)}…`}
+        />
       ) : null}
       {state.error !== undefined ? <ErrorState error={state.error} onRetry={state.reload} /> : null}
 
@@ -351,7 +384,9 @@ export function ListView({
                         {columnLabel(model, column)}
                       </TableHead>
                     ))}
-                    <TableHead scope="col" aria-label="Actions" />
+                    <TableHead scope="col">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -378,11 +413,14 @@ export function ListView({
                             <Cell model={model} models={models} column={column} record={record} />
                           </TableCell>
                         ))}
-                        <TableCell className="w-px text-right whitespace-nowrap">
+                        <TableCell className="w-px whitespace-nowrap">
                           {id === undefined ? null : (
-                            <Button variant="ghost" size="sm" asChild>
-                              <a href={href({ kind: 'detail', model: model.name, id })}>View</a>
-                            </Button>
+                            <RowActions
+                              model={model}
+                              id={id}
+                              label={rowLabel(model, record, id)}
+                              onDone={state.reload}
+                            />
                           )}
                         </TableCell>
                       </TableRow>
@@ -392,11 +430,156 @@ export function ListView({
               </Table>
             </TableWrap>
 
-            <Pagination meta={state.data.meta} onPage={setPage} />
+            <Pagination
+              page={state.data.meta.page}
+              lastPage={lastPage}
+              total={state.data.meta.total}
+              onPage={setPage}
+            />
           </>
         )
       ) : null}
     </section>
+  )
+}
+
+/**
+ * What can be done to one row.
+ *
+ * Opening a record to delete it is two navigations to reach a button that was
+ * always going to be pressed, so the row carries its own. But a row cannot
+ * carry *every* action: view, edit, delete and however many the application
+ * declared do not fit in a cell, and five icons in a line is worse than a menu
+ * even when they do.
+ *
+ * So the split is by frequency and by risk. View and Edit are one click,
+ * because they are what the row is usually for and neither is destructive.
+ * Everything else - delete, and anything the application added - is one click
+ * further, behind a menu. That is not only about space: a destructive control
+ * sitting under the cursor of a control people click all day is how records
+ * get deleted by muscle memory.
+ */
+function RowActions({
+  model,
+  id,
+  label,
+  onDone,
+}: {
+  readonly model: ModelDescriptor
+  readonly id: string
+  /** The record's name, so a confirmation can say which one. */
+  readonly label: string
+  readonly onDone: () => void
+}) {
+  const confirm = useConfirm()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(undefined)
+
+  const recordActions = (model.actions ?? []).filter((action) => action.scope === 'record')
+  const canEdit = model.can?.update !== false
+  const canDelete = model.can?.delete !== false
+  const hasMenu = canDelete || recordActions.length > 0
+
+  const remove = async (): Promise<void> => {
+    const agreed = await confirm({
+      title: `Delete ${label}?`,
+      description: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
+    if (!agreed) return
+
+    setBusy(true)
+    setError(undefined)
+    try {
+      await deleteRecord(model.name, id)
+      onDone()
+    } catch (cause) {
+      setError(cause)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const run = async (action: ActionDescriptor): Promise<void> => {
+    if (action.confirm !== undefined) {
+      const agreed = await confirm({
+        title: action.confirm,
+        confirmLabel: action.label,
+        destructive: action.danger === true,
+      })
+      if (!agreed) return
+    }
+
+    setBusy(true)
+    setError(undefined)
+    try {
+      await runAction(model.name, action.name, id)
+      onDone()
+    } catch (cause) {
+      setError(cause)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-0.5">
+      {error === undefined ? null : (
+        // A row has no room for an explanation, and a failure that says nothing
+        // is worse than one that says where to look.
+        <span className="text-destructive mr-1 text-xs" role="alert">
+          Failed
+        </span>
+      )}
+
+      <Button variant="ghost" size="icon-sm" aria-label={`View ${label}`} asChild>
+        <a href={href({ kind: 'detail', model: model.name, id })}>
+          <Eye />
+        </a>
+      </Button>
+
+      {canEdit ? (
+        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${label}`} asChild>
+          <a href={href({ kind: 'edit', model: model.name, id })}>
+            <Pencil />
+          </a>
+        </Button>
+      ) : null}
+
+      {hasMenu ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={busy}
+              aria-label={`More actions for ${label}`}
+            >
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {recordActions.map((action) => (
+              <DropdownMenuItem
+                key={action.name}
+                variant={action.danger === true ? 'destructive' : 'default'}
+                onSelect={() => void run(action)}
+              >
+                {action.label}
+              </DropdownMenuItem>
+            ))}
+            {recordActions.length > 0 && canDelete ? <DropdownMenuSeparator /> : null}
+            {canDelete ? (
+              <DropdownMenuItem variant="destructive" onSelect={() => void remove()}>
+                <Trash2 />
+                Delete
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
   )
 }
 
@@ -504,31 +687,30 @@ function SortControl({
   if (fields.length === 0) return null
 
   return (
-    <div className="flex items-center gap-2">
-      <ArrowUpDown className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
-      <Select
-        className="w-48"
-        aria-label="Sort by"
-        value={value ? `${value.field}:${value.direction}` : ''}
-        onChange={(event) => {
-          const raw = event.target.value
-          if (raw === '') return onChange(undefined)
-          const separator = raw.lastIndexOf(':')
-          onChange({
-            field: raw.slice(0, separator),
-            direction: raw.slice(separator + 1) === 'desc' ? 'desc' : 'asc',
-          })
-        }}
-      >
-        <option value="">Default order</option>
-        {fields.map((field) => (
-          <optgroup key={field.name} label={field.name}>
-            <option value={`${field.name}:asc`}>{field.name} ascending</option>
-            <option value={`${field.name}:desc`}>{field.name} descending</option>
-          </optgroup>
-        ))}
-      </Select>
-    </div>
+    <SimpleSelect
+      className="w-auto min-w-44"
+      aria-label="Sort by"
+      placeholder="Default order"
+      value={value ? `${value.field}:${value.direction}` : ''}
+      options={[
+        { value: NONE, label: 'Default order' },
+        ...fields.map((field) => ({
+          group: field.name,
+          items: [
+            { value: `${field.name}:asc`, label: `${field.name} ascending` },
+            { value: `${field.name}:desc`, label: `${field.name} descending` },
+          ],
+        })),
+      ]}
+      onValueChange={(raw) => {
+        if (raw === NONE) return onChange(undefined)
+        const separator = raw.lastIndexOf(':')
+        onChange({
+          field: raw.slice(0, separator),
+          direction: raw.slice(separator + 1) === 'desc' ? 'desc' : 'asc',
+        })
+      }}
+    />
   )
 }
 
@@ -570,65 +752,52 @@ function FilterControl({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Select
-        className="w-40"
+      <SimpleSelect
+        className="w-auto min-w-40"
         aria-label="Filter field"
+        placeholder="Filter by…"
         value={field}
-        onChange={(event) => {
-          const next = event.target.value
-          setField(next)
+        options={[
+          { value: NONE, label: 'No filter' },
+          ...fields.map((candidate) => ({ value: candidate.name, label: candidate.name })),
+        ]}
+        onValueChange={(next) => {
+          setField(next === NONE ? '' : next)
           setOperator('')
           setText('')
           onChange(undefined)
         }}
-      >
-        <option value="">Filter by…</option>
-        {fields.map((candidate) => (
-          <option key={candidate.name} value={candidate.name}>
-            {candidate.name}
-          </option>
-        ))}
-      </Select>
+      />
 
       {selected ? (
         <>
-          <Select
-            className="w-36"
+          <SimpleSelect
+            className="w-auto min-w-32"
             aria-label="Filter operator"
+            placeholder="Operator"
             value={operator}
-            onChange={(event) => {
-              setOperator(event.target.value)
-              apply(field, event.target.value, text)
+            options={operators.map((candidate) => ({ value: candidate, label: candidate }))}
+            onValueChange={(next) => {
+              setOperator(next)
+              apply(field, next, text)
             }}
-          >
-            <option value="">Operator</option>
-            {operators.map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {candidate}
-              </option>
-            ))}
-          </Select>
+          />
 
           {selected.kind === 'enum' && selected.enumValues && operator !== 'in' ? (
-            <Select
-              className="w-40"
+            <SimpleSelect
+              className="w-auto min-w-32"
               aria-label="Filter value"
+              placeholder="Value"
               value={text}
-              onChange={(event) => {
-                setText(event.target.value)
-                apply(field, operator, event.target.value)
+              options={selected.enumValues.map((option) => ({ value: option, label: option }))}
+              onValueChange={(next) => {
+                setText(next)
+                apply(field, operator, next)
               }}
-            >
-              <option value="">Value</option>
-              {selected.enumValues.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </Select>
+            />
           ) : (
             <Input
-              className="w-40"
+              className="w-36"
               aria-label="Filter value"
               type={selected.kind === 'number' ? 'number' : 'text'}
               placeholder={operator === 'in' ? 'comma,separated' : 'value'}
@@ -639,61 +808,9 @@ function FilterControl({
               }}
             />
           )}
-
-          {value ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setField('')
-                setOperator('')
-                setText('')
-                onChange(undefined)
-              }}
-            >
-              <X />
-              Clear
-            </Button>
-          ) : null}
         </>
       ) : null}
     </div>
-  )
-}
-
-function Pagination({
-  meta,
-  onPage,
-}: {
-  readonly meta: { readonly total: number; readonly page: number; readonly perPage: number }
-  readonly onPage: (page: number) => void
-}) {
-  const lastPage = Math.max(1, Math.ceil(meta.total / Math.max(1, meta.perPage)))
-
-  return (
-    <nav className="flex items-center justify-between gap-3" aria-label="Pagination">
-      <p className="text-muted-foreground text-sm tabular">
-        Page {meta.page} of {lastPage} · {meta.total} total
-      </p>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={meta.page <= 1}
-          onClick={() => onPage(meta.page - 1)}
-        >
-          Previous
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={meta.page >= lastPage}
-          onClick={() => onPage(meta.page + 1)}
-        >
-          Next
-        </Button>
-      </div>
-    </nav>
   )
 }
 

@@ -26,9 +26,10 @@ import { href } from '../hooks/use-route.js'
 import { fieldLabel, listColumns, modelLabel, recordId } from '../metadata/fields.js'
 import { formatCell } from '../metadata/format.js'
 import { RelationPicker } from './RelationPicker.jsx'
-import { ErrorState, Loading } from './States.jsx'
+import { ErrorState, TableSkeleton } from './States.jsx'
 import { Badge } from './ui/badge.jsx'
 import { Button } from './ui/button.jsx'
+import { Pagination } from './ui/pagination.jsx'
 import {
   Table,
   TableBody,
@@ -111,7 +112,11 @@ export function RelatedList({
       {error !== undefined ? <ErrorState error={error} /> : null}
 
       {state.loading && state.data === undefined ? (
-        <Loading label={`Loading ${fieldLabel(field)}…`} />
+        <TableSkeleton
+          columns={columns.length + 1}
+          rows={3}
+          label={`Loading ${fieldLabel(field)}…`}
+        />
       ) : state.error !== undefined ? (
         <ErrorState error={state.error} onRetry={state.reload} />
       ) : total === 0 ? (
@@ -169,29 +174,7 @@ export function RelatedList({
         </TableWrap>
       )}
 
-      {pages > 1 ? (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            Previous
-          </Button>
-          <span className="text-muted-foreground text-sm tabular">
-            Page {page} of {pages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= pages}
-            onClick={() => setPage(page + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      ) : null}
+      {pages > 1 ? <Pagination page={page} lastPage={pages} onPage={setPage} /> : null}
 
       {parent.can?.update === false ? null : (
         <Attach

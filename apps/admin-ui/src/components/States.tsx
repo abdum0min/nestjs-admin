@@ -16,15 +16,84 @@ import type { AdminErrorCode } from '../api/types.js'
 import { Button } from './ui/button.jsx'
 import { Skeleton } from './ui/skeleton.jsx'
 
+/**
+ * Waiting, in the shape of what is coming.
+ *
+ * A spinner says "something is happening" and nothing else. A skeleton says how
+ * much is arriving and where it will be, so the page does not jump when it
+ * lands - and jumping is what makes an interface feel unreliable even when it
+ * is fast.
+ *
+ * `role="status"` with the label in `sr-only` gives the same information to
+ * someone who cannot see any of it.
+ */
 export function Loading({ label = 'Loading…' }: { readonly label?: string }) {
   return (
     <div data-slot="loading" className="flex flex-col gap-3" role="status">
-      {/* The shape of what is coming, rather than a spinner: it says how much
-          is arriving and keeps the layout from jumping when it does. */}
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-10 w-full" />
       <Skeleton className="h-64 w-full" />
       <span className="sr-only">{label}</span>
+    </div>
+  )
+}
+
+/**
+ * A table that has not arrived.
+ *
+ * Drawn as a table rather than as three grey bars: the column count is known
+ * before the rows are, so the header can be the right width and the rows the
+ * right height. When the data lands, nothing moves.
+ */
+export function TableSkeleton({
+  columns,
+  rows = 8,
+  label = 'Loading…',
+}: {
+  readonly columns: number
+  readonly rows?: number
+  readonly label?: string
+}) {
+  return (
+    <div
+      data-slot="table-skeleton"
+      role="status"
+      className="bg-card w-full overflow-hidden rounded-xl border shadow-xs"
+    >
+      <div className="flex items-center gap-4 border-b px-3 py-2.5">
+        {Array.from({ length: columns }, (_, index) => (
+          <Skeleton key={index} className="h-3 flex-1" />
+        ))}
+      </div>
+      {Array.from({ length: rows }, (_, row) => (
+        <div key={row} className="flex items-center gap-4 border-b px-3 py-3 last:border-0">
+          {Array.from({ length: columns }, (_, index) => (
+            <Skeleton
+              key={index}
+              className="h-4 flex-1"
+              // Varied widths, so it reads as content rather than as a grid.
+              // Deterministic, so it does not shimmer differently on re-render.
+              style={{ maxWidth: `${60 + ((row * 7 + index * 23) % 40)}%` }}
+            />
+          ))}
+        </div>
+      ))}
+      <span className="sr-only">{label}</span>
+    </div>
+  )
+}
+
+/** A form that has not arrived. Label, field, label, field. */
+export function FormSkeleton({ fields = 5 }: { readonly fields?: number }) {
+  return (
+    <div data-slot="form-skeleton" role="status" className="flex flex-col gap-5">
+      {Array.from({ length: fields }, (_, index) => (
+        <div key={index} className="flex flex-col gap-1.5">
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ))}
+      <span className="sr-only">Loading…</span>
     </div>
   )
 }
