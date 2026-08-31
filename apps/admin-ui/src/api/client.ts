@@ -13,6 +13,7 @@
 import { buildQueryString } from './query.js'
 import type {
   AdminErrorCode,
+  AdminSession,
   BulkDeleteResult,
   AdminRecord,
   ErrorEnvelope,
@@ -121,6 +122,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<SuccessEnve
   }
 
   if (!payload.success) {
+    // Announced before it is thrown, so the shell can react while the caller
+    // still gets an error it can render if it wants to.
+    if (payload.error.code === 'UNAUTHORIZED') {
+      for (const listener of listeners) listener()
+    }
+
     throw new AdminApiError(
       payload.error.code,
       payload.error.message,
@@ -130,6 +137,64 @@ async function request<T>(path: string, init?: RequestInit): Promise<SuccessEnve
   }
 
   return payload as SuccessEnvelope<T>
+}
+
+/**
+ * Whoever is signed in, when the admin has a login of its own.
+ *
+ * Three answers, and they are three different situations rather than degrees
+ * of failure:
+ *
+ *   `{ account }`   signed in
+ *   `{ account: null }`  the admin has a login and nobody is using it
+ *   `undefined`     this admin has no login routes, because the application
+ *                   supplied its own `AdminAuth`
+ *
+ * The third is a 404 and is not an error. An application with its own identity
+ * system should not see a sign-in screen from a package it asked to stay out of
+ * authentication.
+ */
+export async function fetchSession(): Promise<AdminSession | undefined> {
+  try {
+    const { data } = await request<AdminSession>('/auth/session')
+    return data
+  } catch (cause) {
+    if (cause instanceof AdminApiError && cause.status === 404) return undefined
+    throw cause
+  }
+}
+
+/** `POST /admin/auth/login`. Throws `UNAUTHORIZED` when the details do not match. */
+export async function signIn(email: string, password: string): Promise<AdminSession> {
+  const { data } = await request<AdminSession>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+  return data
+}
+
+/** `POST /admin/auth/logout`. */
+export async function signOut(): Promise<void> {
+  await request<AdminSession>('/auth/logout', { method: 'POST' })
+}
+
+/**
+ * Told when a request comes back unauthenticated.
+ *
+ * A session can expire while the admin is open, and the screen that finds out
+ * is whichever one happened to make a request - a table, a related list, an
+ * action. Each of them showing "not signed in" in its own corner is worse than
+ * useless: the person is signed out, and the page is still pretending to be an
+ * admin.
+ *
+ * So the client says so once, centrally, and the shell decides what to do
+ * about it. Not an error class, because it is not the requester's problem.
+ */
+const listeners = new Set<() => void>()
+
+export function onUnauthorized(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 /** `GET /admin/meta` - the document every screen renders from. */

@@ -218,3 +218,15 @@ export interface ListResult {
   readonly records: readonly AdminRecord[]
   readonly meta: PageMeta
 }
+
+/** Who is signed in, when the admin has a login of its own. */
+export interface AdminAccountSummary {
+  readonly id: string
+  readonly email: string
+  readonly name?: string
+}
+
+export interface AdminSession {
+  /** `null` when nobody is signed in - which is a state, not a failure. */
+  readonly account: AdminAccountSummary | null
+}

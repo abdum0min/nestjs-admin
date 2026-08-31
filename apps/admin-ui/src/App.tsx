@@ -9,14 +9,16 @@
 import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { fetchMetadata } from './api/client.js'
-import type { ModelDescriptor } from './api/types.js'
+import { fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
+import type { AdminAccountSummary, ModelDescriptor } from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
 import { ListView } from './components/ListView.jsx'
+import { LoginPage } from './components/LoginPage.jsx'
 import { RecordForm } from './components/RecordForm.jsx'
 import { RecordView } from './components/RecordView.jsx'
 import { Empty, ErrorState, Loading } from './components/States.jsx'
 import { ThemeToggle } from './components/ThemeToggle.jsx'
+import { UserMenu } from './components/UserMenu.jsx'
 import { Button } from './components/ui/button.jsx'
 import { ConfirmProvider } from './components/ui/confirm.jsx'
 import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog.jsx'
@@ -27,15 +29,87 @@ import { modelLabel } from './metadata/fields.js'
 import { modelIcon } from './metadata/icons.jsx'
 import { theme } from './metadata/theme.js'
 
+/**
+ * The gate in front of everything.
+ *
+ * Three situations, not two, and collapsing them is how an application that
+ * brought its own authentication ends up being shown a sign-in form from a
+ * package it asked to stay out of authentication:
+ *
+ *   'external'  the admin has no login routes - the host handles identity, and
+ *               a 401 from any request is the host's business to explain
+ *   'signed-in' the built-in login, with somebody signed in
+ *   'signed-out' the built-in login, with nobody signed in
+ *
+ * The session is read once at start-up. After that the only thing that changes
+ * it is signing in, signing out, or a request coming back unauthenticated -
+ * which the client announces centrally, because otherwise whichever screen
+ * happened to be making a request shows "not signed in" in its own corner while
+ * the rest of the page carries on pretending to be an admin.
+ */
 export function App() {
   const route = useRoute()
+  const session = useAsync(() => fetchSession(), [])
+  const [account, setAccount] = useState<AdminAccountSummary | null | undefined>(undefined)
+
+  /*
+   * "No session document" is an answer, not the absence of one.
+   *
+   * `fetchSession` turns the 404 from an admin with no login routes into
+   * `undefined`, so `data` being undefined once the request has settled is how
+   * the external case is recognised. Treating it as "not known yet" left the
+   * interface on its loading screen forever for every application that brought
+   * its own authentication - which is most of them.
+   */
+  const current = account !== undefined ? account : (session.data?.account ?? null)
+  const external = !session.loading && session.data === undefined
+
+  useEffect(() => onUnauthorized(() => setAccount(null)), [])
+
+  if (session.loading) {
+    return (
+      <div className="bg-background flex min-h-svh items-center justify-center">
+        <Loading label="Loading…" />
+      </div>
+    )
+  }
+
+  // A login the admin owns, with nobody signed in. Nothing below this line
+  // renders, which is what "protected" means here - not a redirect that a
+  // determined URL can skip past.
+  if (!external && current === null) {
+    return <LoginPage onSignedIn={setAccount} />
+  }
+
+  return (
+    <Admin
+      route={route}
+      account={external ? undefined : (current ?? undefined)}
+      onSignedOut={() => setAccount(null)}
+    />
+  )
+}
+
+function Admin({
+  route,
+  account,
+  onSignedOut,
+}: {
+  readonly route: ReturnType<typeof useRoute>
+  readonly account: AdminAccountSummary | undefined
+  readonly onSignedOut: () => void
+}) {
   const metadata = useAsync(() => fetchMetadata(), [])
 
-  if (metadata.loading) return <Shell>{<Loading label="Loading resources…" />}</Shell>
+  const shellProps = { account, onSignedOut }
+
+  if (metadata.loading) {
+    return <Shell {...shellProps}>{<Loading label="Loading resources…" />}</Shell>
+  }
 
   if (metadata.error !== undefined) {
     return (
-      <Shell>
+      <Shell {...shellProps}>
         <ErrorState error={metadata.error} onRetry={metadata.reload} />
       </Shell>
     )
@@ -48,7 +122,7 @@ export function App() {
   // it as an error would misreport a working system.
   if (models.length === 0) {
     return (
-      <Shell>
+      <Shell {...shellProps}>
         <Empty>
           <p>No accessible resources.</p>
         </Empty>
@@ -59,7 +133,7 @@ export function App() {
   const active = route.kind === 'home' ? undefined : models.find((m) => m.name === route.model)
 
   return (
-    <Shell models={models} activeModel={active?.name}>
+    <Shell models={models} activeModel={active?.name} {...shellProps}>
       {route.kind === 'home' ? (
         <Empty>
           <p>Select a resource to begin.</p>
@@ -115,10 +189,15 @@ const SIDEBAR_KEY = 'nest-admin.sidebar'
 function Shell({
   models = [],
   activeModel,
+  account,
+  onSignedOut,
   children,
 }: {
   readonly models?: readonly ModelDescriptor[]
   readonly activeModel?: string
+  /** Absent when the application brought its own authentication. */
+  readonly account?: AdminAccountSummary | undefined
+  readonly onSignedOut?: () => void
   readonly children: React.ReactNode
 }) {
   const palette = useCommandPalette()
@@ -213,6 +292,12 @@ function Shell({
               <span className="hidden sm:inline">Search resources</span>
             </Button>
             <ThemeToggle />
+            {/* Only when the admin owns the login. An application signing
+                people out through its own interface should not be offered a
+                button here that cannot do it. */}
+            {account && onSignedOut ? (
+              <UserMenu account={account} onSignedOut={onSignedOut} />
+            ) : null}
           </div>
         </header>
 
