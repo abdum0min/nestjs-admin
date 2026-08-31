@@ -16,8 +16,10 @@
  */
 import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
 
+import { PER_PAGE_OPTIONS } from '../../hooks/use-per-page.js'
 import { cn } from '../../lib/utils.js'
 import { Button } from './button.jsx'
+import { SimpleSelect } from './select.jsx'
 
 /** A page number, or a run of pages that was elided. */
 type Slot = number | 'gap'
@@ -65,14 +67,19 @@ export function Pagination({
   page,
   lastPage,
   total,
+  perPage,
   onPage,
+  onPerPage,
   className,
 }: {
   readonly page: number
   readonly lastPage: number
   /** Shown alongside, because "page 3 of 40" and "982 records" answer different questions. */
   readonly total?: number
+  /** Current page size. Omit to hide the control - a nested list has no room. */
+  readonly perPage?: number
   readonly onPage: (page: number) => void
+  readonly onPerPage?: (perPage: number) => void
   readonly className?: string
 }) {
   const slots = pageSlots(page, lastPage)
@@ -83,13 +90,32 @@ export function Pagination({
       className={cn('flex flex-wrap items-center justify-between gap-3', className)}
       aria-label="Pagination"
     >
-      {total === undefined ? (
-        <span />
-      ) : (
-        <p className="text-muted-foreground text-sm tabular">
-          {total} {total === 1 ? 'record' : 'records'}
-        </p>
-      )}
+      <div className="text-muted-foreground flex items-center gap-3 text-sm">
+        {total === undefined ? null : (
+          <p className="tabular">
+            {total} {total === 1 ? 'record' : 'records'}
+          </p>
+        )}
+
+        {/* Beside the pager rather than in the toolbar above: it is about how
+            this page is cut up, which is the question the pager answers. */}
+        {perPage !== undefined && onPerPage !== undefined ? (
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline">Rows</span>
+            <SimpleSelect
+              className="h-8 w-20"
+              aria-label="Rows per page"
+              placeholder={String(perPage)}
+              value={String(perPage)}
+              options={PER_PAGE_OPTIONS.map((size) => ({
+                value: String(size),
+                label: String(size),
+              }))}
+              onValueChange={(next) => onPerPage(Number(next))}
+            />
+          </div>
+        ) : null}
+      </div>
 
       <div className="flex items-center gap-1">
         <Button

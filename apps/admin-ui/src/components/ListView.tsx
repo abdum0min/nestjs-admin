@@ -19,6 +19,7 @@ import type {
   SortRule,
 } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
+import { usePerPage } from '../hooks/use-per-page.js'
 import { href, navigate } from '../hooks/use-route.js'
 import {
   fieldLabel,
@@ -57,8 +58,6 @@ import {
   TableWrap,
 } from './ui/table.jsx'
 
-const PER_PAGE = 25
-
 export function ListView({
   model,
   models,
@@ -77,6 +76,7 @@ export function ListView({
   const confirm = useConfirm()
 
   const [page, setPage] = useState(1)
+  const { perPage, setPerPage } = usePerPage()
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortRule | undefined>(undefined)
@@ -155,7 +155,7 @@ export function ListView({
     () =>
       listRecords(model.name, {
         page,
-        perPage: PER_PAGE,
+        perPage,
         ...(search ? { search } : {}),
         ...(sort ? { sort: [sort] } : {}),
         ...(filter ? { filters: [filter] } : {}),
@@ -163,6 +163,7 @@ export function ListView({
     [
       model.name,
       page,
+      perPage,
       search,
       sort?.field,
       sort?.direction,
@@ -220,7 +221,7 @@ export function ListView({
   }
 
   const total = state.data?.meta.total
-  const lastPage = Math.max(1, Math.ceil((total ?? 0) / PER_PAGE))
+  const lastPage = Math.max(1, Math.ceil((total ?? 0) / perPage))
 
   return (
     <section className="flex flex-col gap-4">
@@ -434,7 +435,15 @@ export function ListView({
               page={state.data.meta.page}
               lastPage={lastPage}
               total={state.data.meta.total}
+              perPage={perPage}
               onPage={setPage}
+              onPerPage={(next) => {
+                setPerPage(next)
+                // Page 7 of 40 is page 2 of 10 at a hundred rows, and neither
+                // is the page the person was reading. The first one is the
+                // honest answer to "show me more at a time".
+                setPage(1)
+              }}
             />
           </>
         )
