@@ -13,6 +13,78 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.11.0
+
+A second ORM, one `packages` tree, and documentation that matches the code.
+
+### Added
+
+- **A Drizzle adapter**, published as `@nest-admin/nestjs/drizzle` beside the
+  Prisma subpath:
+
+  ```ts
+  import { DrizzleAdapter } from '@nest-admin/nestjs/drizzle'
+  import * as schema from './schema'
+
+  AdminModule.forRoot({ adapter: new DrizzleAdapter({ db, schema }), auth })
+  ```
+
+  Models are named by their export key and fields by their property key —
+  the names your own queries use. Relations come from `relations()` where you
+  declared them and from foreign keys where you did not, so an admin works
+  against a schema that has never heard of Drizzle's relational API.
+
+  SQLite and PostgreSQL. MySQL is refused at startup with a reason: it has no
+  `RETURNING`, so a write could not report the stored row, and an adapter that
+  returned the submitted data instead would hide every default.
+
+- **Documentation that did not exist**: a
+  [getting-started guide](docs/getting-started.md), a
+  [configuration reference](docs/configuration.md) covering every option, and
+  an [adapter guide](docs/adapters.md) describing the contract and what writing
+  a second implementation actually cost.
+
+- **Boundary checks for a two-ORM world.** Neither adapter may import the
+  other's ORM or package; neither may import NestJS; the interface may import
+  no ORM, no adapter and no Core. Previously "ORM-independent" was only ever
+  checked against the one ORM that existed.
+
+### Changed
+
+- **`apps/admin-ui` is now `packages/admin-ui`, and `apps/` is gone.** The
+  package name `@nest-admin/admin-ui` is unchanged, so every import is
+  unchanged. The workspace now has two kinds of directory instead of three:
+  packages that build, and examples that consume them.
+
+- **A declared filter is coerced against the schema in the Prisma adapter too.**
+  `parseFilters` is exported as `parseFilterExpression` and both the URL path
+  and the dashboard path go through it.
+
+### Removed
+
+- **`packages/ui`.** It was twelve lines of comment, versioned and built every
+  release. Its contents were only ever going to be the components the interface
+  already has — vendored from shadcn, bundled into one artefact, with no second
+  consumer to extract them for.
+
+### Notes
+
+- **Core did not change, and neither did anything above the adapter.** The
+  module, the controller, the query parser, the metadata DTO, the exception
+  filter, the dashboard and the interface are the same code both adapters run
+  under. `packages/nestjs/test/drizzle-e2e.test.ts` drives the whole admin over
+  Drizzle to prove it.
+
+- **Two contract edges surfaced**, both recorded rather than patched over:
+  `RecordId` is a single value, so a composite primary key can be listed but
+  not addressed; and the contract assumed every adapter could name the columns
+  in a constraint violation, which is true of Prisma and only mostly true of a
+  raw driver. Both should be settled deliberately before 1.0.
+
+- The packed-package checks grew from 48 to 56, covering the third entrypoint.
+
+---
+
 ## 0.10.0
 
 A landing page that answers a question, and a table that shows as many rows as
