@@ -87,7 +87,9 @@ describe('what the principal may do', () => {
     window.location.hash = '#/User/u1'
     render(<App />)
 
-    await screen.findByText('Ada')
+    // The detail page names the record in its heading as well as in the
+    // field list, so the plain text matches twice; the heading is the one.
+    await screen.findByRole('heading', { name: 'Ada' })
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
   })

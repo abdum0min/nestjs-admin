@@ -223,3 +223,62 @@ describe('rejecting unusable configuration', () => {
     ).rejects.toThrow(/requires an `auth`/)
   })
 })
+
+describe('options that cannot come from the factory', () => {
+  /*
+   * `AdminModuleFactoryOptions` omits `path`, `uiRoot` and `theme`, so this
+   * looks like something the compiler already prevents. It does not: excess
+   * property checking runs on an object literal assigned to a typed target,
+   * and a factory's return reaches that target through a *function* type,
+   * where it does not run. The option is accepted and silently dropped.
+   *
+   * These tests exist because this repository's own reference consumer put
+   * `theme` inside `useFactory`, typechecked clean, and served an unbranded
+   * page for a day. The only symptom was a colour that never arrived.
+   */
+  const withFactoryOption = (extra: Record<string, unknown>) =>
+    boot([
+      AdminModule.forRootAsync({
+        uiRoot: BUILT_UI_ROOT,
+        useFactory: (() => ({
+          adapter: seeded(),
+          auth: unsafeAllowAllRequests(),
+          ...extra,
+        })) as never,
+      }),
+    ])
+
+  it('refuses a theme returned from the factory', async () => {
+    await expect(withFactoryOption({ theme: { title: 'Ops' } })).rejects.toThrow(
+      /received theme from its factory.*structural/s,
+    )
+  })
+
+  it('says where the option belongs instead of only that it is wrong', async () => {
+    await expect(withFactoryOption({ path: '/panel' })).rejects.toThrow(
+      /must be passed to forRootAsync\(\) itself/,
+    )
+  })
+
+  it('names every misplaced option at once', async () => {
+    // One boot, one message. Reporting them one per restart is how a five
+    // minute fix becomes three.
+    await expect(withFactoryOption({ path: '/panel', theme: {} })).rejects.toThrow(
+      /received path, theme from its factory/,
+    )
+  })
+
+  it('accepts them in their proper place', async () => {
+    const server = await boot([
+      AdminModule.forRootAsync({
+        uiRoot: BUILT_UI_ROOT,
+        path: '/panel',
+        theme: { title: 'Ops' },
+        useFactory: (() => ({ adapter: seeded(), auth: unsafeAllowAllRequests() })) as never,
+      }),
+    ])
+
+    const shell = await request(server).get('/panel').expect(200)
+    expect(shell.text).toContain('<title>Ops</title>')
+  })
+})

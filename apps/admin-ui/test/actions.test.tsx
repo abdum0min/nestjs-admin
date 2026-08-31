@@ -6,7 +6,7 @@
  * that contract: which button appears where, what a confirmation prevents, and
  * that the person pressing it is told what happened.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
@@ -115,7 +115,9 @@ describe('where an action appears', () => {
     window.location.hash = '#/User/u1'
     render(<App />)
 
-    await screen.findByText('Ada')
+    // The detail page names the record in its heading as well as in the
+    // field list, so the plain text matches twice; the heading is the one.
+    await screen.findByRole('heading', { name: 'Ada' })
     expect(screen.queryByRole('button', { name: 'Ban' })).toBeNull()
   })
 })
@@ -196,25 +198,32 @@ describe('confirmation', () => {
   const WITH_CONFIRM = { ...BAN, confirm: 'Ban this user?' }
 
   it('asks before sending', async () => {
+    // The question is a real dialog now rather than `window.confirm`, so
+    // answering it means pressing something. What it asks is still the
+    // application's own `confirm` string, verbatim.
     const { calls } = server([WITH_CONFIRM])
-    const confirm = vi.fn(() => true)
-    vi.stubGlobal('confirm', confirm)
 
     window.location.hash = '#/User/u1'
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Ban' }))
 
-    expect(confirm).toHaveBeenCalledWith('Ban this user?')
+    const box = await screen.findByRole('alertdialog')
+    expect(box.textContent).toContain('Ban this user?')
+    expect(calls).not.toContain('POST /actions/User/ban/u1')
+
+    fireEvent.click(within(box).getByRole('button', { name: 'Ban' }))
     await waitFor(() => expect(calls).toContain('POST /actions/User/ban/u1'))
   })
 
   it('sends nothing when the answer is no', async () => {
     const { calls } = server([WITH_CONFIRM])
-    vi.stubGlobal('confirm', () => false)
 
     window.location.hash = '#/User/u1'
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Ban' }))
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }),
+    )
 
     await new Promise((resolve) => setTimeout(resolve, 30))
     expect(calls.some((call) => call.startsWith('POST /actions'))).toBe(false)

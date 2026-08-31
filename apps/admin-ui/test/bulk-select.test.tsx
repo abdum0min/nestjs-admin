@@ -5,22 +5,32 @@
  * easy one: a partially selected page must not look like an empty one, or the
  * next click on the header checkbox does the opposite of what it appears to.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
 
 const fetchMock = vi.fn()
-const confirmMock = vi.fn((_message?: string) => true)
 
 beforeEach(() => {
   window.location.hash = ''
   fetchMock.mockReset()
-  confirmMock.mockClear()
-  confirmMock.mockReturnValue(true)
   vi.stubGlobal('fetch', fetchMock)
-  vi.stubGlobal('confirm', confirmMock)
 })
+
+/**
+ * The confirmation, as a person answers it.
+ *
+ * It used to be `window.confirm`, which a test could stub with a boolean. It
+ * is a real dialog now - focus-trapped, escapable, announced as an alert - so
+ * answering it means finding it and pressing something. What is being asserted
+ * either way is the same: nothing is sent until the question is answered.
+ */
+const dialog = () => screen.getByRole('alertdialog')
+const answer = async (label: RegExp): Promise<void> => {
+  const box = await screen.findByRole('alertdialog')
+  fireEvent.click(within(box).getByRole('button', { name: label }))
+}
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -173,22 +183,70 @@ describe('deleting the selection', () => {
     fireEvent.click(rowBox('Cy'))
     fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
 
+    // Asked, and naming how many - so the answer is about a known quantity.
+    expect((await screen.findByRole('alertdialog')).textContent).toMatch(/2 records/)
+    // And nothing has gone anywhere yet.
+    expect(sent).toEqual([])
+
+    await answer(/^Delete$/)
     await waitFor(() => expect(sent).toEqual([{ ids: ['u1', 'u3'] }]))
-    expect(confirmMock).toHaveBeenCalledTimes(1)
-    expect(String(confirmMock.mock.calls[0]?.[0])).toMatch(/2 records/)
   })
 
-  it('sends nothing when the confirmation is declined', async () => {
-    const { sent } = server()
-    confirmMock.mockReturnValue(false)
+  it('is announced as an alert, not merely shown', async () => {
+    // `role="alertdialog"` rather than `dialog`: it traps focus, cannot be
+    // dismissed by clicking away, and is announced immediately. A destructive
+    // confirmation someone can dismiss by missing is not one.
+    server()
     await openList()
 
     fireEvent.click(rowBox('Ada'))
     fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
 
+    expect(await screen.findByRole('alertdialog')).toBeTruthy()
+  })
+
+  it('sends nothing when the confirmation is declined', async () => {
+    const { sent } = server()
+    await openList()
+
+    fireEvent.click(rowBox('Ada'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+    await answer(/^Cancel$/)
+
     expect(sent).toEqual([])
     // And the selection survives, so the click can be repeated deliberately.
     expect(screen.getByText('1 selected')).toBeTruthy()
+  })
+
+  it('gives focus back to the button that opened it', async () => {
+    // Radix returns focus to its own Trigger, and this dialog has none - it is
+    // opened by a promise from wherever the call site is. Without handling it,
+    // cancelling drops a keyboard user at the top of the document, dozens of
+    // tab stops from where they were. Found by walking the interface with no
+    // mouse rather than by reading the code.
+    server()
+    await openList()
+
+    fireEvent.click(rowBox('Ada'))
+    const trigger = screen.getByRole('button', { name: 'Delete selected' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    await answer(/^Cancel$/)
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+  })
+
+  it('treats dismissing the dialog as declining it', async () => {
+    // Escape closes it without an answer. Anything that is not "yes" is "no".
+    const { sent } = server()
+    await openList()
+
+    fireEvent.click(rowBox('Ada'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+    fireEvent.keyDown(dialog(), { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(sent).toEqual([])
   })
 
   it('reports both halves of a partial result', async () => {
@@ -199,6 +257,7 @@ describe('deleting the selection', () => {
 
     fireEvent.click(screen.getByLabelText(/^Select all/))
     fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+    await answer(/^Delete$/)
 
     const outcome = await screen.findByText(/1 deleted, 1 could not be/)
     // Announced, not just printed: the person pressed a button and looked away.
@@ -212,6 +271,7 @@ describe('deleting the selection', () => {
 
     fireEvent.click(rowBox('Ada'))
     fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+    await answer(/^Delete$/)
 
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Delete selected' })).toBeNull(),

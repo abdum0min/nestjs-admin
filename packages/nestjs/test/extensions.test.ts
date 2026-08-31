@@ -8,6 +8,8 @@
  * the package makes, rather than opening a way around them.
  */
 import { ValidationError } from '@nest-admin/core'
+
+import { isReadable } from '../src/ui/colour.js'
 import type { ExecutionContext, INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -317,9 +319,51 @@ describe('theme', () => {
   it('reaches the page as a CSS variable and a global', async () => {
     const shell = await shellOf({ brandColor: '#0b6e6e', title: 'Ops', logoUrl: 'https://x/y.png' })
 
-    expect(shell).toContain('--brand:#0b6e6e')
+    // `--primary`, not `--accent`: they are different roles now, and a brand
+    // colour written into the second turns every hover into a block of it.
+    expect(shell).toContain('--primary:#0b6e6e')
     expect(shell).toContain('<title>Ops</title>')
     expect(shell).toContain('"logoUrl":"https://x/y.png"')
+  })
+
+  it('emits a readable pairing for each palette', async () => {
+    // The pairing 0.7.0 got wrong by hand, decided by measurement instead.
+    // What is asserted is the guarantee rather than the hex: whatever arrives,
+    // the text on it is readable and the colour is visible on the page.
+    // theme-colour.test.ts covers the arithmetic itself.
+    const shell = await shellOf({ brandColor: '#1e3a8a' })
+
+    const light = /:root{--primary:(#[0-9a-f]{6});--primary-foreground:(#[0-9a-f]{6})}/i.exec(shell)
+    const dark = /.dark{--primary:(#[0-9a-f]{6});--primary-foreground:(#[0-9a-f]{6})}/i.exec(shell)
+
+    expect(light).not.toBeNull()
+    expect(dark).not.toBeNull()
+    expect(isReadable(light![2]!, light![1]!)).toBe(true)
+    expect(isReadable(dark![2]!, dark![1]!)).toBe(true)
+
+    // A navy is fine on white and invisible on near-black, so exactly one of
+    // the two has been adjusted.
+    expect(light![1]).toBe('#1e3a8a')
+    expect(dark![1]).not.toBe('#1e3a8a')
+  })
+
+  it('carries the appearance an application chose', async () => {
+    expect(await shellOf({ appearance: 'dark' })).toContain('"appearance":"dark"')
+  })
+
+  it('refuses an option it does not have', async () => {
+    // A key nobody reads is a setting that silently does nothing, and the only
+    // symptom is a colour that never arrives. This repository's own reference
+    // consumer hit exactly that.
+    await expect(boot({ theme: { accent: '#0b6e6e' } as never })).rejects.toThrow(
+      /theme` has no option called accent/,
+    )
+  })
+
+  it('refuses an appearance that is not one of the three', async () => {
+    await expect(boot({ theme: { appearance: 'sepia' } as never })).rejects.toThrow(
+      /must be "system", "light" or "dark"/,
+    )
   })
 
   it('changes nothing when unset', async () => {

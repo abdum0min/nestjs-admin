@@ -100,7 +100,7 @@ describe('a failure that names a field', () => {
     const message = await screen.findByRole('alert')
     expect(message.textContent).toBe('Another User already has this email.')
     // Inside the row for `email`, not floating above the form.
-    expect(screen.getByLabelText('email *').closest('.form__row')).toContain(message)
+    expect(screen.getByLabelText('email *').closest('[data-slot="field"]')).toContain(message)
   })
 
   it('marks the input invalid and points the reader at the message', async () => {
@@ -124,7 +124,7 @@ describe('a failure that names a field', () => {
     await submit()
 
     await screen.findByRole('alert')
-    expect(document.querySelectorAll('.state--error')).toHaveLength(0)
+    expect(document.querySelectorAll('[data-slot="error-state"]')).toHaveLength(0)
   })
 
   it('clears the message once that value is changed', async () => {
@@ -173,7 +173,7 @@ describe('a failure the form cannot attach', () => {
     await submit()
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/already has this tenantId/)
-    expect(document.querySelectorAll('.state--error')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-slot="error-state"]')).toHaveLength(1)
   })
 
   it('ignores a details shape it does not recognise', async () => {

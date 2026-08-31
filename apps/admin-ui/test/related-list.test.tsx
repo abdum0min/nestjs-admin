@@ -132,7 +132,7 @@ describe('a one-to-many on the parent', () => {
     // The section is headed by the relation and carries the total, so the
     // reader knows whether the rows below are all of them.
     const heading = await screen.findByRole('heading', { name: /posts/ })
-    expect(heading.textContent).toContain('(1)')
+    expect(heading.querySelector('[data-slot="related-count"]')?.textContent).toBe('1')
     expect(await screen.findByText('First')).toBeTruthy()
   })
 
