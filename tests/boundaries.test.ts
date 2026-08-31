@@ -68,6 +68,12 @@ const isPrismaPackage = (specifier: string): boolean =>
 
 const isNestPackage = (specifier: string): boolean => specifier.startsWith('@nestjs/')
 
+const isDrizzlePackage = (specifier: string): boolean =>
+  specifier === 'drizzle-orm' || specifier.startsWith('drizzle-orm/')
+
+const isAdapterPackage = (specifier: string): boolean =>
+  specifier.startsWith('@nest-admin/prisma') || specifier.startsWith('@nest-admin/drizzle')
+
 /** Files violating a rule, reported as `relative/path -> specifier`. */
 function violations(root: string, predicate: (specifier: string) => boolean): string[] {
   return sourceFiles(root).flatMap((file) =>
@@ -88,6 +94,12 @@ describe('packages/core is framework- and ORM-independent', () => {
     expect(violations(coreSrc, isNestPackage)).toEqual([])
   })
 
+  it('does not import Drizzle either', () => {
+    // Added with the second adapter. "ORM-independent" had until then only ever
+    // been checked against the one ORM that existed, which is not a check.
+    expect(violations(coreSrc, isDrizzlePackage)).toEqual([])
+  })
+
   it('declares no runtime dependencies', () => {
     const manifest: { dependencies?: Record<string, string> } = JSON.parse(
       readFileSync(join(repoRoot, 'packages/core/package.json'), 'utf8'),
@@ -103,21 +115,69 @@ describe('the NestJS HTTP layer is ORM-independent', () => {
     expect(violations(nestSrc, isPrismaPackage)).toEqual([])
   })
 
+  it('does not import Drizzle', () => {
+    expect(violations(nestSrc, isDrizzlePackage)).toEqual([])
+  })
+
   /**
-   * `src/prisma.ts` is the published `./prisma` subpath and exists only to
-   * re-export the adapter to consumers - a packaging concern. Every other file
-   * must reach the ORM through Core's `OrmAdapter` contract.
+   * `src/prisma.ts` and `src/drizzle.ts` are the published subpaths and exist
+   * only to re-export an adapter to consumers - a packaging concern. Every
+   * other file must reach the ORM through Core's `OrmAdapter` contract.
    */
-  it('reaches the adapter only through the published subpath', () => {
+  it.each([
+    ['@nest-admin/prisma', 'prisma.ts'],
+    ['@nest-admin/drizzle', 'drizzle.ts'],
+  ])('reaches %s only through its published subpath', (adapter, entrypoint) => {
     const offenders = sourceFiles(nestSrc)
-      .filter((file) => !file.endsWith(`${join('src', 'prisma.ts')}`))
+      .filter((file) => !file.endsWith(`${join('src', entrypoint)}`))
       .flatMap((file) =>
         importsOf(file)
-          .filter((specifier) => specifier.startsWith('@nest-admin/prisma'))
+          .filter((specifier) => specifier.startsWith(adapter))
           .map((specifier) => `${relative(repoRoot, file).replace(/\\/g, '/')} -> ${specifier}`),
       )
 
     expect(offenders).toEqual([])
+  })
+})
+
+/**
+ * The reason the second adapter was written.
+ *
+ * If either adapter reaches for the other's ORM, or for the other's package,
+ * then `OrmAdapter` is not the seam it claims to be - and the next person to
+ * write one would be the one to find that out.
+ */
+describe('the two adapters do not know about each other', () => {
+  const prismaSrc = join(repoRoot, 'packages/prisma/src')
+  const drizzleSrc = join(repoRoot, 'packages/drizzle/src')
+
+  it('the Prisma adapter imports nothing of Drizzle', () => {
+    expect(violations(prismaSrc, isDrizzlePackage)).toEqual([])
+    expect(violations(prismaSrc, (name) => name.startsWith('@nest-admin/drizzle'))).toEqual([])
+  })
+
+  it('the Drizzle adapter imports nothing of Prisma', () => {
+    expect(violations(drizzleSrc, isPrismaPackage)).toEqual([])
+    expect(violations(drizzleSrc, (name) => name.startsWith('@nest-admin/prisma'))).toEqual([])
+  })
+
+  it('neither is a NestJS package', () => {
+    // An adapter implements a Core contract. Reaching for `@nestjs/common` here
+    // would make every future adapter a Nest package too.
+    expect(violations(prismaSrc, isNestPackage)).toEqual([])
+    expect(violations(drizzleSrc, isNestPackage)).toEqual([])
+  })
+})
+
+describe('the admin UI knows no ORM at all', () => {
+  it('imports neither ORM, nor Core, nor either adapter', () => {
+    // The interface renders from the metadata document and restates the wire
+    // types by hand. That is what makes a second ORM invisible to it: not one
+    // line of `packages/admin-ui` changed when Drizzle was added.
+    const uiSrc = join(repoRoot, 'packages/admin-ui/src')
+    expect(violations(uiSrc, isPrismaPackage)).toEqual([])
+    expect(violations(uiSrc, isDrizzlePackage)).toEqual([])
+    expect(violations(uiSrc, isAdapterPackage)).toEqual([])
   })
 })
 
