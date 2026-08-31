@@ -14,6 +14,7 @@ import { buildQueryString } from './query.js'
 import type {
   AdminErrorCode,
   AdminSession,
+  Dashboard,
   BulkDeleteResult,
   AdminRecord,
   ErrorEnvelope,
@@ -195,6 +196,12 @@ const listeners = new Set<() => void>()
 export function onUnauthorized(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+/** `GET /admin/dashboard` - the widgets the landing page draws. */
+export async function fetchDashboard(): Promise<Dashboard> {
+  const { data } = await request<Dashboard>('/dashboard')
+  return data
 }
 
 /** `GET /admin/meta` - the document every screen renders from. */

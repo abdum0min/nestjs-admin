@@ -230,3 +230,50 @@ export interface AdminSession {
   /** `null` when nobody is signed in - which is a state, not a failure. */
   readonly account: AdminAccountSummary | null
 }
+
+/** How wide a dashboard widget sits in the four-column grid. */
+export type WidgetSpan = 1 | 2 | 3 | 4
+
+export interface WidgetDescriptor {
+  readonly id: string
+  readonly kind: 'count' | 'list' | 'chart' | 'stat'
+  readonly title: string
+  readonly description?: string
+  readonly span: WidgetSpan
+  /** Which model it reads, so the widget can link to that list. */
+  readonly model?: string
+  /** The list view this widget summarises, as `field:op:value`. */
+  readonly filter?: string
+  /** Shaped by `kind`. Absent when `failed`. */
+  readonly data?: unknown
+  /** This one could not be loaded. The others on the page still were. */
+  readonly failed?: boolean
+}
+
+export interface Dashboard {
+  readonly widgets: readonly WidgetDescriptor[]
+  /** True when nothing was declared and this was built from the schema. */
+  readonly generated: boolean
+}
+
+export interface CountData {
+  readonly value: number
+  readonly delta?: number
+  readonly hint?: string
+}
+
+export interface StatData {
+  readonly value: string | number
+  readonly delta?: number
+  readonly hint?: string
+}
+
+export interface ListData {
+  readonly records: readonly { readonly id: string; readonly label: string }[]
+  readonly total: number
+}
+
+export interface ChartData {
+  readonly points: readonly { readonly at: string; readonly value: number }[]
+  readonly total: number
+}

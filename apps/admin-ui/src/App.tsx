@@ -6,12 +6,13 @@
  * authorization simply is not in the document and therefore is not in the UI -
  * no client-side filtering, and nothing to keep in sync.
  */
-import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { LayoutDashboard, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
+import { useEffect, useState, type ComponentType } from 'react'
 
 import { fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
 import type { AdminAccountSummary, ModelDescriptor } from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
+import { DashboardView } from './components/DashboardView.jsx'
 import { ListView } from './components/ListView.jsx'
 import { LoginPage } from './components/LoginPage.jsx'
 import { RecordForm } from './components/RecordForm.jsx'
@@ -135,9 +136,7 @@ function Admin({
   return (
     <Shell models={models} activeModel={active?.name} {...shellProps}>
       {route.kind === 'home' ? (
-        <Empty>
-          <p>Select a resource to begin.</p>
-        </Empty>
+        <DashboardView />
       ) : active === undefined ? (
         // The hash named something metadata does not contain. It may not exist,
         // or may be hidden from this principal - the UI cannot tell them apart,
@@ -373,47 +372,92 @@ function ResourceNav({
   readonly activeModel?: string
   readonly collapsed: boolean
 }) {
-  if (models.length === 0) return null
-
   return (
     <ul className="flex flex-col gap-0.5">
+      {/*
+       * Above the resources, and separated from them.
+       *
+       * The dashboard is not one of the models - it is the page they are all
+       * on - and putting it in the same list would make it look like a
+       * resource called "Dashboard". It is also the only navigation that
+       * exists before any model does, which is why this list no longer
+       * returns null for an empty schema.
+       */}
+      <li className={models.length === 0 ? undefined : 'mb-1 border-b pb-1'}>
+        <NavLink
+          href="#/"
+          label="Dashboard"
+          icon={LayoutDashboard}
+          current={activeModel === undefined}
+          collapsed={collapsed}
+        />
+      </li>
       {models.map((model) => {
-        const current = model.name === activeModel
         const label = modelLabel(model)
-        const Icon = modelIcon(model.icon)
 
         return (
           <li key={model.name}>
-            <a
+            <NavLink
               href={href({ kind: 'list', model: model.name })}
-              aria-current={current ? 'page' : undefined}
-              // The label is the accessible name whether or not it is drawn,
-              // so a rail is not a column of unlabelled letters to a reader.
-              aria-label={collapsed ? label : undefined}
-              title={collapsed ? label : undefined}
-              className={cn(
-                'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
-                collapsed && 'justify-center px-0',
-                current
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                  : 'hover:bg-sidebar-accent/60',
-              )}
-            >
-              {Icon ? (
-                <Icon className="size-4 shrink-0" aria-hidden="true" />
-              ) : (
-                <span
-                  className="flex size-4 shrink-0 items-center justify-center text-xs font-semibold opacity-70"
-                  aria-hidden="true"
-                >
-                  {label.slice(0, 1).toUpperCase()}
-                </span>
-              )}
-              {collapsed ? null : <span className="truncate">{label}</span>}
-            </a>
+              label={label}
+              icon={modelIcon(model.icon)}
+              current={model.name === activeModel}
+              collapsed={collapsed}
+            />
           </li>
         )
       })}
     </ul>
+  )
+}
+
+/**
+ * One entry in the navigation.
+ *
+ * The fallback for a model with no configured icon is its initial rather than a
+ * generic shape: on the collapsed rail something has to distinguish one row
+ * from the next, and a letter does that while a repeated symbol does not.
+ */
+function NavLink({
+  href: to,
+  label,
+  icon: Icon,
+  current,
+  collapsed,
+}: {
+  readonly href: string
+  readonly label: string
+  readonly icon: ComponentType<{ className?: string }> | undefined
+  readonly current: boolean
+  readonly collapsed: boolean
+}) {
+  return (
+    <a
+      href={to}
+      aria-current={current ? 'page' : undefined}
+      // The label is the accessible name whether or not it is drawn, so a rail
+      // is not a column of unlabelled letters to a reader.
+      aria-label={collapsed ? label : undefined}
+      title={collapsed ? label : undefined}
+      className={cn(
+        'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
+        collapsed && 'justify-center px-0',
+        current
+          ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+          : 'hover:bg-sidebar-accent/60',
+      )}
+    >
+      {Icon ? (
+        <Icon className="size-4 shrink-0" aria-hidden="true" />
+      ) : (
+        <span
+          className="flex size-4 shrink-0 items-center justify-center text-xs font-semibold opacity-70"
+          aria-hidden="true"
+        >
+          {label.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+      {collapsed ? null : <span className="truncate">{label}</span>}
+    </a>
   )
 }
