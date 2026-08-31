@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     prisma: 'src/prisma.ts',
+    drizzle: 'src/drizzle.ts',
   },
   format: ['esm', 'cjs'],
   // The declaration build must be told to follow the workspace packages, not
@@ -27,6 +28,9 @@ export default defineConfig({
     '@nestjs/core',
     '@prisma/client',
     '@prisma/get-dmmf',
+    // The consumer's own Drizzle instance and schema are built against their
+    // copy; a second one here would produce tables that fail every `is()` check.
+    'drizzle-orm',
     'reflect-metadata',
     'rxjs',
   ],
@@ -40,5 +44,5 @@ export default defineConfig({
   // inputs, not runtime dependencies - which is both what makes the emitted
   // .d.ts self-contained and what keeps the published `dependencies` free of
   // packages that are never published.
-  noExternal: ['@nest-admin/core', '@nest-admin/prisma'],
+  noExternal: ['@nest-admin/core', '@nest-admin/prisma', '@nest-admin/drizzle'],
 })

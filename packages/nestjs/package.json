@@ -42,6 +42,16 @@
         "default": "./dist/prisma.cjs"
       }
     },
+    "./drizzle": {
+      "import": {
+        "types": "./dist/drizzle.d.ts",
+        "default": "./dist/drizzle.js"
+      },
+      "require": {
+        "types": "./dist/drizzle.d.cts",
+        "default": "./dist/drizzle.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -71,16 +81,21 @@
     "@nestjs/core": ">=10.0.0 <13",
     "@prisma/client": "^7.0.0",
     "reflect-metadata": "^0.1.13 || ^0.2.0",
-    "rxjs": "^7.0.0"
+    "rxjs": "^7.0.0",
+    "drizzle-orm": ">=0.44.0 <1"
   },
   "peerDependenciesMeta": {
     "@prisma/client": {
+      "optional": true
+    },
+    "drizzle-orm": {
       "optional": true
     }
   },
   "devDependencies": {
     "@nest-admin/admin-ui": "workspace:*",
     "@nest-admin/core": "workspace:*",
+    "@nest-admin/drizzle": "workspace:*",
     "@nest-admin/prisma": "workspace:*",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
@@ -89,7 +104,10 @@
     "@prisma/adapter-better-sqlite3": "7.10.0",
     "@prisma/client": "catalog:",
     "@swc/core": "^1.16.1",
+    "@types/better-sqlite3": "7.6.13",
     "@types/supertest": "6.0.3",
+    "better-sqlite3": "12.11.1",
+    "drizzle-orm": "0.45.2",
     "prisma": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
