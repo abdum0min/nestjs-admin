@@ -13,6 +13,66 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.8.1
+
+Fifteen things found by using 0.8.0's interface for an afternoon rather than
+looking at it.
+
+### Added
+
+- **`models[Model].icon`** — an icon beside a resource in the navigation, from
+  a closed set of 33 names. A model without one is drawn without one; the same
+  symbol on every entry is decoration.
+
+  ```ts
+  models: { User: { label: 'People', icon: 'users' } }
+  ```
+
+- **Numbered pagination**, with a window that keeps a steady width so the
+  buttons do not move under the cursor as you page.
+- **Breadcrumbs** on every screen — Home / Resource / Record.
+- **Row actions**: View and Edit as icon links named after the record, with
+  Delete and any declared actions behind an overflow menu.
+- **A calendar** for date fields, in a popover, keyboard-operable, in the
+  viewer's locale and starting the week where their locale starts it. The text
+  box beside it still accepts a typed date.
+- **Table and form skeletons**, shaped like the content that is coming.
+
+### Changed
+
+- **Every select is now a Radix listbox.** A native `<select>` cannot be
+  styled: its popup is drawn by the operating system, in the system font and
+  the system's light palette even when the admin is dark. 0.8.0 chose the
+  native element on bundle grounds and that was the wrong trade.
+- **The theme control is one button** rather than three. It still follows the
+  operating system until pressed — nothing is stored before that.
+- **The sidebar is sticky**, has its own scrollbar, and collapses to an icon
+  rail rather than disappearing. Its links stay reachable and named when
+  collapsed, and the change is an eased width transition.
+- **Forms use the full page**, in two columns where the fields are short.
+- **Search, sort and filter share one wrapping row** instead of the filter
+  always dropping to its own line.
+- **Every interactive element gets `cursor: pointer`** and a hover that moves.
+  A `<button>` inherits the arrow cursor from the user agent.
+- Dialogs, menus and the mobile drawer animate in and out.
+
+### Fixed
+
+- **The pager elided pages it had room to show.** `pageSlots(1, 5)` returned
+  `1 … 5`, hiding two pages behind an ellipsis no shorter than they were — and
+  changing the number of buttons as you moved, which is what makes a click land
+  on the wrong number. Found by its own test.
+
+### Known limitations
+
+- The interface bundle grew from **104 KB to 134 KB gzipped**, itemised in
+  `reports/018-interface-polish.md` — including the 20 KB not spent by writing
+  the calendar instead of installing one.
+- No column sorting from table headers.
+- The calendar changes the day; a datetime's time is edited in the text box.
+
+---
+
 ## 0.8.0
 
 A visual rebuild on Tailwind and shadcn/ui. No new capability: every screen that
