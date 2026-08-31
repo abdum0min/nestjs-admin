@@ -7,9 +7,14 @@
  */
 declare global {
   interface Window {
-    __NEST_ADMIN_THEME__?: { title?: string; logoUrl?: string }
+    __NEST_ADMIN_THEME__?: {
+      title?: string
+      logoUrl?: string
+      /** Which appearance to start from, before the viewer chooses. */
+      appearance?: 'system' | 'light' | 'dark'
+    }
   }
 }
 
-export const theme: { title?: string; logoUrl?: string } =
+export const theme: NonNullable<Window['__NEST_ADMIN_THEME__']> =
   (typeof window === 'undefined' ? undefined : window.__NEST_ADMIN_THEME__) ?? {}

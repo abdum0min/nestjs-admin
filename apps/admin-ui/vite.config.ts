@@ -1,9 +1,13 @@
 /// <reference types="vitest/config" />
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  plugins: [react()],
+  // Tailwind compiles here, at *our* build time, into the stylesheet the
+  // package already ships. A consumer installs nothing and runs no build step;
+  // that constraint is why the admin can be configured without a bundler.
+  plugins: [react(), tailwindcss()],
 
   // A placeholder, not a real path. The mount point is chosen by the consuming
   // application at runtime (`AdminModule.forRoot({ path })`), which is long

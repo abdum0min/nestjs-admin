@@ -1,680 +1,279 @@
 /*
- * Plain CSS, deliberately.
+ * The design system.
  *
- * This is an internal admin tool: dense, legible, fast to scan. No component
- * library, no design system, no animation. Adding one would be a dependency
- * decision better made against real screens than an empty scaffold.
+ * Tailwind compiles this at build time into the single stylesheet the package
+ * ships. A consuming application installs nothing and runs no build step -
+ * that constraint is the whole reason this admin can be branded without a
+ * bundler, and nothing here may break it.
+ *
+ * ## Everything is a token
+ *
+ * No component names a colour. They name roles - `bg-background`,
+ * `text-muted-foreground`, `border-border` - and the roles are defined once
+ * here, twice over: a light set on `:root` and a dark set on `.dark`. Three
+ * consequences follow, and all three are the point:
+ *
+ *   1. Dark mode needs no second palette in any component.
+ *   2. The server can brand the admin by overriding one variable, because the
+ *      variable is what every component actually reads.
+ *   3. A contrast failure is fixed in one place rather than forty. Two of them
+ *      shipped before this file existed - see reports/016.
+ *
+ * ## Why the values are oklch
+ *
+ * Perceptual lightness. `oklch(0.55 0.2 265)` and `oklch(0.55 0.2 25)` are the
+ * same *apparent* brightness in blue and in red, which hex cannot promise - and
+ * a palette whose steps drift in brightness is exactly how a theme ends up
+ * legible in one hue and not another. The server still injects hex, because a
+ * hex colour is what an application's brand guide gives you; CSS takes both.
  */
 
+@import 'tailwindcss';
+
+/*
+ * Dark mode follows a class, not the media query alone.
+ *
+ * 0.7.0 shipped `prefers-color-scheme` only, and recorded the consequence as a
+ * limitation: a viewer whose operating system disagrees with them has no
+ * recourse. The class is what gives them one. `main.tsx` sets it from the
+ * stored preference, falling back to the system.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Roles, as Tailwind utilities.
+ *
+ * `@theme inline` maps each token to a utility name, so `bg-card` resolves to
+ * `var(--card)` rather than baking the value in. Inline is what makes the
+ * indirection survive: without it Tailwind would compile the *current* value
+ * into the class, and the server's override would arrive too late to matter.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-code);
+}
+
+/*
+ * Light.
+ *
+ * The neutral carries a slight cool bias - a hue of 255 rather than none at
+ * all. A pure grey is what you get when nobody chose, and it reads that way
+ * beside a coloured accent.
+ */
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --ink: #161a22;
-  /* 5.0:1 on --bg. The obvious #6b7688 measures 4.28 there and reads as
-     "grey enough" while failing the contrast floor for body text. */
-  --muted: #5f6b7d;
-  --line: #d7dee7;
-  --accent: #2e5aac;
-  /* What sits *on* the accent. A single `#fff` works in light and collapses
-     to 2.5:1 against the lighter accent dark mode uses. */
-  --on-accent: #ffffff;
-  --danger: #9e362e;
-  /* Overridden by the server's theme block when one is configured. */
-  --surface-2: #eef1f5;
+  --background: oklch(0.995 0.001 255);
+  --foreground: oklch(0.21 0.02 258);
 
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
-  line-height: 1.5;
-  color: var(--ink);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+
+  /* Overridden by the server when an application sets `theme.brandColor`. */
+  --primary: oklch(0.48 0.16 258);
+  --primary-foreground: oklch(0.985 0.002 255);
+
+  --secondary: oklch(0.968 0.004 255);
+  --secondary-foreground: oklch(0.28 0.02 258);
+
+  --muted: oklch(0.968 0.004 255);
+  /* 5.1:1 on --background. The obvious mid-grey measures 4.3 and reads as
+     "grey enough" while failing the floor for body text - reports/016. */
+  --muted-foreground: oklch(0.53 0.02 258);
+
+  --accent: oklch(0.955 0.008 255);
+  --accent-foreground: oklch(0.28 0.02 258);
+
+  --destructive: oklch(0.52 0.19 27);
+  --destructive-foreground: oklch(0.985 0.002 255);
+
+  --success: oklch(0.5 0.13 155);
+  --success-foreground: oklch(0.985 0.002 255);
+
+  /* 0.58 measured 4.05:1 against its own ink - below the floor for text, and
+     found by measuring rather than by looking. See contrast.test.ts. */
+  --warning: oklch(0.66 0.13 75);
+  --warning-foreground: oklch(0.21 0.02 258);
+
+  --border: oklch(0.9 0.005 255);
+  /*
+   * The edge of a text field, at 3.1:1 against the page.
+   *
+   * Deliberately darker than `--border`, and darker than the pale hairline
+   * most component libraries use. WCAG 1.4.11 asks for 3:1 on anything whose
+   * boundary is what identifies it as a control, and an input's boundary is
+   * exactly that - there is nothing else to say "you can type here". The
+   * fashionable value measures 1.4:1 and fails it.
+   *
+   * A row rule in a table is *not* such a boundary, which is why `--border`
+   * stays quiet. See contrast.test.ts, which holds the two to different bars.
+   */
+  --input: oklch(0.66 0.012 255);
+  --ring: var(--primary);
+
+  --sidebar: oklch(0.978 0.003 255);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: oklch(0.9 0.005 255);
+  --sidebar-accent: oklch(0.94 0.006 255);
+  --sidebar-accent-foreground: oklch(0.24 0.02 258);
+
+  --radius: 0.625rem;
+
+  --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-code: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 /*
- * The viewer's theme, honoured rather than imposed.
+ * Dark.
  *
- * Only the tokens are redefined; every component reads them, so nothing else
- * has to know a second palette exists. An application that sets a brand colour
- * keeps it in both - the server's block is emitted after this file and wins.
+ * Not an inversion. The surfaces lift away from black rather than sinking into
+ * it, because a true-black panel with white text is the pairing people report
+ * as "harsh" - and the accent is lightened, because a colour chosen to read on
+ * white does not read on near-black.
  */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #10141a;
-    --surface: #171d25;
-    --surface-2: #1f2731;
-    --ink: #e3e8ee;
-    --muted: #93a0b1;
-    --line: #2a333f;
-    --accent: #7aa2f7;
-    /* 7.3:1. White here is 2.5:1 - unreadable, and on the one element that
-       marks where you are. */
-    --on-accent: #10141a;
-    --danger: #f08a80;
-  }
+.dark {
+  --background: oklch(0.17 0.012 258);
+  --foreground: oklch(0.93 0.008 255);
+
+  --card: oklch(0.212 0.014 258);
+  --card-foreground: var(--foreground);
+
+  --popover: oklch(0.225 0.015 258);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.72 0.13 258);
+  --primary-foreground: oklch(0.17 0.012 258);
+
+  --secondary: oklch(0.27 0.016 258);
+  --secondary-foreground: oklch(0.93 0.008 255);
+
+  --muted: oklch(0.27 0.016 258);
+  --muted-foreground: oklch(0.72 0.018 255);
+
+  --accent: oklch(0.29 0.018 258);
+  --accent-foreground: oklch(0.93 0.008 255);
+
+  --destructive: oklch(0.71 0.16 22);
+  --destructive-foreground: oklch(0.17 0.012 258);
+
+  --success: oklch(0.72 0.14 158);
+  --success-foreground: oklch(0.17 0.012 258);
+
+  --warning: oklch(0.79 0.13 80);
+  --warning-foreground: oklch(0.17 0.012 258);
+
+  --border: oklch(0.3 0.016 258);
+  /* 3.5:1 against the dark page - see the note in the light palette. */
+  --input: oklch(0.52 0.02 258);
+  --ring: var(--primary);
+
+  --sidebar: oklch(0.196 0.013 258);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: oklch(0.28 0.016 258);
+  --sidebar-accent: oklch(0.27 0.016 258);
+  --sidebar-accent-foreground: oklch(0.95 0.008 255);
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-}
-
-a {
-  color: var(--accent);
-}
-
-/*
- * One focus ring, everywhere.
- *
- * The browser default differs per engine and disappears against a dark
- * surface in some of them. Keyboard focus is the only way some people know
- * where they are on a page, so it is drawn deliberately rather than inherited.
- *
- * `:focus-visible` rather than `:focus`: a mouse click on a button should not
- * leave a ring behind it, which is the reason people remove focus styles
- * altogether and break the page for everyone who does not use a mouse.
- */
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-/*
- * Past the resource list, in one keystroke.
- *
- * The navigation holds one link per model, so on a schema of thirty models a
- * keyboard user passes thirty links to reach the table - on every page. Hidden
- * until focused, which is the point: it is for people who are already tabbing.
- */
-.skip-link {
-  position: absolute;
-  left: -9999px;
-  top: 0;
-  z-index: 10;
-  padding: 0.5rem 0.75rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 0 0 4px 0;
-}
-
-.skip-link:focus {
-  left: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
+@layer base {
   * {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+    @apply border-border;
   }
-}
 
-/* ---------------------------------------------------------------- shell */
-
-.shell__bar {
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-  padding: 0.75rem 1.25rem;
-  font-weight: 600;
-}
-
-.shell__bar a {
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.shell__body {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  min-height: calc(100vh - 49px);
-}
-
-@media (max-width: 700px) {
-  .shell__body {
-    grid-template-columns: 1fr;
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
 
   /*
-   * The resource list becomes a scrolling row rather than a column.
+   * One focus ring, everywhere.
    *
-   * Stacked, thirty models are thirty rows to scroll past before reaching the
-   * table - on a phone that is the whole screen, every time. Sideways it costs
-   * one line.
+   * `:focus-visible` rather than `:focus`, so a mouse click does not leave a
+   * ring behind it - which is the reason people remove focus styles altogether
+   * and break the page for everyone who does not use a mouse.
    */
-  .shell__nav {
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-    padding: 0.5rem 0.75rem;
+  :focus-visible {
+    @apply outline-ring outline-2 outline-offset-2;
   }
 
-  .shell__nav h2 {
-    display: none;
+  /* Digits that line up in a column should line up. */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 
-  .shell__nav ul {
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 0.25rem;
-  }
-
-  .shell__nav a {
-    white-space: nowrap;
-  }
-
-  .shell__content {
-    padding: 1rem 0.75rem;
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-.shell__nav {
-  background: var(--surface);
-  border-right: 1px solid var(--line);
-  padding: 1rem;
-}
-
-.shell__nav h2 {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin: 0 0 0.5rem;
-}
-
-.shell__nav ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.shell__nav a {
-  display: block;
-  padding: 0.4rem 0.55rem;
-  border-radius: 4px;
-  text-decoration: none;
-  color: var(--ink);
-}
-
-.shell__nav a:hover {
-  background: var(--bg);
-}
-
-.shell__nav a[aria-current='page'] {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-.shell__content {
-  padding: 1.5rem;
-  min-width: 0;
-}
-
-/* ---------------------------------------------------------------- states */
-
-.state {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 1.5rem;
-  color: var(--muted);
-}
-
-.state--error {
-  border-left: 3px solid var(--danger);
-  color: var(--ink);
-}
-
-.state h2 {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
-}
-
-.state p {
-  margin: 0 0 0.5rem;
-}
-
-.state__detail {
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-.muted {
-  color: var(--muted);
-}
-
-/* ---------------------------------------------------------------- list */
-
-.list__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.list__header h1 {
-  margin: 0;
-  font-size: 1.4rem;
-}
-
-.toolbar,
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.toolbar__search {
-  flex: 1 1 240px;
-}
-
-.toolbar__control {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-input,
-select,
-button {
-  font: inherit;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--ink);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-button.danger {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-/* ---------------------------------------------------------------- table */
-
-/* Rows being replaced. Dimmed rather than removed, so a page change does not
-   flash the table out and back - which reads as a bug rather than as work. */
-.table-wrap[aria-busy='true'] {
-  opacity: 0.55;
-}
-
-.table-wrap {
-  overflow-x: auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 0.9rem;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-
-th {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  background: var(--bg);
-}
-
-tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.cell--actions {
-  text-align: right;
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-  font-size: 0.88rem;
-  color: var(--muted);
-}
-
-/* ---------------------------------------------------------------- record */
-
-.record__back {
-  font-size: 0.85rem;
-  text-decoration: none;
-}
-
-.record__actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.record__fields {
-  margin: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-
-.record__field {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 1rem;
-  padding: 0.6rem 0.9rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.record__field:last-child {
-  border-bottom: none;
-}
-
-@media (max-width: 700px) {
-  .record__field {
-    grid-template-columns: 1fr;
-    gap: 0.2rem;
+@layer utilities {
+  /*
+   * Past the resource list, in one keystroke.
+   *
+   * The navigation holds one link per model, so on a schema of thirty models a
+   * keyboard user passes thirty links to reach the table - on every page.
+   * Hidden until focused, which is the point: it is for people already tabbing.
+   */
+  .skip-link {
+    @apply bg-popover text-popover-foreground border-border absolute top-2 left-2 z-50 -translate-y-20 rounded-md border px-3 py-2 text-sm shadow-md transition-transform;
   }
-}
 
-.record__field dt {
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.record__kind {
-  display: block;
-  font-weight: 400;
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
-.record__field dd {
-  margin: 0;
-  min-width: 0;
-}
-
-.record__field pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font: inherit;
-}
-
-/* ---------------------------------------------------------------- form */
-
-.form {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  max-width: 640px;
-}
-
-.form__row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.form__label {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.form__row--inline {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-  /* So a refusal can take a line of its own beside a checkbox. */
-  flex-wrap: wrap;
-}
-
-/*
- * Why a refused value is announced twice over.
- *
- * The colour alone is not the message: it is invisible to a screen reader,
- * absent for someone who cannot distinguish it, and gone the moment the page is
- * printed. The sentence under the input is what actually says what is wrong,
- * and `aria-invalid` is what says it to a reader that cannot see either.
- *
- * Written as a child selector because .form__row > span already claims the
- * label styling, and the message must win against it.
- */
-.form__row > .form__error {
-  font-size: 0.85rem;
-  color: var(--danger);
-}
-
-.form__row--inline > .form__error {
-  width: 100%;
-}
-
-.form__row [aria-invalid='true'] {
-  border-color: var(--danger);
-}
-
-.form__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding-top: 0.25rem;
-}
-
-/* ---------------------------------------------------------------- picker --
-   Choosing the record a to-one relation points at. The field being edited is
-   a foreign key, so what is stored is an id and what is shown is a name.      */
-
-.picker {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: relative;
-}
-
-.picker__chosen {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0;
-  font-weight: 500;
-}
-
-.picker__options {
-  list-style: none;
-  margin: 0;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface);
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.picker__options li {
-  margin: 0;
-}
-
-.picker__options li.muted {
-  padding: 6px 8px;
-}
-
-/* A row in a list of choices, not a call to action - so it reads as text and
-   only shows it is interactive on hover and focus. */
-.picker__options button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 3px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.picker__options button:hover,
-.picker__options button:focus-visible {
-  background: var(--surface-2, rgba(127, 127, 127, 0.12));
-}
-
-button.link {
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  color: var(--accent, currentColor);
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-/* --------------------------------------------------------------- related --
-   A to-many relation, shown on the parent's detail page. Paginated, because
-   how many children a record has is a property of the data.                  */
-
-.related {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
-}
-
-.related__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.related__header h3 {
-  margin: 0;
-  font-size: 1rem;
-}
-
-.related__pager {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.related__attach {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.related__attach .picker {
-  flex: 1 1 220px;
-}
-
-/* Said before the click rather than after: attaching across a one-to-many
-   moves a record, and detaching may not be possible at all. */
-.related__note {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 0.9em;
-}
-
-/* --------------------------------------------------------------- actions --
-   Buttons the application added. Drawn from metadata, so this file knows
-   nothing about what any of them do.                                        */
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.actions__result {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9em;
-}
-
-/* The logo sits with the title rather than replacing it: an image alone is not
-   a link anyone can read out. */
-.brand__logo {
-  height: 20px;
-  width: auto;
-  vertical-align: -4px;
-  margin-right: 8px;
-}
-
-/* ------------------------------------------------------------------ bulk --
-   Selecting rows and acting on the selection. The bar appears only when
-   something is selected: a permanently visible "Delete selected" that does
-   nothing most of the time trains people to ignore it.                       */
-
-.bulk {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-}
-
-.bulk__count {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.bulk__failures {
-  margin: 0.5rem 0;
-  padding-left: 1.25rem;
-  font-size: 0.9rem;
-}
-
-.bulk__failures code {
-  opacity: 0.7;
-}
-
-/* Narrow, and never the column that grows when the table is wider than the
-   screen. A checkbox column that stretches puts the box far from its row. */
-.cell--select {
-  width: 1px;
-  white-space: nowrap;
-}
-
-.row--selected {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  .skip-link:focus {
+    @apply translate-y-0;
+  }
 }
