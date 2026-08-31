@@ -129,7 +129,12 @@ export function RecordView({
                   </span>
                 </dt>
                 <dd className="min-w-0 text-sm">
-                  {field.kind === 'relation' ? (
+                  {field.writeOnly === true ? (
+                    // The value is never sent, so the blank here is not the
+                    // record having none. Saying which it is matters most for
+                    // exactly the field this exists for.
+                    <span className="text-muted-foreground italic">Not shown</span>
+                  ) : field.kind === 'relation' ? (
                     <RelationValue field={field} models={models} record={record} />
                   ) : (
                     <span className="wrap-break-word whitespace-pre-wrap">
@@ -189,7 +194,7 @@ function RelationValue({
   if (link) {
     return (
       <a
-        className="text-primary underline-offset-4 hover:underline"
+        className="text-link underline-offset-4 hover:underline"
         href={href({ kind: 'detail', model: link.model, id: link.id })}
       >
         {link.label}

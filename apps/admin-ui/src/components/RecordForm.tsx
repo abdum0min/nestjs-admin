@@ -49,6 +49,7 @@ import { Card, CardContent } from './ui/card.jsx'
 import { Checkbox } from './ui/checkbox.jsx'
 import { DatePicker } from './ui/date-picker.jsx'
 import { Input } from './ui/input.jsx'
+import { PasswordInput } from './ui/password-input.jsx'
 import { SimpleSelect } from './ui/select.jsx'
 import { Textarea } from './ui/textarea.jsx'
 
@@ -161,7 +162,19 @@ function Form({
 
     const body: AdminRecord = {}
     for (const field of editable) {
-      const converted = toRequestValue(field, values[field.name] ?? '')
+      const raw = values[field.name] ?? ''
+
+      /*
+       * A blank write-only field is left out entirely.
+       *
+       * It is never sent back, so the box is always empty when a form opens -
+       * which means "blank" cannot mean "clear it". On a password that
+       * distinction is the whole thing: the ordinary rule would send `null`
+       * and wipe the password of every record anyone opened and saved.
+       */
+      if (field.writeOnly === true && raw === '') continue
+
+      const converted = toRequestValue(field, raw)
       // `undefined` means "omit" - a required field left blank on create is
       // the server's to reject, and an omitted key on PATCH means unchanged.
       if (converted !== undefined) body[field.name] = converted
@@ -228,6 +241,7 @@ function Form({
                   models={models}
                   value={values[field.name] ?? ''}
                   error={messageFor(field.name)}
+                  editing={id !== undefined}
                   onChange={(next) => change(field.name, next)}
                 />
               ))}
@@ -262,6 +276,7 @@ function FieldInput({
   models,
   value,
   error,
+  editing,
   onChange,
 }: {
   readonly field: FieldDescriptor
@@ -270,6 +285,8 @@ function FieldInput({
   readonly value: string | boolean
   /** Why this value was refused, when it was. */
   readonly error?: string
+  /** Editing an existing record rather than creating one. */
+  readonly editing: boolean
   readonly onChange: (next: string | boolean) => void
 }) {
   const label = `${fieldLabel(field)}${field.isRequired ? ' *' : ''}`
@@ -349,6 +366,17 @@ function FieldInput({
         onChange={(event) => onChange(event.target.value)}
       />
     )
+  } else if (field.widget === 'password') {
+    control = (
+      <PasswordInput
+        {...described}
+        value={String(value)}
+        // Never required on an edit: leaving it blank means "keep the one
+        // already stored", which `onSubmit` turns into an omitted key.
+        required={field.isRequired && !editing}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    )
   } else if (field.widget !== undefined && field.kind !== 'boolean') {
     control = (
       <Input
@@ -357,9 +385,6 @@ function FieldInput({
         value={String(value)}
         required={field.isRequired}
         className={field.widget === 'color' ? 'h-9 w-20 p-1' : undefined}
-        // A password box must not be offered to a password manager as the
-        // visitor's own credential: it belongs to someone else's record.
-        {...(field.widget === 'password' ? { autoComplete: 'new-password' } : {})}
         onChange={(event) => onChange(event.target.value)}
       />
     )
