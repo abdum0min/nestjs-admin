@@ -1,14 +1,8 @@
 import { randomBytes, scryptSync } from 'node:crypto'
 
 import { Module } from '@nestjs/common'
-import {
-  AdminModule,
-  ForbiddenError,
-  UnauthorizedError,
-  ValidationError,
-  type AdminAuth,
-} from '@nest-admin/nestjs'
-import { PrismaAdapter } from '@nest-admin/nestjs/prisma'
+import { AdminModule, builtInAuth, ValidationError } from '@nest-admin/nestjs'
+import { PrismaAdapter, prismaAccountStore } from '@nest-admin/nestjs/prisma'
 
 import { PrismaService } from './prisma.service.js'
 
@@ -26,29 +20,6 @@ import { PrismaService } from './prisma.service.js'
  * which columns it hides, which it renames, which it renders differently, and
  * where its own rules go.
  */
-
-/**
- * The application owns identity.
- *
- * A deliberately crude stand-in for whatever the host already has - a session,
- * a JWT verified by middleware, a gateway header. The framework never inspects
- * a credential itself; it only asks this question.
- *
- * Set `ADMIN_TOKEN` to require the header; leave it unset and the admin is open,
- * which is fine for a local example and nothing else.
- */
-const adminAuth: AdminAuth = {
-  authorize(context) {
-    const expected = process.env['ADMIN_TOKEN']
-    if (!expected) return
-
-    const request = context.switchToHttp().getRequest<{ headers: Record<string, unknown> }>()
-    const presented = request.headers['x-admin-token']
-
-    if (typeof presented !== 'string' || presented === '') throw new UnauthorizedError()
-    if (presented !== expected) throw new ForbiddenError()
-  },
-}
 
 /**
  * Per-field configuration.
@@ -208,6 +179,39 @@ const models = {
   },
 } as const
 
+/**
+ * Who may open the admin.
+ *
+ * This example has no identity system of its own, which is the case
+ * `builtInAuth` exists for: a login page, a session cookie and a password
+ * hash, without writing any of them.
+ *
+ * The accounts live in `AdminAccount` - a model of its own, separate from the
+ * `User` table this admin manages. That separation is the whole point. The
+ * people who administer a system are not rows in the table they administer,
+ * and pointing this at `User` would mean every customer record carries a
+ * password that opens the admin.
+ *
+ * An application that *does* have identity keeps writing its own `AdminAuth`
+ * and never touches any of this - the contract has not changed.
+ */
+function adminAuth(prisma: PrismaService) {
+  const secret = process.env['ADMIN_SESSION_SECRET']
+  if (!secret) {
+    // Refused here rather than defaulted. A development fallback is a secret
+    // that ships, and a shipped secret mints a session for any account.
+    throw new Error(
+      'ADMIN_SESSION_SECRET is not set. Generate one with:\n' +
+        "  node -e \"console.log(require('node:crypto').randomBytes(32).toString('base64url'))\"",
+    )
+  }
+
+  return builtInAuth({
+    store: prismaAccountStore({ client: prisma }),
+    session: { secret },
+  })
+}
+
 @Module({ providers: [PrismaService], exports: [PrismaService] })
 class DatabaseModule {}
 
@@ -233,7 +237,18 @@ class DatabaseModule {}
 
       useFactory: (prisma: PrismaService) => ({
         adapter: new PrismaAdapter({ client: prisma }),
-        auth: adminAuth,
+        auth: adminAuth(prisma),
+
+        /*
+         * The admin does not manage its own administrators.
+         *
+         * `AdminAccount` is in this schema, so without excluding it the admin
+         * would list it like any other table - and anyone who could edit it
+         * could set another account's password hash, which is every permission
+         * the admin has, reachable from a form. The module warns at startup if
+         * this is forgotten.
+         */
+        resources: { exclude: ['AdminAccount'] },
 
         models,
 

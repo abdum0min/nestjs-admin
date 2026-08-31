@@ -250,3 +250,24 @@ model Review {
 
   @@unique([productId, userId])
 }
+
+/// Who may open the admin.
+///
+/// A model of its own, and that is the point rather than an accident of
+/// naming: the people who administer this system are not rows in `User`, and
+/// conflating the two would mean every customer record carries a password that
+/// opens the admin.
+///
+/// It is excluded from the admin's own resource list in app.module.ts. Anyone
+/// who could edit this table could set another account's password hash, which
+/// is every permission the admin has, reachable from a table that looks like
+/// any other.
+model AdminAccount {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  disabled     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+}

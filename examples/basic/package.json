@@ -11,7 +11,8 @@
     "seed": "nest build && node seed.mjs",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:push": "prisma db push"
+    "prisma:push": "prisma db push",
+    "create-admin": "nest build && node create-admin.mjs"
   },
   "dependencies": {
     "@nest-admin/nestjs": "workspace:*",
