@@ -17,6 +17,13 @@ export type {
 } from './metadata/model.js'
 
 export type { ModelIcon } from './config/overrides.js'
+
+export {
+  summarise,
+  type AdminAccount,
+  type AdminAccountStore,
+  type AdminAccountSummary,
+} from './auth/account.js'
 export { displayFieldFor } from './metadata/display-field.js'
 
 export type { RelationShape } from './metadata/relation-shape.js'
