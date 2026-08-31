@@ -36,11 +36,35 @@ model Product {
   price Float
 }
 
-// Numeric primary key: proves id coercion, since ids arriving from a URL
-// are strings but an Int @id must be queried with a number.
+// Numeric primary keys, and relations between them.
+//
+// Ids arrive from a URL as strings, so every place one becomes a query
+// argument has to coerce it. `Counter` used to have no relations, which meant
+// the relation routes were only ever exercised against string keys - and the
+// two places that forgot to coerce went unnoticed until a consumer hit them.
+// The shapes below cover all three: a to-one inverse (`is`), a many-to-many
+// (`some`), and a self-relation.
 model Counter {
-  id    Int    @id @default(autoincrement())
-  label String
+  id       Int       @id @default(autoincrement())
+  label    String
+  readings Reading[]
+  markers  Marker[]
+}
+
+model Reading {
+  id        Int       @id @default(autoincrement())
+  value     Int
+  counterId Int
+  counter   Counter   @relation(fields: [counterId], references: [id])
+  parentId  Int?
+  parent    Reading?  @relation("chain", fields: [parentId], references: [id])
+  children  Reading[] @relation("chain")
+}
+
+model Marker {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  counters Counter[]
 }
 
 model Post {

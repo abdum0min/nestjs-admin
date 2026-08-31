@@ -106,3 +106,32 @@ export const DDL = `
     PRIMARY KEY (post_id, tag_id)
   );
 `
+
+/**
+ * Integer keys, and relations between them.
+ *
+ * The Prisma adapter shipped a defect where an id from a URL - always a string
+ * - reached the query builder without being converted to the key's declared
+ * type, on every relation route. Drizzle's adapter resolves a related list from
+ * the parent record's own value rather than from the id, so it should not be
+ * reachable here. "Should not" is not evidence, so these tables exist to ask.
+ */
+export const meters = sqliteTable('meters', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  label: text('label').notNull(),
+})
+
+export const samples = sqliteTable('samples', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  value: integer('value').notNull(),
+  meterId: integer('meter_id').references(() => meters.id),
+})
+
+export const NUMERIC_DDL = `
+  CREATE TABLE meters (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL);
+  CREATE TABLE samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    value INTEGER NOT NULL,
+    meter_id INTEGER REFERENCES meters(id)
+  );
+`

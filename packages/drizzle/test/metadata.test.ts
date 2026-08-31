@@ -43,8 +43,10 @@ describe('models', () => {
     const all = await models()
     expect(all.map((entry) => entry.name).sort()).toEqual([
       'comments',
+      'meters',
       'postTags',
       'posts',
+      'samples',
       'tags',
       'users',
     ])

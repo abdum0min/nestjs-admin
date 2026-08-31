@@ -2,9 +2,10 @@
 
 An admin panel for NestJS applications, generated from your ORM schema.
 
-> **Status: 0.11.0, not published.** Everything described below works and is
+> **Status: 0.11.1, published.** Everything described below works and is
 > tested against a real database, a real NestJS HTTP server and the built
-> interface. Nothing is on npm yet — the first publish is 1.0.0. See
+> interface. The API is not frozen — 0.x means it may still change, and 1.0.0
+> is planned once row-level authorization lands. See
 > [docs/project-state.md](docs/project-state.md) for what exists, what does
 > not, and the open risks.
 

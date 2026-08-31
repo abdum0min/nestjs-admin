@@ -24,6 +24,7 @@ export function seeded(): {
   // only reachable when the database actually enforces them.
   sqlite.pragma('foreign_keys = ON')
   sqlite.exec(schema.DDL)
+  sqlite.exec(schema.NUMERIC_DDL)
 
   const db = drizzle(sqlite, { schema })
 
@@ -75,6 +76,18 @@ export function seeded(): {
     .run()
   db.insert(schema.postTags)
     .values([{ postId: 'p1', tagId: 't1' }])
+    .run()
+
+  // Integer keys, so the relation routes are asked the question the Prisma
+  // adapter got wrong.
+  db.insert(schema.meters)
+    .values([{ id: 1, label: 'visits' }])
+    .run()
+  db.insert(schema.samples)
+    .values([
+      { id: 1, value: 10, meterId: 1 },
+      { id: 2, value: 20, meterId: 1 },
+    ])
     .run()
 
   return {

@@ -208,7 +208,7 @@ describe('dynamic model resolution', () => {
 
   it('names the known models in the error, so the mistake is obvious', async () => {
     await expect(adapter.list('user', {})).rejects.toThrow(
-      /Known models: User, Product, Counter, Post/,
+      /Known models: User, Product, Counter, Reading, Marker, Post/,
     )
   })
 

@@ -35,7 +35,15 @@ function model(models: readonly ModelMetadata[], name: string): ModelMetadata {
 describe('model discovery', () => {
   it('finds every model in the schema', () => {
     const models = load(SINGLE_FILE)
-    expect(models.map((m) => m.name).sort()).toEqual(['Counter', 'Post', 'Product', 'Tag', 'User'])
+    expect(models.map((m) => m.name).sort()).toEqual([
+      'Counter',
+      'Marker',
+      'Post',
+      'Product',
+      'Reading',
+      'Tag',
+      'User',
+    ])
   })
 
   it('identifies the primary key', () => {

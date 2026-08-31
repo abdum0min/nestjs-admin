@@ -27,6 +27,7 @@ import { readDatasourceProvider, readPrismaDmmf } from './metadata/read-dmmf.js'
 import { toModelMetadata } from './metadata/to-metadata.js'
 import { toIncludeClause } from './query/to-include.js'
 import { toConstraintError } from './errors/constraints.js'
+import { coerceId } from './query/coerce-id.js'
 import { toRelatedWhere } from './query/to-related-where.js'
 import { resolvePagination, toFindManyArgs } from './query/to-prisma-args.js'
 
@@ -260,7 +261,13 @@ export class PrismaAdapter implements OrmAdapter {
       () =>
         delegate.update({
           where: this.#whereById(metadata, id),
-          data: { [relationField]: { [operation]: { [targetKey]: targetId } } },
+          data: {
+            [relationField]: {
+              // Against the *target's* key, not this model's - the two ends of
+              // a relation can be typed differently.
+              [operation]: { [targetKey]: coerceId(target, targetKey, targetId) },
+            },
+          },
         }),
       id,
     )
@@ -320,27 +327,7 @@ export class PrismaAdapter implements OrmAdapter {
       )
     }
 
-    return { [primaryKeyField]: this.#coerceId(model, primaryKeyField, id) }
-  }
-
-  /**
-   * Coerce an id to the type the schema declares.
-   *
-   * Ids arriving from a URL are always strings, but a Prisma `Int @id` column
-   * must be queried with a number or Prisma rejects the argument.
-   */
-  #coerceId(model: ModelMetadata, fieldName: string, id: RecordId): RecordId {
-    const field = model.fields.find((candidate) => candidate.name === fieldName)
-    if (field?.kind !== 'number' || typeof id === 'number') return id
-
-    const numeric = Number(id)
-    if (!Number.isFinite(numeric)) {
-      throw new InvalidQueryError(
-        `Invalid id ${JSON.stringify(id)} for numeric primary key ` +
-          `"${model.name}.${fieldName}".`,
-      )
-    }
-    return numeric
+    return { [primaryKeyField]: coerceId(model, primaryKeyField, id) }
   }
 
   /**

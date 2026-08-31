@@ -23,6 +23,8 @@ import {
   type RecordId,
 } from '@nest-admin/core'
 
+import { coerceId } from './coerce-id.js'
+
 /**
  * A `where` clause selecting the target records linked to `parentId`.
  *
@@ -83,7 +85,10 @@ export function toRelatedWhere(
     )
   }
 
-  const match = { [parentKey]: parentId }
+  // Coerced here rather than by the caller, because this is the line that
+  // turns an id into a Prisma argument. A string against an `Int @id` is
+  // refused by Prisma with a message about its own argument types.
+  const match = { [parentKey]: coerceId(parent, parentKey, parentId) }
 
   return {
     target,

@@ -13,6 +13,52 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.11.1
+
+Fixes the first defect reported from a published release.
+
+### Fixed
+
+- **Relation routes failed on a model with a numeric primary key.** Every
+  `GET /admin/:model/:id/:relation`, attach and detach against an `Int @id`
+  model answered 500:
+
+  ```
+  Argument `id`: Invalid value provided. Expected IntFilter or Int, provided String.
+  ```
+
+  Ids reach the adapter from a URL, so they are always strings, and Prisma
+  refuses a string for an `Int @id` rather than converting it. The adapter knew
+  that and converted in `#whereById` - but two _other_ places turn an id into a
+  Prisma argument and neither did: the parent id inside a related-list filter
+  (`{ post: { is: { id } } }`), and the target id inside a connect or disconnect.
+
+  The conversion is now a module of its own, applied at each of the three points
+  where an id becomes a Prisma argument rather than once at an entrance - that
+  is where the mistake was made, so that is where the guard belongs. A
+  non-numeric id for a numeric key is now refused with a message about the id,
+  instead of one about Prisma's argument types.
+
+  String-keyed models were never affected, which is why it survived to a
+  release: the fixture schema's only integer-keyed model had no relations, so
+  the whole class was untested. It now has three - a to-one inverse, a
+  many-to-many and a self-relation - and the same questions are asked of the
+  Drizzle adapter, which resolves a related list from the parent record's own
+  key value and was never reachable.
+
+  Reported by a consumer running the admin against a Medium-style schema.
+  Thank you. If you wrote a subclass to work around this, it is safe to keep
+  during the upgrade - converting an id twice does nothing - and can then be
+  deleted.
+
+### Notes
+
+- No API changed. `AdminModule`, `OrmAdapter` and both adapters have the same
+  surface as 0.11.0; the HTTP layer is untouched, because passing the id through
+  unconverted is what it is supposed to do.
+
+---
+
 ## 0.11.0
 
 A second ORM, one `packages` tree, and documentation that matches the code.

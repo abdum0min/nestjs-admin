@@ -46,5 +46,9 @@ export async function resetDatabase(client: PrismaClient): Promise<void> {
   await client.user.updateMany({ data: { managerId: null } })
   await client.user.deleteMany({})
   await client.product.deleteMany({})
+  // Readings chain to themselves, so the children go before their parents.
+  await client.reading.updateMany({ data: { parentId: null } })
+  await client.reading.deleteMany({})
+  await client.marker.deleteMany({})
   await client.counter.deleteMany({})
 }
