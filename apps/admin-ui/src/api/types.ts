@@ -67,6 +67,8 @@ export interface FieldDescriptor {
   readonly isGenerated: boolean
   /** The admin will refuse to write this field. */
   readonly readOnly?: boolean
+  /** The admin accepts this field on a write and never sends it back. */
+  readonly writeOnly?: boolean
   /** What to call it, when the column name is not what people call it. */
   readonly label?: string
   /** How to edit it, when the kind does not say enough. */

@@ -93,6 +93,21 @@ export interface FieldMetadata {
    * See reports/003-prisma-adapter.md for the correct derivation.
    */
   readonly isGenerated: boolean
+
+  /**
+   * Accepted on a write, never returned on a read.
+   *
+   * Set by `writeOnly` in the configuration. A password is the reason it
+   * exists: it has to be typed into a form and must never come back out, and
+   * `hidden` cannot express that - it refuses the field in both directions, so
+   * a hidden password column leaves no way to set one.
+   *
+   * Enforced twice, deliberately: the field is left out of the columns the
+   * adapter is asked for, *and* out of the projection applied to whatever comes
+   * back. One of those is enough; two is what it takes for a future adapter
+   * that ignores the field scope not to become a leak.
+   */
+  readonly writeOnly?: boolean
   /**
    * Literal default the admin should pre-fill on create, when the schema
    * declares one (`@default(true)`, `@default(0)`, `@default("USER")`).

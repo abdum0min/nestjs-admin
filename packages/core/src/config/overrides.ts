@@ -13,6 +13,9 @@
  *                 cannot be filtered, sorted, written or returned - see
  *                 `applyOverrides`.
  *
+ *   behaviour     `writeOnly` too - accepted on a write and stripped from
+ *                 every read.
+ *
  *   presentation  `label`, `widget`, `order`. Passed to the client, which is
  *                 free to ignore them. Nothing depends on them being honoured.
  *
@@ -44,6 +47,19 @@ export interface FieldOverride {
 
   /** Show the field, refuse to write it. Generated columns are already this. */
   readonly readOnly?: boolean
+
+  /**
+   * Write the field, never read it back. The mirror of `readOnly`.
+   *
+   * **Enforced, not cosmetic.** The column is left out of the query the adapter
+   * makes and out of the projection applied to the result, so it is absent from
+   * a list, from a detail page and from the record a write returns - while
+   * still being accepted in the write itself.
+   *
+   * A password is what this is for. `hidden` is the wrong tool: it refuses the
+   * field in both directions, so a hidden password column can never be set.
+   */
+  readonly writeOnly?: boolean
 
   /** What to call it, when the column name is not what people call the thing. */
   readonly label?: string
@@ -179,10 +195,26 @@ export function applyOverrides(
         .map(([name]) => name),
     )
 
+    const writeOnly = new Set(
+      Object.entries(override.fields ?? {})
+        .filter(([, field]) => field.writeOnly === true)
+        .map(([name]) => name),
+    )
+
+    const kept = hidden.size === 0 ? model.fields : model.fields.filter((f) => !hidden.has(f.name))
+
     return {
       ...model,
       ...(override.displayField !== undefined ? { displayField: override.displayField } : {}),
-      fields: hidden.size === 0 ? model.fields : model.fields.filter((f) => !hidden.has(f.name)),
+      // Carried onto the metadata rather than looked up again later, so
+      // everything downstream - the field scope, the projection, the DTO -
+      // reads one flag instead of each re-deriving it from the configuration.
+      fields:
+        writeOnly.size === 0
+          ? kept
+          : kept.map((field) =>
+              writeOnly.has(field.name) ? { ...field, writeOnly: true } : field,
+            ),
     }
   })
 }

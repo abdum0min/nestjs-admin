@@ -125,6 +125,15 @@ export interface FieldDto {
    */
   readonly readOnly: boolean
 
+  /**
+   * The admin accepts this field on a write and never sends it back.
+   *
+   * Sent so the interface knows the blank it shows is not the stored value. A
+   * password field that looked empty because the record had none would be a
+   * different thing entirely.
+   */
+  readonly writeOnly?: boolean
+
   /** Present when `kind` is `relation`. */
   readonly relation?: RelationDto
 }
@@ -270,6 +279,7 @@ function toFieldDto(
     isList: field.isList,
     isGenerated: field.isGenerated,
     readOnly: isReadOnly(overrides, modelName, field),
+    ...(field.writeOnly === true ? { writeOnly: true } : {}),
     ...(override?.label !== undefined ? { label: override.label } : {}),
     ...(override?.widget !== undefined ? { widget: override.widget } : {}),
     ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),

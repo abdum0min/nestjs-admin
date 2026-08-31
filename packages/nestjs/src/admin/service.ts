@@ -21,6 +21,7 @@ import {
   ModelNotFoundError,
   RecordNotFoundError,
   type ListQuery,
+  type FieldMetadata,
   type ModelMetadata,
   type OrmAdapter,
   type Page,
@@ -64,6 +65,11 @@ import {
  * through. Two hundred is more than anyone selects by hand and small enough to
  * finish.
  */
+/** The fields a response may carry. Excludes anything marked write-only. */
+function readableFields(model: ModelMetadata): readonly FieldMetadata[] {
+  return model.fields.filter((field) => field.writeOnly !== true)
+}
+
 export const MAX_BULK_DELETE = 200
 
 /** What happened to each record a bulk delete named. */
@@ -431,7 +437,7 @@ export class AdminService implements OnModuleInit {
    * this admin, it does not leave it.
    */
   private project(model: ModelMetadata, record: RecordData): RecordData {
-    const allowed = new Set(model.fields.map((field) => field.name))
+    const allowed = new Set(readableFields(model).map((field) => field.name))
     const projected: RecordData = {}
 
     for (const [key, value] of Object.entries(record)) {
@@ -450,8 +456,16 @@ export class AdminService implements OnModuleInit {
    * meant to see. `project` would still keep it out of the response, but
    * "you cannot read it" is a weaker promise than "it was never fetched".
    */
+  /**
+   * Which columns the adapter is allowed to return.
+   *
+   * Not every field the model has: a `writeOnly` one is accepted on a write and
+   * must never come back, so it is left out of the query itself rather than
+   * removed from the answer afterwards. The projection below removes it a
+   * second time, which is deliberate - see `FieldMetadata.writeOnly`.
+   */
   private scopeToFields(model: ModelMetadata, query: ListQuery): ListQuery {
-    return { ...query, fields: model.fields.map((field) => field.name) }
+    return { ...query, fields: readableFields(model).map((field) => field.name) }
   }
 
   private projectPage(model: ModelMetadata, page: Page<RecordData>): Page<RecordData> {
