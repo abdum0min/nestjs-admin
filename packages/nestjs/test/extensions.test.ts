@@ -329,22 +329,50 @@ describe('theme', () => {
   it('emits a readable pairing for each palette', async () => {
     // The pairing 0.7.0 got wrong by hand, decided by measurement instead.
     // What is asserted is the guarantee rather than the hex: whatever arrives,
-    // the text on it is readable and the colour is visible on the page.
-    // theme-colour.test.ts covers the arithmetic itself.
+    // the label on the fill is readable and the link text is readable on the
+    // page. theme-colour.test.ts covers the arithmetic itself.
     const shell = await shellOf({ brandColor: '#1e3a8a' })
 
-    const light = /:root{--primary:(#[0-9a-f]{6});--primary-foreground:(#[0-9a-f]{6})}/i.exec(shell)
-    const dark = /.dark{--primary:(#[0-9a-f]{6});--primary-foreground:(#[0-9a-f]{6})}/i.exec(shell)
+    const block = (scope: string) =>
+      new RegExp(
+        scope +
+          '\{--primary:(#[0-9a-f]{6});--primary-foreground:(#[0-9a-f]{6});--link:(#[0-9a-f]{6})\}',
+        'i',
+      ).exec(shell)
+
+    const light = block(':root')
+    const dark = block('\.dark')
 
     expect(light).not.toBeNull()
     expect(dark).not.toBeNull()
+
+    // The label on a filled button.
     expect(isReadable(light![2]!, light![1]!)).toBe(true)
     expect(isReadable(dark![2]!, dark![1]!)).toBe(true)
 
     // A navy is fine on white and invisible on near-black, so exactly one of
-    // the two has been adjusted.
+    // the two fills has been adjusted.
     expect(light![1]).toBe('#1e3a8a')
     expect(dark![1]).not.toBe('#1e3a8a')
+  })
+
+  it('separates the fill from the text, because they have different floors', async () => {
+    /*
+     * One colour cannot do both jobs in dark mode. A fill dark enough to take
+     * a light label sits below the floor for body text against a near-black
+     * page; text light enough to read is too light to take a light label.
+     *
+     * Holding one token to both is what produced buttons with near-black
+     * labels - legible, measurable, and reported as looking washed out.
+     */
+    const shell = await shellOf({ brandColor: '#1e3a8a' })
+    const dark =
+      /.dark{--primary:(#[0-9a-f]{6});--primary-foreground:#[0-9a-f]{6};--link:(#[0-9a-f]{6})}/i.exec(
+        shell,
+      )
+
+    expect(dark).not.toBeNull()
+    expect(dark![1]).not.toBe(dark![2])
   })
 
   it('carries the appearance an application chose', async () => {

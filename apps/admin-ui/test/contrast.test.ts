@@ -85,6 +85,10 @@ const TEXT: readonly (readonly [string, string])[] = [
   ['muted-foreground', 'background'],
   ['muted-foreground', 'card'],
   ['primary-foreground', 'primary'],
+  // The token that exists because a fill and a piece of text cannot be the
+  // same colour in dark mode. This is the half that has to be *read*.
+  ['link', 'background'],
+  ['link', 'card'],
   ['secondary-foreground', 'secondary'],
   ['accent-foreground', 'accent'],
   ['destructive-foreground', 'destructive'],
@@ -102,6 +106,8 @@ const TEXT: readonly (readonly [string, string])[] = [
  * nobody can see is a keyboard user with nowhere to stand.
  */
 const SURFACE: readonly (readonly [string, string])[] = [
+  // A filled button, whose label carries the contrast - see `--link` above for
+  // the same colour held to the stricter floor where it is text.
   ['primary', 'background'],
   ['destructive', 'card'],
   ['success', 'card'],

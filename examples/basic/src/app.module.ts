@@ -1,3 +1,5 @@
+import { randomBytes, scryptSync } from 'node:crypto'
+
 import { Module } from '@nestjs/common'
 import {
   AdminModule,
@@ -66,15 +68,25 @@ const models = {
     // same icon on every entry is decoration rather than information.
     icon: 'users',
     fields: {
-      // Enforced. The column leaves the server in no response at all - not in
-      // the schema document, not in a list, not in a detail page - and is
-      // refused in filters, sorts and writes.
-      //
-      // It is nullable in the schema, and that is not an accident: a *required*
-      // column with no default cannot be hidden, because that would leave no
-      // way to supply a value and every create would fail. The module refuses
-      // to start rather than let that happen.
-      passwordHash: { hidden: true },
+      /*
+       * Written, never read back.
+       *
+       * `hidden` was the wrong tool here and this example used it: it refuses
+       * the column in both directions, so the admin could show a Person but
+       * never give one a password. `writeOnly` is the other half - the value
+       * is accepted on a write and left out of every response, which is what a
+       * password actually needs.
+       *
+       * The `password` widget gets the masked box with a reveal toggle; the
+       * hook below turns whatever is typed into a hash before it is stored, so
+       * the plaintext exists only for the length of one request.
+       */
+      passwordHash: {
+        label: 'Password',
+        widget: 'password',
+        writeOnly: true,
+        order: 7,
+      },
 
       name: { order: 1 },
       email: { widget: 'email', order: 2 } as const,
@@ -244,6 +256,18 @@ class DatabaseModule {}
          * the application's own transaction.
          */
         hooks: {
+          User: {
+            // scrypt from node:crypto - no dependency, and a real KDF rather
+            // than a hash. A salt per password, stored with it, because
+            // otherwise two people who chose the same one are visibly the same
+            // in the database.
+            beforeCreate: ({ data }) => ({ ...data, passwordHash: hash(data['passwordHash']) }),
+            // An omitted key means "unchanged", which is what a blank password
+            // box sends. Only a value that arrived is re-hashed.
+            beforeUpdate: ({ data }) =>
+              'passwordHash' in data ? { ...data, passwordHash: hash(data['passwordHash']) } : data,
+          },
+
           Post: {
             // A slug is derived from the title rather than typed. Returning
             // new data from a `before` hook is how a value is supplied that
@@ -355,6 +379,21 @@ class DatabaseModule {}
   ],
 })
 export class AppModule {}
+
+/**
+ * A password, as something safe to store.
+ *
+ * scrypt with a random salt, both from `node:crypto`. Deliberately not a plain
+ * SHA: a password hash has to be slow, and a general-purpose digest is designed
+ * to be fast, which is the whole problem with using one here.
+ */
+function hash(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value === '') return undefined
+  const salt = randomBytes(16).toString('hex')
+  // `scrypt$<salt>$<hash>`, so the salt travels with the hash and a future
+  // change of parameters is recognisable rather than silently incompatible.
+  return ['scrypt', salt, scryptSync(value, salt, 64).toString('hex')].join(String.fromCharCode(36))
+}
 
 /** Enough for a slug in an example. A real application has a library for this. */
 function slugify(value: string): string {
