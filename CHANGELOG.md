@@ -13,6 +13,83 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.9.0
+
+A login, shipped in the box — without moving the boundary that kept
+authentication with the host application.
+
+### Added
+
+- **`builtInAuth()`** — an `AdminAuth` implementation the package provides,
+  with a login screen, sessions and a user menu. `AdminAuth` itself is
+  unchanged; there are now three answers to "who may open this?" rather than
+  one:
+
+  ```ts
+  auth: unsafeAllowAllRequests()   // development only, warns at startup
+  auth: myOwnAuth                  // an application that already has identity
+  auth: builtInAuth({ ... })       // a login page, sessions and a store
+  ```
+
+  An application using its own `AdminAuth` sees an admin with **no login
+  routes at all** — not a sign-in form it cannot use.
+
+- **`AdminAccountStore`** in Core, with `prismaAccountStore()` in
+  `@nest-admin/nestjs/prisma`. A contract rather than a table, for the same
+  reason `OrmAdapter` is one.
+
+  The accounts are **separate from the application’s users** by construction —
+  a model of its own, `AdminAccount` by default. The admin never reads the
+  application’s `User` table to decide who may sign in, so adding a customer
+  never adds an administrator. The store is read-only: seeding an account is
+  the application’s job.
+
+- **`hashAdminPassword()`** and **`generateSessionSecret()`**, for seeding.
+  scrypt from `node:crypto` — no native module, so the package still installs
+  identically everywhere. Cost parameters travel with each hash, so they can
+  be raised later without a migration nobody can run.
+
+- **`adminAccountOf(context)`** — who is signed in, for a `resourceAuth`
+  policy or a hook.
+
+### Security
+
+Each of these has a test.
+
+- An unknown address, a wrong password, a disabled account and a locked-out
+  one answer **identically** — including in timing: the password is verified
+  against a dummy hash when the account does not exist.
+- Session cookie: `HttpOnly`, `SameSite=Lax`, `Secure` everywhere but
+  localhost, HMAC-SHA256 compared with `timingSafeEqual`.
+- A new token on every sign-in, so a planted cookie cannot survive one.
+- An `Origin` check on writes, when the header is present.
+- Ten attempts per address, then fifteen minutes.
+- A session secret under 32 characters is refused at construction.
+- The account is loaded on **every** request, so disabling or deleting one
+  ends its session immediately rather than when the cookie expires.
+
+### Fixed
+
+- **The rate limiter counted nothing.** `lockedOut` cleared the failure count
+  whenever there was no active lockout — which is every call before the tenth —
+  so the lockout never triggered. Found by the test that tries the right
+  password after ten wrong ones.
+
+### Known limitations
+
+- **A session cannot be revoked before it expires.** Disabling the account is
+  the revocation that works.
+- The lockout counter is per process, so behind several instances an attacker
+  gets the allowance once per instance. Not a substitute for a rate limiter at
+  the edge.
+- No roles, no password reset, no email, no OAuth, no 2FA.
+- The admin cannot manage its own accounts — deliberate, and it does mean the
+  second administrator is created by a script rather than a screen.
+- A model named `auth` is unreachable, as one named `actions` or `assets`
+  already was.
+
+---
+
 ## 0.8.2
 
 Three things found by working in 0.8.1's interface.
