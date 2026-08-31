@@ -82,12 +82,18 @@ Who may open the admin at all. One method, applied to every route including
 
 ```ts
 interface AdminAuth {
-  authenticate(args: { context: ExecutionContext }): void | Promise<void>
+  authorize(context: ExecutionContext): void | boolean | Promise<void | boolean>
 }
 ```
 
 Return to admit. Throw `UnauthorizedError` for 401, `ForbiddenError` for 403 —
-the interface renders those differently, so the distinction matters.
+the interface renders those differently, so the distinction matters. Returning
+`false` denies as 403; it exists so a guard written reflexively fails closed,
+not as the preferred way to say no.
+
+Note the shape: `authorize` takes the `ExecutionContext` **positionally**.
+`AdminResourceAuth.authorize` below takes an object, because it carries three
+things rather than one.
 
 Three ready-made answers:
 
@@ -112,6 +118,9 @@ auth: builtInAuth({ ... })      // a login screen this package provides
 `prismaAccountStore({ client, model?, fields? })` defaults to a model called
 `AdminAccount`; `fields` maps `id`, `email`, `name`, `passwordHash` and
 `disabled` onto your own column names.
+
+`AdminAccountStore` itself is `findByEmail`, `findById` and `count`, plus two
+optional members: `recordLogin` and `describes`.
 
 Whatever you pass, **exclude the account table from `resources`**. Anyone who
 could edit it could set another account's password hash, which is every

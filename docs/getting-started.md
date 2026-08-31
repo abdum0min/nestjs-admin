@@ -95,10 +95,10 @@ so whatever your application already uses — a guard, a session, a JWT, a
 header — works unchanged:
 
 ```ts
-import { ForbiddenError, UnauthorizedError } from '@nest-admin/nestjs'
+import { ForbiddenError, UnauthorizedError, type AdminAuth } from '@nest-admin/nestjs'
 
-const auth = {
-  async authenticate({ context }) {
+const auth: AdminAuth = {
+  authorize(context) {
     const request = context.switchToHttp().getRequest()
     const user = request.user
     if (!user) throw new UnauthorizedError('Sign in first.')
@@ -107,9 +107,13 @@ const auth = {
 }
 ```
 
-Throwing `UnauthorizedError` produces 401, `ForbiddenError` produces 403, and
-the interface renders each differently — one says "sign in", the other says
-"you do not have access". Returning normally admits the request.
+Returning normally admits the request. Throwing `UnauthorizedError` produces
+401, `ForbiddenError` produces 403, and the interface renders each differently
+— one says "sign in", the other says "you do not have access".
+
+Returning `false` also denies, mapped to 403, so a guard written in the
+reflexive NestJS style fails closed rather than silently allowing. Prefer
+throwing: `false` cannot express the 401/403 distinction.
 
 This is the boundary the package will not move: **authentication belongs to the
 host application.** Nothing below is a replacement for that, only an
@@ -175,8 +179,8 @@ Create the first account with a script; the example ships one
 
 Already have an accounts table under different names? `prismaAccountStore`
 takes `model` and a `fields` map. Storing accounts somewhere else entirely —
-LDAP, another service — means implementing `AdminAccountStore`, which is four
-methods.
+LDAP, another service — means implementing `AdminAccountStore`: three required
+methods (`findByEmail`, `findById`, `count`) and two optional ones.
 
 ### Who may see what
 
