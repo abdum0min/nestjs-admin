@@ -24,6 +24,7 @@ export {
   type AdminAccountStore,
   type AdminAccountSummary,
 } from './auth/account.js'
+export { createdFieldFor } from './metadata/created-field.js'
 export { displayFieldFor } from './metadata/display-field.js'
 
 export type { RelationShape } from './metadata/relation-shape.js'
