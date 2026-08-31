@@ -93,8 +93,14 @@ export function ConfirmProvider({ children }: { readonly children: React.ReactNo
         }}
       >
         <AlertDialogPrimitive.Portal>
-          <AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
-          <AlertDialogPrimitive.Content className="bg-popover text-popover-foreground fixed top-1/2 left-1/2 z-50 grid w-full max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border p-6 shadow-lg">
+          <AlertDialogPrimitive.Overlay
+            data-slot="alert-overlay"
+            className="fixed inset-0 z-50 bg-black/50"
+          />
+          <AlertDialogPrimitive.Content
+            data-slot="alert-content"
+            className="bg-popover text-popover-foreground fixed top-1/2 left-1/2 z-50 grid w-full max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border p-6 shadow-lg"
+          >
             <div className="flex flex-col gap-2">
               <AlertDialogPrimitive.Title className="text-lg leading-none font-semibold">
                 {pending?.title}

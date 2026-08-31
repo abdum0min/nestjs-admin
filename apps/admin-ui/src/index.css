@@ -249,6 +249,27 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /*
+   * Anything you can press says so.
+   *
+   * A `<button>` inherits `cursor: default` from the user agent - the same
+   * arrow the page background has - and a `<summary>` and an `aria-` widget
+   * get nothing at all. The pointer is the cheapest signal an interface has
+   * that something responds, and its absence is most of what makes one feel
+   * dead before anyone can say why.
+   *
+   * Disabled controls are excluded: there the arrow is the honest answer.
+   */
+  button:not(:disabled),
+  summary,
+  [role='button']:not([aria-disabled='true']),
+  [role='option'],
+  [role='menuitem'],
+  label[for],
+  a[href] {
+    cursor: pointer;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -258,6 +279,103 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/*
+ * Motion for the things that appear over the page.
+ *
+ * Radix stamps `data-state="open"` and `"closed"` on an overlay and its
+ * content and keeps the element mounted until its animation finishes, which is
+ * what makes an exit animation possible at all. Without these a dialog is
+ * simply there and then simply gone, and the eye reads that as a jump rather
+ * than as a thing arriving.
+ *
+ * Short - 150ms in, 120ms out. Long enough to be followed, short enough that
+ * nobody waiting on it notices. `prefers-reduced-motion` cuts all of it in the
+ * base layer above.
+ */
+@keyframes na-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes na-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes na-pop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+}
+
+@keyframes na-pop-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+}
+
+@keyframes na-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes na-slide-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes na-drop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-2px);
+  }
+}
+
+@layer components {
+  [data-radix-popper-content-wrapper] > *,
+  [data-slot='select-content'],
+  [data-slot='dropdown-menu-content'],
+  [data-slot='popover-content'] {
+    animation: na-drop-in 120ms ease-out;
+  }
+
+  [data-state='open'][data-slot='dialog-overlay'],
+  [data-state='open'][data-slot='alert-overlay'] {
+    animation: na-fade-in 150ms ease-out;
+  }
+
+  [data-state='closed'][data-slot='dialog-overlay'],
+  [data-state='closed'][data-slot='alert-overlay'] {
+    animation: na-fade-out 120ms ease-in;
+  }
+
+  /* The centred dialogs: the palette and every confirmation. */
+  [data-slot='dialog-content'][data-state='open'],
+  [data-slot='alert-content'][data-state='open'] {
+    animation: na-pop-in 150ms ease-out;
+  }
+
+  [data-slot='dialog-content'][data-state='closed'],
+  [data-slot='alert-content'][data-state='closed'] {
+    animation: na-pop-out 120ms ease-in;
+  }
+
+  /* The mobile navigation, which comes in from the edge it lives on. */
+  [data-slot='nav-drawer'][data-state='open'] {
+    animation: na-slide-in-left 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  [data-slot='nav-drawer'][data-state='closed'] {
+    animation: na-slide-out-left 160ms ease-in;
   }
 }
 
