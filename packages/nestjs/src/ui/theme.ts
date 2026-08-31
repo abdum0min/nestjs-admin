@@ -14,6 +14,7 @@
  * Each value is validated to a shape that cannot carry markup, and rejected at
  * startup if it does not fit.
  */
+import { readableInk, visibleOn } from './colour.js'
 
 export interface AdminTheme {
   /**
@@ -36,6 +37,15 @@ export interface AdminTheme {
    * whitelist rather than a blacklist so there is nothing to keep up with.
    */
   readonly logoUrl?: string
+
+  /**
+   * Which appearance to start from, before anyone chooses.
+   *
+   * `'system'` follows the viewer's operating system and is the default. A
+   * viewer's own choice, once made, wins over this and is remembered by their
+   * browser - so this sets the first impression rather than a policy.
+   */
+  readonly appearance?: 'system' | 'light' | 'dark'
 }
 
 const HEX_COLOUR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
@@ -44,6 +54,11 @@ const HEX_COLOUR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 const SAFE_TEXT = /^[^<>&"'`\\]{1,64}$/
 
 const SAFE_URL = /^(?:https?:\/\/[^\s<>"'`\\]+|data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+)$/
+
+const APPEARANCES: ReadonlySet<string> = new Set(['system', 'light', 'dark'])
+
+/** Every option this theme has. Anything else is a mistake, not a hint. */
+const THEME_KEYS: ReadonlySet<string> = new Set(['brandColor', 'title', 'logoUrl', 'appearance'])
 
 /**
  * Reject a theme that cannot be rendered safely.
@@ -74,6 +89,30 @@ export function assertUsableTheme(theme: AdminTheme | undefined): void {
         `received ${JSON.stringify(theme.logoUrl)}.`,
     )
   }
+
+  if (theme.appearance !== undefined && !APPEARANCES.has(theme.appearance)) {
+    throw new Error(
+      `AdminModule \`theme.appearance\` must be "system", "light" or "dark", ` +
+        `received ${JSON.stringify(theme.appearance)}.`,
+    )
+  }
+
+  /*
+   * An unknown key is a setting that silently does nothing.
+   *
+   * Every other part of the configuration refuses an unrecognised name at
+   * startup - `resources`, `models`, and the field overrides all do. Theming
+   * did not, and the cost of that showed up in this repository's own reference
+   * consumer: it configured `accent` where the option is called `brandColor`,
+   * the page stayed grey, and nothing anywhere said why.
+   */
+  const unknown = Object.keys(theme).filter((key) => !THEME_KEYS.has(key))
+  if (unknown.length > 0) {
+    throw new Error(
+      `AdminModule \`theme\` has no option${unknown.length === 1 ? '' : 's'} called ` +
+        `${unknown.join(', ')}. Known options: ${[...THEME_KEYS].join(', ')}.`,
+    )
+  }
 }
 
 /**
@@ -87,16 +126,47 @@ export function assertUsableTheme(theme: AdminTheme | undefined): void {
  * Everything here has been through `assertUsableTheme`.
  */
 export function renderTheme(theme: AdminTheme | undefined): string {
-  if (!theme || (!theme.brandColor && !theme.title && !theme.logoUrl)) return ''
+  if (!theme || (!theme.brandColor && !theme.title && !theme.logoUrl && !theme.appearance)) {
+    return ''
+  }
 
-  const style = theme.brandColor
-    ? `<style>:root{--brand:${theme.brandColor};--accent:${theme.brandColor}}</style>`
-    : ''
+  const style = theme.brandColor ? `<style>${brandRules(theme.brandColor)}</style>` : ''
 
   const globals = JSON.stringify({
     ...(theme.title !== undefined ? { title: theme.title } : {}),
     ...(theme.logoUrl !== undefined ? { logoUrl: theme.logoUrl } : {}),
+    ...(theme.appearance !== undefined ? { appearance: theme.appearance } : {}),
   })
 
   return `${style}<script>window.__NEST_ADMIN_THEME__ = ${globals}</script>`
+}
+
+/**
+ * The brand colour, as rules for both palettes.
+ *
+ * ## Why it sets `--primary` rather than `--accent`
+ *
+ * They are different roles in the token system: `--primary` is the colour of a
+ * button, and `--accent` is the pale surface a row takes on hover. Writing a
+ * brand colour into the second turns every hover into a solid block of it.
+ *
+ * ## Why one hex becomes four values
+ *
+ * A single colour cannot answer the three questions the interface has to ask
+ * of it - what text can be read on top of it, and whether it can be seen
+ * against a light page and against a dark one. `colour.ts` answers them, and
+ * says there why the server does this rather than the stylesheet.
+ *
+ * The dark rule is scoped to `.dark`, the class the stylesheet already keys
+ * off. Specificity is on its side - a class beats `:root` - so the dark
+ * variant wins where it applies without either rule needing `!important`.
+ */
+function brandRules(brand: string): string {
+  const light = visibleOn(brand, 'light')
+  const dark = visibleOn(brand, 'dark')
+
+  return (
+    `:root{--primary:${light};--primary-foreground:${readableInk(light)}}` +
+    `.dark{--primary:${dark};--primary-foreground:${readableInk(dark)}}`
+  )
 }
