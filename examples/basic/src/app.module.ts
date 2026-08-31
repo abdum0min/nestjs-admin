@@ -61,6 +61,10 @@ const models = {
     label: 'People',
     displayField: 'name',
     order: 1,
+    // Presentational, from a closed set the interface knows how to draw. A
+    // model without one is drawn without one, which is a real answer: the
+    // same icon on every entry is decoration rather than information.
+    icon: 'users',
     fields: {
       // Enforced. The column leaves the server in no response at all - not in
       // the schema document, not in a list, not in a detail page - and is
@@ -84,6 +88,7 @@ const models = {
   Profile: {
     displayField: 'headline',
     order: 2,
+    icon: 'user',
     fields: {
       website: { widget: 'url' } as const,
       newsletter: { label: 'Subscribed to the newsletter' },
@@ -93,6 +98,7 @@ const models = {
   Category: {
     displayField: 'name',
     order: 3,
+    icon: 'layers',
     fields: {
       description: { widget: 'textarea' } as const,
       parentId: { label: 'Parent category' },
@@ -103,6 +109,7 @@ const models = {
   Product: {
     displayField: 'name',
     order: 4,
+    icon: 'package',
     fields: {
       // The detection rule guesses well and has no way to know that people
       // here say "SKU" rather than "sku".
@@ -117,6 +124,7 @@ const models = {
   Tag: {
     displayField: 'name',
     order: 5,
+    icon: 'tag',
     fields: {
       // A `String?` column that holds `#4f46e5`. The schema cannot tell a
       // colour from a sentence; this is the application saying which it is.
@@ -128,6 +136,7 @@ const models = {
     // `reference` rather than `id`: ORD-00042 is what people say out loud.
     displayField: 'reference',
     order: 6,
+    icon: 'receipt',
     fields: {
       reference: { label: 'Reference', order: 1 },
       status: { order: 2 },
@@ -139,6 +148,7 @@ const models = {
   OrderItem: {
     label: 'Order lines',
     order: 7,
+    icon: 'list',
     fields: {
       unitPrice: { label: 'Unit price at order time' },
     },
@@ -147,6 +157,7 @@ const models = {
   Post: {
     displayField: 'title',
     order: 8,
+    icon: 'file-text',
     fields: {
       title: { order: 1 },
       slug: { order: 2 },
@@ -162,6 +173,7 @@ const models = {
   Comment: {
     displayField: 'body',
     order: 9,
+    icon: 'message-square',
     fields: {
       body: { widget: 'textarea', order: 1 } as const,
       postId: { label: 'On post', order: 2 },
@@ -173,6 +185,7 @@ const models = {
   Review: {
     displayField: 'title',
     order: 10,
+    icon: 'star',
     fields: {
       rating: { label: 'Rating (1-5)', order: 1 },
       title: { order: 2 },

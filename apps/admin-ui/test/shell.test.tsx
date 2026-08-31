@@ -72,14 +72,29 @@ async function open(): Promise<void> {
 }
 
 describe('appearance', () => {
-  it('offers all three choices rather than a switch', async () => {
-    // "System" is a real answer and the default one. A two-state toggle forces
-    // everyone who has expressed no preference into having expressed one.
+  /*
+   * One button, not three.
+   *
+   * 0.8.0 shipped a three-way control - light, dark, follow the system - and
+   * these tests asserted it. The control changed deliberately, so the tests
+   * change with it: switching is something people do often and idly, and
+   * picking from a list of three to do it is three times the interaction for
+   * the same outcome.
+   *
+   * The argument for "system" was about the *default*, and that behaviour is
+   * unchanged and still asserted below: nothing is stored until the button is
+   * pressed, and until then the admin follows the operating system.
+   */
+  it('is a single button that switches to the other mode', async () => {
     serve()
     await open()
 
-    const group = screen.getByRole('radiogroup', { name: 'Appearance' })
-    expect(within(group).getAllByRole('radio')).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: /switch to dark mode/i }))
+    await waitFor(() => expect(document.documentElement.classList.contains('dark')).toBe(true))
+
+    // And the button now offers the way back, rather than repeating itself.
+    fireEvent.click(screen.getByRole('button', { name: /switch to light mode/i }))
+    await waitFor(() => expect(document.documentElement.classList.contains('dark')).toBe(false))
   })
 
   it('applies the choice to the document, not to a wrapper', async () => {
@@ -88,32 +103,25 @@ describe('appearance', () => {
     serve()
     await open()
 
-    fireEvent.click(screen.getByLabelText('Dark'))
-    await waitFor(() => expect(document.documentElement.classList.contains('dark')).toBe(true))
-    expect(document.documentElement.style.colorScheme).toBe('dark')
-
-    fireEvent.click(screen.getByLabelText('Light'))
-    await waitFor(() => expect(document.documentElement.classList.contains('dark')).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /switch to dark mode/i }))
+    await waitFor(() => expect(document.documentElement.style.colorScheme).toBe('dark'))
   })
 
   it('remembers the choice', async () => {
     serve()
     await open()
 
-    fireEvent.click(screen.getByLabelText('Dark'))
+    fireEvent.click(screen.getByRole('button', { name: /switch to dark mode/i }))
     await waitFor(() => expect(window.localStorage.getItem('nest-admin.appearance')).toBe('dark'))
   })
 
-  it('says which one is in force', async () => {
-    // The highlight is not information a screen reader can reach.
+  it('follows the system until someone says otherwise', async () => {
+    // The half of the three-way control worth keeping. Nothing is written down
+    // on load, so a machine that switches at dusk still switches the admin.
     serve()
     await open()
 
-    fireEvent.click(screen.getByLabelText('Dark'))
-    await waitFor(() =>
-      expect(screen.getByLabelText('Dark').getAttribute('aria-checked')).toBe('true'),
-    )
-    expect(screen.getByLabelText('System').getAttribute('aria-checked')).toBe('false')
+    expect(window.localStorage.getItem('nest-admin.appearance')).toBeNull()
   })
 
   it('survives storage that refuses to be read', async () => {
@@ -127,7 +135,7 @@ describe('appearance', () => {
 
     serve()
     await open()
-    fireEvent.click(screen.getByLabelText('Dark'))
+    fireEvent.click(screen.getByRole('button', { name: /switch to dark mode/i }))
 
     // Applied to this page even though it could not be written down.
     await waitFor(() => expect(document.documentElement.classList.contains('dark')).toBe(true))
@@ -155,18 +163,41 @@ describe('the resource list', () => {
     )
   })
 
-  it('collapses, and remembers that too', async () => {
-    // For width: a table with a dozen columns wants the whole screen, and the
-    // resource list is not what someone reading it is looking at.
+  it('collapses to a rail rather than disappearing', async () => {
+    /*
+     * A deliberate change from 0.8.0, where collapsing removed the navigation
+     * from the page. That took every link out of reach and out of the tab
+     * order, which made the collapse an all-or-nothing choice nobody makes
+     * twice - and left nothing to animate between.
+     *
+     * The links stay. What changes is the width, so every one of them is still
+     * one click away.
+     */
     serve()
     await open()
 
-    fireEvent.click(screen.getByLabelText('Hide navigation'))
-    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Resources' })).toBeNull())
-    expect(window.localStorage.getItem('nest-admin.sidebar')).toBe('collapsed')
+    const links = () => within(screen.getAllByRole('navigation', { name: 'Resources' })[0]!)
+    expect(links().getAllByRole('link')).toHaveLength(3)
 
-    fireEvent.click(screen.getByLabelText('Show navigation'))
-    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Resources' })).toBeTruthy())
+    fireEvent.click(screen.getByLabelText('Collapse navigation'))
+    await waitFor(() => expect(screen.getByLabelText('Expand navigation')).toBeTruthy())
+
+    // Still there, still reachable, still named - the label is what a screen
+    // reader gets whether or not it is drawn.
+    expect(links().getAllByRole('link')).toHaveLength(3)
+    expect(links().getByRole('link', { name: 'People' })).toBeTruthy()
+    expect(window.localStorage.getItem('nest-admin.sidebar')).toBe('collapsed')
+  })
+
+  it('shows an icon where the application chose one', async () => {
+    // And nothing where it did not: the same icon on every entry is decoration.
+    // The initial stands in on the rail, where something has to tell one row
+    // from the next.
+    serve(MODELS.map((m) => (m.name === 'User' ? { ...m, icon: 'users' } : m)))
+    await open()
+
+    const nav = screen.getAllByRole('navigation', { name: 'Resources' })[0]!
+    expect(nav.querySelector('svg')).toBeTruthy()
   })
 })
 

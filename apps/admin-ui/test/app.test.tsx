@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from '../src/App.jsx'
+import { optionsOf } from './radix.js'
 
 const fetchMock = vi.fn()
 
@@ -158,7 +159,11 @@ describe('the generic list', () => {
     render(<App />)
 
     const headers = await screen.findAllByRole('columnheader')
-    const labels = headers.map((header) => header.textContent).filter(Boolean)
+    // The last column holds the row's actions and is headed only for a screen
+    // reader, so it has text but is not a field.
+    const labels = headers
+      .map((header) => header.textContent)
+      .filter((label) => Boolean(label) && label !== 'Actions')
 
     expect(labels).toEqual(['id', 'email', 'active', 'role', 'bio'])
   })
@@ -237,10 +242,10 @@ describe('the generic list', () => {
     routeFetch({ '/meta': metaOk([USER_MODEL]), '/User': listOk([]) })
     render(<App />)
 
-    const sort = await screen.findByLabelText(/sort by/i)
-    const options = within(sort as HTMLElement)
-      .getAllByRole('option')
-      .map((option) => option.textContent)
+    // A listbox rather than a native select now, so its options exist only
+    // once it is open. What is asserted is unchanged: the choices come from
+    // metadata rather than from anything written here.
+    const options = await optionsOf(await screen.findByLabelText(/sort by/i))
 
     expect(options).toContain('email ascending')
     expect(options).toContain('email descending')
@@ -261,10 +266,7 @@ describe('the generic list', () => {
     routeFetch({ '/meta': metaOk([withRelation]), '/User': listOk([]) })
     render(<App />)
 
-    const select = await screen.findByLabelText(/filter field/i)
-    const options = within(select as HTMLElement)
-      .getAllByRole('option')
-      .map((option) => option.textContent)
+    const options = await optionsOf(await screen.findByLabelText(/filter field/i))
 
     // The server rejects filtering a relation, so it is never offered.
     expect(options).toContain('email')
@@ -323,12 +325,8 @@ describe('the create form', () => {
     render(<App />)
 
     const role = await screen.findByLabelText('role')
-    expect(role.tagName).toBe('SELECT')
-    expect(
-      within(role as HTMLElement)
-        .getAllByRole('option')
-        .map((option) => option.textContent),
-    ).toEqual(['—', 'USER', 'ADMIN'])
+    expect(role.getAttribute('role')).toBe('combobox')
+    expect(await optionsOf(role)).toEqual(['USER', 'ADMIN'])
 
     expect((screen.getByLabelText('active') as HTMLInputElement).type).toBe('checkbox')
   })
