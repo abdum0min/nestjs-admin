@@ -315,8 +315,45 @@ function defineModule(
  * factory result is reported once, as the options resolve, and names the
  * method the reader called.
  */
+/**
+ * The options that cannot come from the factory.
+ *
+ * Routes are registered and the shell is rendered when the module is defined,
+ * which is before any provider exists - so these three are read from the
+ * `forRootAsync` call itself, beside `imports` and `inject`.
+ */
+const STRUCTURAL_OPTIONS = ['path', 'uiRoot', 'theme'] as const
+
+/**
+ * Refuse a structural option returned from the factory.
+ *
+ * `AdminModuleFactoryOptions` omits these three, so this looks like something
+ * TypeScript already prevents. It does not: excess property checking applies
+ * to an object literal assigned directly to a typed target, and a factory’s
+ * return value reaches that target through a *function* type, where the check
+ * does not run. The compiler accepts it and the option is silently dropped.
+ *
+ * Which is not hypothetical - this repository’s own reference consumer put
+ * `theme` inside `useFactory`, typechecked clean, and served an unbranded
+ * page. The only symptom was a colour that never arrived.
+ */
+function assertNoStructuralOptions(resolved: AdminModuleFactoryOptions): void {
+  const misplaced = STRUCTURAL_OPTIONS.filter((key) => key in (resolved as object))
+  if (misplaced.length === 0) return
+
+  const one = misplaced.length === 1
+  throw new Error(
+    `AdminModule.forRootAsync() received ${misplaced.join(', ')} from its factory. ` +
+      `${one ? 'That option is' : 'Those options are'} structural: routes are registered ` +
+      `before any provider exists, so ${one ? 'it' : 'they'} must be passed to ` +
+      `forRootAsync() itself, beside \`imports\` and \`inject\`, rather than returned ` +
+      `from \`useFactory\`.`,
+  )
+}
+
 function optionsProviders(options: AdminModuleAsyncOptions): Provider[] {
   const validate = (resolved: AdminModuleFactoryOptions): AdminModuleOptions => {
+    assertNoStructuralOptions(resolved)
     assertUsableOptions(resolved as AdminModuleOptions, 'forRootAsync')
     return resolved as AdminModuleOptions
   }
