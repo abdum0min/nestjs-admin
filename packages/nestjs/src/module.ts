@@ -30,6 +30,7 @@ import {
 import { RouterModule } from '@nestjs/core'
 
 import { AdminController } from './admin/controller.js'
+import { AdminAuthController } from './auth/controller.js'
 import { AdminService } from './admin/service.js'
 import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
 import { AdminAuthGuard } from './auth/guard.js'
@@ -289,8 +290,11 @@ function defineModule(
     // Order matters and is the whole answer to the route collision. The UI
     // controller binds exactly two paths - the mount path itself and
     // `assets/:file` - and is matched first, so `assets` can never be read as a
-    // model name. Everything else falls through to the API controller.
-    controllers: [AdminUiController, AdminController],
+    // model name. The auth controller claims `auth/*` next, for the same
+    // reason and at the same cost: a model named `auth` is unreachable, as one
+    // named `assets` or `actions` already was. Everything else falls through to
+    // the API controller.
+    controllers: [AdminUiController, AdminAuthController, AdminController],
     providers: [
       ...optionProviders,
       { provide: ADMIN_UI_ROOT, useValue: resolvedUiRoot },

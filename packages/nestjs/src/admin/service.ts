@@ -34,8 +34,16 @@ import {
   unknownSelectionNames,
   unwritableHiddenFields,
 } from '@nest-admin/core'
-import { Inject, Injectable, type ExecutionContext, type OnModuleInit } from '@nestjs/common'
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type ExecutionContext,
+  type OnModuleInit,
+} from '@nestjs/common'
 
+import { builtInRuntimeOf } from '../auth/built-in.js'
+import type { AdminAuth } from '../auth/contract.js'
 import type { AdminOperation, AdminResourceAuth } from '../auth/resource.js'
 import { clientMessage } from '../http/exception.filter.js'
 import { parseListQuery, type RawQuery } from '../http/query-parser.js'
@@ -44,6 +52,7 @@ import type { AdminHooksByModel } from '../hooks/contract.js'
 import {
   ADMIN_ACTIONS,
   ADMIN_ADAPTER,
+  ADMIN_AUTH,
   ADMIN_HOOKS,
   ADMIN_MODELS,
   ADMIN_RESOURCE_AUTH,
@@ -88,7 +97,10 @@ export class AdminService implements OnModuleInit {
     @Inject(ADMIN_MODELS) private readonly overrides: ModelOverrides | undefined,
     @Inject(ADMIN_HOOKS) private readonly hooks: AdminHooksByModel | undefined,
     @Inject(ADMIN_ACTIONS) private readonly actions: AdminActionsByModel | undefined,
+    @Inject(ADMIN_AUTH) private readonly auth: AdminAuth,
   ) {}
+
+  private readonly logger = new Logger('NestAdmin')
 
   /**
    * Fail at boot on a selection that names a model the schema does not have.
@@ -131,6 +143,8 @@ export class AdminService implements OnModuleInit {
     // hiding it means no record can ever be created. The database reports that
     // as a constraint violation, which the admin can only pass on as an
     // internal error - a long way from the line that caused it.
+    await this.checkBuiltInAuth(selectModels(schema, this.resources))
+
     const unwritable = unwritableHiddenFields(selectModels(schema, this.resources), this.overrides)
     if (unwritable.length > 0) {
       const one = unwritable.length === 1
@@ -140,6 +154,56 @@ export class AdminService implements OnModuleInit {
           `Hiding ${one ? 'it' : 'them'} leaves no way to supply a value, so every create would ` +
           `fail. Give the column a default, make it optional, or leave it visible.`,
       )
+    }
+  }
+
+  /**
+   * Two things about the built-in authentication that are only knowable here.
+   *
+   * Warnings rather than boot failures, and the distinction is deliberate.
+   * Both describe a *deployment* that is wrong rather than a configuration
+   * that cannot work - and an admin that refuses to start because its account
+   * table is empty is an admin nobody can seed, because the seed script
+   * imports the module.
+   */
+  private async checkBuiltInAuth(exposed: readonly ModelMetadata[]): Promise<void> {
+    const runtime = builtInRuntimeOf(this.auth)
+    if (!runtime) return
+
+    /*
+     * An account model that is also an editable resource.
+     *
+     * Anyone who may edit it can set another account’s password hash, or
+     * clear `disabled` on their own - which is every permission the admin has,
+     * reachable from a table that looks like any other.
+     */
+    const accountModel = runtime.store.describes
+    if (accountModel !== undefined && exposed.some((model) => model.name === accountModel)) {
+      this.logger.warn(
+        `AdminModule exposes "${accountModel}" as a resource, and it is also where ` +
+          'the admin keeps its own accounts. Anyone who may edit it can grant ' +
+          `themselves anything the admin can do. Exclude it with ` +
+          `resources: { exclude: ["${accountModel}"] }.`,
+      )
+    }
+
+    /*
+     * No accounts at all.
+     *
+     * Otherwise the symptom is a login form that rejects every correct
+     * password, which reads as a broken build rather than an empty table.
+     */
+    try {
+      if ((await runtime.store.count()) === 0) {
+        this.logger.warn(
+          'AdminModule is using builtInAuth() and the account store is empty, so ' +
+            'nobody can sign in. Create the first account with hashAdminPassword().',
+        )
+      }
+    } catch (cause) {
+      // A store that cannot be counted will not answer a login either, and
+      // saying so at startup beats finding out at the login form.
+      this.logger.warn(`Could not read the admin account store: ${String(cause)}`)
     }
   }
 

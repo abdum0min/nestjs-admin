@@ -38,6 +38,14 @@ export {
 // that calls it is internal - a consumer supplies the decision, not the wiring.
 export { unsafeAllowAllRequests, type AdminAuth } from './auth/contract.js'
 
+// An implementation of that boundary, for applications that do not have an
+// identity system of their own. The contract above is unchanged and is still
+// the only way in; this is one thing that satisfies it.
+export { adminAccountOf, builtInAuth, type BuiltInAuthOptions } from './auth/built-in.js'
+export { hashAdminPassword, verifyAdminPassword } from './auth/password.js'
+export { generateSessionSecret } from './auth/session.js'
+export type { AdminAccount, AdminAccountStore, AdminAccountSummary } from '@nest-admin/core'
+
 // Resource-level authorization: which models a principal may see and act on.
 // The enforcement point is internal; the consumer supplies only the decision.
 export type { AdminOperation, AdminResourceAuth, ResourceAuthorization } from './auth/resource.js'
