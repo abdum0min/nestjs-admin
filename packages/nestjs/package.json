@@ -72,7 +72,8 @@
   "scripts": {
     "build": "tsup && node scripts/copy-admin-ui.mjs",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "node scripts/assert-publishable.mjs"
   },
   "dependencies": {
     "@prisma/get-dmmf": "7.10.0"
