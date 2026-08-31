@@ -13,6 +13,51 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.8.2
+
+Three things found by working in 0.8.1's interface.
+
+### Added
+
+- **`writeOnly`** on a field override — accepted on a write, never returned on
+  a read. The mirror of `readOnly`, and a password is what it is for:
+
+  ```ts
+  models: {
+    User: { fields: { passwordHash: { label: 'Password', widget: 'password', writeOnly: true } } },
+  }
+  ```
+
+  `hidden` cannot express this. It refuses the field in both directions, so a
+  hidden password column leaves no way to set one — which is exactly the hole
+  this repository's own example had. Enforced twice: the column is left out of
+  the query the adapter is asked to make, and out of the projection applied to
+  the result.
+
+- **A reveal toggle on password inputs.** Masked by default, never remembered
+  as revealed, and never offered to a password manager as the visitor's own
+  credential — it belongs to somebody else's record.
+
+- **`--link`**, a token for brand-coloured text, separate from `--primary`
+  which fills a button. `theme.brandColor` now drives both, each held to its
+  own contrast floor.
+
+### Changed
+
+- **A row shows its actions on a wide screen** — view, edit and delete as three
+  buttons — and collapses them into one menu on a phone. The set is identical
+  either way; a control that exists on a desktop and not on a phone is a
+  feature people cannot find on the device they are holding.
+- **Dark-mode fills take light labels.** The buttons had near-black text: it is
+  legible and measurable and looks washed out, which is what it was reported
+  as. Fixed by splitting the token above rather than by lowering the floor —
+  every pairing still passes AA, asserted by the palette test.
+- **A blank write-only field is omitted from a write**, so saving a record
+  without retyping the password leaves the stored one alone. The ordinary rule
+  would send `null` and clear it.
+
+---
+
 ## 0.8.1
 
 Fifteen things found by using 0.8.0's interface for an afternoon rather than
