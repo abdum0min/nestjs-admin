@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync } from 'node:crypto'
 
 import { Module } from '@nestjs/common'
-import { AdminModule, builtInAuth, ValidationError } from '@nest-admin/nestjs'
+import { AdminModule, builtInAuth, ValidationError, type AdminDashboard } from '@nest-admin/nestjs'
 import { PrismaAdapter, prismaAccountStore } from '@nest-admin/nestjs/prisma'
 
 import { PrismaService } from './prisma.service.js'
@@ -180,6 +180,86 @@ const models = {
 } as const
 
 /**
+ * The landing page.
+ *
+ * An admin with no `dashboard` still gets one, built from the schema: a count
+ * per model and the newest records where the schema says which those are. That
+ * is a reasonable place to arrive and a poor place to stay, because it treats
+ * every table as equally interesting. This example declares its own to show
+ * what the difference looks like.
+ *
+ * Three of the four kinds name a model and a filter and nothing else, so the
+ * server does the counting - and so a widget over a resource the reader cannot
+ * see is absent from the page rather than hidden by it. `stat` is the escape
+ * hatch: it runs application code, for a number that no single table holds.
+ */
+function dashboard(prisma: PrismaService) {
+  return [
+    {
+      kind: 'count',
+      title: 'Customers',
+      model: 'User',
+      // Needs `createdAt`, which this schema has. Without it the comparison is
+      // dropped and the count is still shown.
+      compareDays: 30,
+    },
+    {
+      kind: 'count',
+      title: 'Orders awaiting payment',
+      model: 'Order',
+      // The same `field:operator:value` the list screen's URL uses, parsed by
+      // the same code - so the widget links straight to those rows.
+      filter: 'status:eq:PENDING',
+    },
+    {
+      kind: 'count',
+      title: 'Published posts',
+      model: 'Post',
+      filter: 'status:eq:PUBLISHED',
+    },
+    {
+      kind: 'stat',
+      title: 'Revenue',
+      description: 'Paid and shipped orders.',
+      // No model, because no single table answers it. Whatever this throws
+      // becomes one widget saying it could not load, not a broken page.
+      load: async () => {
+        const paid = await prisma.order.findMany({
+          where: { status: { in: ['PAID', 'SHIPPED'] } },
+          include: { items: true },
+        })
+
+        const total = paid.reduce(
+          (sum, order) =>
+            sum +
+            order.items.reduce((line, item) => line + Number(item.unitPrice) * item.quantity, 0),
+          0,
+        )
+
+        return {
+          value: total.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
+          hint: `across ${paid.length} orders`,
+        }
+      },
+    },
+    {
+      kind: 'chart',
+      title: 'New customers',
+      description: 'Over the last 30 days.',
+      model: 'User',
+      bucket: 'day',
+      buckets: 30,
+    },
+    {
+      kind: 'list',
+      title: 'Latest orders',
+      model: 'Order',
+      limit: 6,
+    },
+  ] as const satisfies AdminDashboard
+}
+
+/**
  * Who may open the admin.
  *
  * This example has no identity system of its own, which is the case
@@ -251,6 +331,8 @@ class DatabaseModule {}
         resources: { exclude: ['AdminAccount'] },
 
         models,
+
+        dashboard: dashboard(prisma),
 
         // Optional. Left permissive so the example is usable for exploring;
         // the commented line is the shape a per-model rule takes.
