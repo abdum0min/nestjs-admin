@@ -61,5 +61,13 @@ export const ADMIN_HOOKS = Symbol('NEST_ADMIN_HOOKS')
 /** Application-defined actions, per model. */
 export const ADMIN_ACTIONS = Symbol('NEST_ADMIN_ACTIONS')
 
+/**
+ * The widgets an application put on the dashboard.
+ *
+ * Absent means a dashboard built from the schema alone, which is the common
+ * case and the one that has to look right without anybody configuring it.
+ */
+export const ADMIN_DASHBOARD = Symbol('NEST_ADMIN_DASHBOARD')
+
 /** Branding the served page applies without a rebuild. */
 export const ADMIN_THEME = Symbol('NEST_ADMIN_THEME')

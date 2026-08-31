@@ -43,6 +43,8 @@ import {
 } from '@nestjs/common'
 
 import { builtInRuntimeOf } from '../auth/built-in.js'
+import { buildDashboard, type DashboardDto } from '../dashboard/service.js'
+import type { AdminDashboard } from '../dashboard/contract.js'
 import type { AdminAuth } from '../auth/contract.js'
 import type { AdminOperation, AdminResourceAuth } from '../auth/resource.js'
 import { clientMessage } from '../http/exception.filter.js'
@@ -53,6 +55,7 @@ import {
   ADMIN_ACTIONS,
   ADMIN_ADAPTER,
   ADMIN_AUTH,
+  ADMIN_DASHBOARD,
   ADMIN_HOOKS,
   ADMIN_MODELS,
   ADMIN_RESOURCE_AUTH,
@@ -98,6 +101,7 @@ export class AdminService implements OnModuleInit {
     @Inject(ADMIN_HOOKS) private readonly hooks: AdminHooksByModel | undefined,
     @Inject(ADMIN_ACTIONS) private readonly actions: AdminActionsByModel | undefined,
     @Inject(ADMIN_AUTH) private readonly auth: AdminAuth,
+    @Inject(ADMIN_DASHBOARD) private readonly dashboard: AdminDashboard | undefined,
   ) {}
 
   private readonly logger = new Logger('NestAdmin')
@@ -205,6 +209,37 @@ export class AdminService implements OnModuleInit {
       // saying so at startup beats finding out at the login form.
       this.logger.warn(`Could not read the admin account store: ${String(cause)}`)
     }
+  }
+
+  /**
+   * What the dashboard shows this principal.
+   *
+   * Authorized the way everything else is, and *before* anything is queried: a
+   * widget over a model this principal may not list is absent from the
+   * document, so a dashboard cannot become a way to count rows of a table
+   * nobody would let you open.
+   *
+   * The exposed model list is passed in rather than looked up again inside, so
+   * "which models does this person see" is answered once, here, by the same
+   * code that answers it for the metadata document.
+   */
+  async getDashboard(context: ExecutionContext): Promise<DashboardDto> {
+    const models = await this.exposedModels()
+    const permitted: ModelMetadata[] = []
+
+    for (const model of models) {
+      if (await this.permits(context, model.name, 'list')) permitted.push(model)
+    }
+
+    return buildDashboard({
+      adapter: this.adapter,
+      models: permitted,
+      declared: this.dashboard,
+      context,
+      labels: Object.fromEntries(
+        Object.entries(this.overrides ?? {}).map(([name, override]) => [name, override?.label]),
+      ),
+    })
   }
 
   /**

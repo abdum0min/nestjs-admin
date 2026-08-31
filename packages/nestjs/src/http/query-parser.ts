@@ -275,6 +275,26 @@ function parseFilters(raw: unknown, model: ModelMetadata): readonly FilterRule[]
 }
 
 /**
+ * One `field:operator:value` expression, coerced against the schema.
+ *
+ * The dashboard's declared filters use the same syntax as the list screen's
+ * URL, and they have to mean the same thing: `active:eq:true` is the boolean
+ * `true` in both places, not the string. Sharing the parser is what guarantees
+ * that - a second implementation would drift, and its drift would be silent,
+ * because a filter that coerces wrongly returns no rows rather than an error.
+ */
+export function parseFilterExpression(entry: string, model: ModelMetadata): FilterRule {
+  const rules = parseFilters(entry, model)
+  const rule = rules?.[0]
+  if (rule === undefined) {
+    throw new InvalidQueryError(
+      `Expected a filter of the form "field:operator:value", got "${entry}".`,
+    )
+  }
+  return rule
+}
+
+/**
  * Build a `ListQuery` from a raw HTTP query object.
  *
  * `model` is required because value coercion is type-directed: only the schema

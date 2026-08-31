@@ -40,10 +40,12 @@ import type { AdminHooksByModel } from './hooks/contract.js'
 import { AdminExceptionFilter } from './http/exception.filter.js'
 import { normaliseMountPath } from './mount-path.js'
 import { uiAvailable, uiRoot } from './ui/assets.js'
+import type { AdminDashboard } from './dashboard/contract.js'
 import { assertUsableTheme, type AdminTheme } from './ui/theme.js'
 import { AdminUiController } from './ui/controller.js'
 import {
   ADMIN_ACTIONS,
+  ADMIN_DASHBOARD,
   ADMIN_ADAPTER,
   ADMIN_AUTH,
   ADMIN_HOOKS,
@@ -154,6 +156,16 @@ export interface AdminModuleOptions {
    * provider exists.
    */
   readonly theme?: AdminTheme
+
+  /**
+   * What the dashboard shows.
+   *
+   * Omit it and the dashboard is built from the schema: a count per model, the
+   * newest records, and a month of activity. Declaring widgets replaces that
+   * rather than adding to it - a dashboard is a page someone designed, and
+   * half-designed is worse than either.
+   */
+  readonly dashboard?: AdminDashboard
 
   /**
    * Directory holding the built admin UI.
@@ -405,6 +417,7 @@ export class AdminModule {
       { provide: ADMIN_MODELS, useValue: options.models },
       { provide: ADMIN_HOOKS, useValue: options.hooks },
       { provide: ADMIN_ACTIONS, useValue: options.actions },
+      { provide: ADMIN_DASHBOARD, useValue: options.dashboard },
       { provide: ADMIN_AUTH, useValue: options.auth },
       // Always provided, so injection resolves whether or not the consumer
       // supplied a policy. The default permits every model.
@@ -467,6 +480,7 @@ export class AdminModule {
         derive(ADMIN_MODELS, (resolved) => resolved.models),
         derive(ADMIN_HOOKS, (resolved) => resolved.hooks),
         derive(ADMIN_ACTIONS, (resolved) => resolved.actions),
+        derive(ADMIN_DASHBOARD, (resolved) => resolved.dashboard),
         derive(ADMIN_AUTH, (resolved) => resolved.auth),
         derive(ADMIN_RESOURCE_AUTH, (resolved) => resolved.resourceAuth ?? allowAllResources()),
       ],

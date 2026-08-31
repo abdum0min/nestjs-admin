@@ -50,6 +50,19 @@ export type { AdminAccount, AdminAccountStore, AdminAccountSummary } from '@nest
 // The enforcement point is internal; the consumer supplies only the decision.
 export type { AdminOperation, AdminResourceAuth, ResourceAuthorization } from './auth/resource.js'
 
+// What the dashboard shows. A closed set of four kinds, drawn by the interface
+// from data - the same arrangement as actions, and for the same reason.
+export type {
+  AdminDashboard,
+  ChartWidget,
+  CountWidget,
+  DashboardWidget,
+  ListWidget,
+  StatResult,
+  StatWidget,
+  WidgetSpan,
+} from './dashboard/contract.js'
+
 // The HTTP contract. Exported as types so a consumer - and the future admin
 // UI - can type responses without restating the shapes.
 export type {

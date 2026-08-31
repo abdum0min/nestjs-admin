@@ -42,6 +42,7 @@ import { AdminExceptionFilter } from '../http/exception.filter.js'
 import { success, successPage, type SuccessResponse } from '../http/response.js'
 import type { RawQuery } from '../http/query-parser.js'
 import type { MetadataDto } from './metadata.dto.js'
+import type { DashboardDto } from '../dashboard/service.js'
 import { AdminService, type BulkDeleteResult } from './service.js'
 
 @Controller()
@@ -90,6 +91,20 @@ export class AdminController {
   @Get('meta')
   async meta(@AdminContext() context: ExecutionContext): Promise<SuccessResponse<MetadataDto>> {
     return success(await this.service.getMetadata(context))
+  }
+
+  /**
+   * `GET /admin/dashboard` - what the landing page shows.
+   *
+   * Declared before `:model` so the literal segment wins, as `meta` and
+   * `actions` already are. The cost is the same and is documented with them: a
+   * model named `dashboard` would be unreachable.
+   */
+  @Get('dashboard')
+  async dashboard(
+    @AdminContext() context: ExecutionContext,
+  ): Promise<SuccessResponse<DashboardDto>> {
+    return success(await this.service.getDashboard(context))
   }
 
   @Get(':model')
