@@ -12,6 +12,15 @@ export const ADMIN_ADAPTER = Symbol('NEST_ADMIN_ADAPTER')
 export const ADMIN_AUTH = Symbol('NEST_ADMIN_AUTH')
 
 /** The optional `AdminResourceAuth` the application supplied to `AdminModule`. */
+/**
+ * Whether the current request may do something that is not about a model.
+ *
+ * A function rather than the role table, so nothing downstream has to know
+ * whether roles were configured at all - without them it answers true, which is
+ * what an admin with a single superuser has always meant.
+ */
+export const ADMIN_CAPABILITIES = Symbol.for('nest-admin.capabilities')
+
 export const ADMIN_RESOURCE_AUTH = Symbol('NEST_ADMIN_RESOURCE_AUTH')
 
 /**

@@ -63,6 +63,17 @@ export type {
   WidgetSpan,
 } from './dashboard/contract.js'
 
+// Roles: a shorthand that compiles into the resource-authorization contract,
+// so an application can start with roles and drop to a function later without
+// changing anything it already relies on.
+export type {
+  AdminCapability,
+  AdminRoles,
+  RoleDefinition,
+  RolePermissions,
+  RoleResolver,
+} from './auth/roles.js'
+
 // The HTTP contract. Exported as types so a consumer - and the future admin
 // UI - can type responses without restating the shapes.
 export type {

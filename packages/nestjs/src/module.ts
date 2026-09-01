@@ -35,6 +35,13 @@ import { AdminService } from './admin/service.js'
 import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
 import { AdminAuthGuard } from './auth/guard.js'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
+import {
+  capabilityChecker,
+  combineResourceAuth,
+  rolesToResourceAuth,
+  type AdminRoles,
+  type RoleResolver,
+} from './auth/roles.js'
 import type { AdminActionsByModel } from './actions/contract.js'
 import type { AdminHooksByModel } from './hooks/contract.js'
 import { AdminExceptionFilter } from './http/exception.filter.js'
@@ -52,6 +59,7 @@ import {
   ADMIN_MODELS,
   ADMIN_MOUNT_PATH,
   ADMIN_OPTIONS,
+  ADMIN_CAPABILITIES,
   ADMIN_RESOURCE_AUTH,
   ADMIN_RESOURCES,
   ADMIN_THEME,
@@ -97,6 +105,30 @@ export interface AdminModuleOptions {
    * fail with 403 before the ORM adapter is called.
    */
   readonly resourceAuth?: AdminResourceAuth
+
+  /**
+   * Named roles, as a shorthand for `resourceAuth`.
+   *
+   * Optional, and omitting it changes nothing: an admin without roles behaves
+   * exactly as it did before they existed, with every administrator permitted
+   * everything.
+   *
+   * Supplying both `roles` and `resourceAuth` is allowed and means **both**
+   * must agree. Adding a rule can then only remove access, never grant it,
+   * which is the direction a permission system should fail in.
+   *
+   * Requires `roleOf`, and says so at startup rather than silently denying
+   * every request.
+   */
+  readonly roles?: AdminRoles
+
+  /**
+   * Which role is making this request. Required when `roles` is set.
+   *
+   * Reads from the same `ExecutionContext` that `auth` and `resourceAuth` read
+   * from, so whatever attached the principal is reachable here too.
+   */
+  readonly roleOf?: RoleResolver
 
   /**
    * Where the admin is mounted. Defaults to `/admin`.
@@ -208,6 +240,22 @@ function assertUsableOptions(options: AdminModuleOptions, caller: string): void 
     )
   }
 
+  if (options.roles !== undefined && typeof options.roleOf !== 'function') {
+    // Without a resolver every request has no role, and a role table with no
+    // role denies everything - a locked-out admin with no explanation. Better
+    // to refuse to start than to lock someone out of their own data.
+    throw new Error(
+      `AdminModule.${caller}() was given \`roles\` without \`roleOf\`. ` +
+        'Add roleOf: (context) => … so the admin can tell which role is asking.',
+    )
+  }
+
+  if (options.roleOf !== undefined && options.roles === undefined) {
+    throw new Error(
+      `AdminModule.${caller}() was given \`roleOf\` without \`roles\`. ` +
+        'Add a roles table, or remove roleOf - on its own it decides nothing.',
+    )
+  }
   if (options.resourceAuth && typeof options.resourceAuth.authorize !== 'function') {
     throw new Error(
       `AdminModule.${caller}() was given a \`resourceAuth\` without an ` +
@@ -263,6 +311,29 @@ export interface AdminModuleAsyncOptions {
 }
 
 /** Say once, at startup, that the API works but the interface is not there. */
+/**
+ * The policy the admin will actually enforce.
+ *
+ * Roles compile to a policy and are then indistinguishable from a hand-written
+ * one, so there is a single enforcement path rather than two - which is what
+ * stops a permission from being missed in one of them.
+ */
+function resolvePolicy(options: {
+  readonly resourceAuth?: AdminResourceAuth
+  readonly roles?: AdminRoles
+  readonly roleOf?: RoleResolver
+}): AdminResourceAuth {
+  const fromRoles =
+    options.roles !== undefined && options.roleOf !== undefined
+      ? rolesToResourceAuth(options.roles, options.roleOf)
+      : undefined
+
+  if (fromRoles === undefined) return options.resourceAuth ?? allowAllResources()
+  if (options.resourceAuth === undefined) return fromRoles
+
+  return combineResourceAuth(fromRoles, options.resourceAuth)
+}
+
 function warnIfUiMissing(resolvedUiRoot: string, mountPath: string): void {
   if (uiAvailable(resolvedUiRoot)) return
 
@@ -421,7 +492,8 @@ export class AdminModule {
       { provide: ADMIN_AUTH, useValue: options.auth },
       // Always provided, so injection resolves whether or not the consumer
       // supplied a policy. The default permits every model.
-      { provide: ADMIN_RESOURCE_AUTH, useValue: options.resourceAuth ?? allowAllResources() },
+      { provide: ADMIN_RESOURCE_AUTH, useValue: resolvePolicy(options) },
+      { provide: ADMIN_CAPABILITIES, useValue: capabilityChecker(options.roles, options.roleOf) },
     ])
   }
 
@@ -482,7 +554,10 @@ export class AdminModule {
         derive(ADMIN_ACTIONS, (resolved) => resolved.actions),
         derive(ADMIN_DASHBOARD, (resolved) => resolved.dashboard),
         derive(ADMIN_AUTH, (resolved) => resolved.auth),
-        derive(ADMIN_RESOURCE_AUTH, (resolved) => resolved.resourceAuth ?? allowAllResources()),
+        derive(ADMIN_RESOURCE_AUTH, (resolved) => resolvePolicy(resolved)),
+        derive(ADMIN_CAPABILITIES, (resolved) =>
+          capabilityChecker(resolved.roles, resolved.roleOf),
+        ),
       ],
       options.imports ?? [],
     )
