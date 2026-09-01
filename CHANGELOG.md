@@ -84,13 +84,26 @@ that configures none of them behaves exactly as 0.11 did.
 - **[SECURITY.md](SECURITY.md)** — what the admin guarantees, what it does not,
   and the four things a deployment has to get right.
 
+- **A team screen**, reached from the user menu when the login is `builtInAuth`
+  and its store can list accounts.
+
+  It is deliberately _not_ the account table exposed as a resource — that stays
+  excluded, because anyone with `update` on it could write another account's
+  password hash, which is a complete takeover from a form with no password ever
+  typed. This is the opposite arrangement: a hash is never accepted, only a
+  password it derives one from; it sits behind the `manageTeam` capability; and
+  it refuses to let you delete, disable or demote your own account.
+  `AdminAccountStore` gains four **optional** write methods, so a store without
+  them keeps working - the screen is then read-only, or absent.
+
 ### Notes
 
-- **The account store stays read-only, and so there is no team-management
-  screen.** One was planned, and then the contract's own note was found:
-  _"an admin that could mint its own administrators is an escalation waiting for
-  its first mistake."_ Overturning that in the release that adds permissions
-  would have been the wrong trade. Roles are granted where accounts are created.
+- **A fourth invariant was written and then deleted.** "Refuse to remove the
+  last account that can manage the team" reads well and can never fire: the
+  account making the request is signed in, so it is enabled and holds the
+  capability, and the three self-rules mean it is never the target - it always
+  survives its own check. Dead safety code is worse than none, because it
+  advertises a protection that is not there. A test records why.
 
 - **One role per request.** Combining two roles' scopes needs OR, and
   `ListQuery.filters` are ANDed. Doing it properly means changing the adapter
