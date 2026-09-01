@@ -92,6 +92,14 @@ export interface DashboardInput {
   readonly declared: AdminDashboard | undefined
   readonly context: ExecutionContext
   /**
+   * Row-level scopes, by model, for the principal this document is being built
+   * for. A model absent from the map is unscoped.
+   *
+   * Widgets are already dropped when the model is denied outright; this is the
+   * narrower case where the model is visible but only some of its rows are.
+   */
+  readonly scopes?: ReadonlyMap<string, readonly FilterRule[]>
+  /**
    * What each model is called in this admin.
    *
    * The generated dashboard names models, and a model's name is not
@@ -230,7 +238,7 @@ async function countOf(
   input: DashboardInput,
 ): Promise<CountData> {
   const model = modelFor(widget.model, input)
-  const declared = filtersFor(widget.filter, model)
+  const declared = scopedFilters(widget.filter, model, input)
 
   const page = await input.adapter.list(widget.model, {
     perPage: 1,
@@ -269,7 +277,7 @@ async function listOf(
   const created = createdFieldFor(model)
   const label = displayFieldFor(model)
   const key = model.primaryKey[0] ?? 'id'
-  const declared = filtersFor(widget.filter, model)
+  const declared = scopedFilters(widget.filter, model, input)
 
   const page = await input.adapter.list(widget.model, {
     perPage: Math.min(widget.limit ?? 5, 10),
@@ -315,7 +323,7 @@ async function chartOf(
   const count = Math.min(widget.buckets ?? 30, MAX_BUCKETS)
   const size = bucket === 'day' ? DAY : bucket === 'week' ? 7 * DAY : 30 * DAY
 
-  const declared = filtersFor(widget.filter, model)
+  const declared = scopedFilters(widget.filter, model, input)
 
   const now = Date.now()
   const starts = Array.from({ length: count }, (_, index) => now - (count - index) * size)
@@ -358,6 +366,15 @@ function modelFor(name: string, input: DashboardInput): ModelMetadata {
  */
 function filtersFor(filter: string | undefined, model: ModelMetadata): readonly FilterRule[] {
   return filter === undefined ? [] : [parseFilterExpression(filter, model)]
+}
+
+/** The widget's own filter, plus whatever the policy scoped this model to. */
+function scopedFilters(
+  filter: string | undefined,
+  model: ModelMetadata,
+  input: DashboardInput,
+): readonly FilterRule[] {
+  return [...filtersFor(filter, model), ...(input.scopes?.get(model.name) ?? [])]
 }
 
 /** A value worth showing as a label, or nothing. */

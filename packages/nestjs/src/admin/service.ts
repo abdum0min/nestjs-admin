@@ -22,6 +22,7 @@ import {
   RecordNotFoundError,
   type ListQuery,
   type FieldMetadata,
+  type FilterRule,
   type ModelMetadata,
   type OrmAdapter,
   type Page,
@@ -46,7 +47,7 @@ import { builtInRuntimeOf } from '../auth/built-in.js'
 import { buildDashboard, type DashboardDto } from '../dashboard/service.js'
 import type { AdminDashboard } from '../dashboard/contract.js'
 import type { AdminAuth } from '../auth/contract.js'
-import type { AdminOperation, AdminResourceAuth } from '../auth/resource.js'
+import { readDecision, type AdminOperation, type AdminResourceAuth } from '../auth/resource.js'
 import { clientMessage } from '../http/exception.filter.js'
 import { parseListQuery, type RawQuery } from '../http/query-parser.js'
 import type { AdminActionResult, AdminActionsByModel } from '../actions/contract.js'
@@ -226,9 +227,18 @@ export class AdminService implements OnModuleInit {
   async getDashboard(context: ExecutionContext): Promise<DashboardDto> {
     const models = await this.exposedModels()
     const permitted: ModelMetadata[] = []
+    const scopes = new Map<string, readonly FilterRule[]>()
 
     for (const model of models) {
-      if (await this.permits(context, model.name, 'list')) permitted.push(model)
+      // Asked once, and both halves of the answer kept: whether a widget over
+      // this model may exist, and which rows it may count. A count that ignored
+      // the scope would report a number about records the reader may not open,
+      // which is the one thing a scope exists to prevent.
+      const decision = await this.decide(context, model.name, 'list')
+      if (!decision.allowed) continue
+
+      permitted.push(model)
+      if (decision.filters.length > 0) scopes.set(model.name, decision.filters)
     }
 
     return buildDashboard({
@@ -236,6 +246,7 @@ export class AdminService implements OnModuleInit {
       models: permitted,
       declared: this.dashboard,
       context,
+      scopes,
       labels: Object.fromEntries(
         Object.entries(this.overrides ?? {}).map(([name, override]) => [name, override?.label]),
       ),
@@ -280,12 +291,12 @@ export class AdminService implements OnModuleInit {
     rawQuery: RawQuery,
   ): Promise<Page<RecordData>> {
     const metadata = await this.requireModel(model)
-    await this.assertAllowed(context, model, 'list')
+    const scope = await this.assertAllowed(context, model, 'list')
     return this.projectPage(
       metadata,
       await this.adapter.list(
         model,
-        this.scopeToFields(metadata, parseListQuery(rawQuery, metadata)),
+        this.withScope(this.scopeToFields(metadata, parseListQuery(rawQuery, metadata)), scope),
       ),
     )
   }
@@ -298,10 +309,8 @@ export class AdminService implements OnModuleInit {
    */
   async findOne(context: ExecutionContext, model: string, id: RecordId): Promise<RecordData> {
     const metadata = await this.requireModel(model)
-    await this.assertAllowed(context, model, 'read')
-    const record = await this.adapter.findOne(model, id)
-    if (record === null) throw new RecordNotFoundError(model, id)
-    return this.project(metadata, record)
+    const scope = await this.assertAllowed(context, model, 'read')
+    return this.project(metadata, await this.readInScope(metadata, id, scope))
   }
 
   async create(context: ExecutionContext, model: string, data: RecordData): Promise<RecordData> {
@@ -323,8 +332,12 @@ export class AdminService implements OnModuleInit {
     data: RecordData,
   ): Promise<RecordData> {
     const metadata = await this.requireModel(model)
-    await this.assertAllowed(context, model, 'update')
+    const scope = await this.assertAllowed(context, model, 'update')
     this.assertWritable(metadata, data)
+
+    // Before the hooks run: a hook must never see a record this principal was
+    // not allowed to reach.
+    if (scope.length > 0) await this.readInScope(metadata, id, scope)
 
     const prepared = await this.runBefore(context, metadata, 'beforeUpdate', data, id)
     const updated = await this.adapter.update(model, id, prepared)
@@ -358,10 +371,10 @@ export class AdminService implements OnModuleInit {
     model: string,
     ids: readonly RecordId[],
   ): Promise<BulkDeleteResult> {
-    await this.requireModel(model)
+    const metadata = await this.requireModel(model)
     // Once, for the operation - not once per record. The permission is to
     // delete records of this model, and it does not change mid-loop.
-    await this.assertAllowed(context, model, 'delete')
+    const scope = await this.assertAllowed(context, model, 'delete')
 
     if (ids.length === 0) {
       throw new InvalidQueryError('Deleting records requires a body of the form { "ids": [...] }.')
@@ -378,6 +391,11 @@ export class AdminService implements OnModuleInit {
 
     for (const id of ids) {
       try {
+        // Per record, unlike the permission: a scope is about *which* rows, so
+        // it has to be asked once per row. A refusal becomes one failed entry
+        // rather than a failed request, which is what the caller wants when
+        // forty checkboxes were ticked.
+        if (scope.length > 0) await this.readInScope(metadata, id, scope)
         if (before) await before({ context, model, id })
         await this.adapter.delete(model, id)
         await this.runAfter(context, model, 'afterDelete', { id })
@@ -393,8 +411,10 @@ export class AdminService implements OnModuleInit {
   }
 
   async delete(context: ExecutionContext, model: string, id: RecordId): Promise<void> {
-    await this.requireModel(model)
-    await this.assertAllowed(context, model, 'delete')
+    const metadata = await this.requireModel(model)
+    const scope = await this.assertAllowed(context, model, 'delete')
+
+    if (scope.length > 0) await this.readInScope(metadata, id, scope)
 
     const before = this.hooks?.[model]?.beforeDelete
     if (before) await before({ context, model, id })
@@ -420,10 +440,15 @@ export class AdminService implements OnModuleInit {
     rawQuery: RawQuery,
   ): Promise<Page<RecordData>> {
     const parent = await this.requireModel(model)
-    await this.assertAllowed(context, model, 'read')
+    const parentScope = await this.assertAllowed(context, model, 'read')
+
+    // The parent has to be reachable before its children are, or a scoped
+    // principal could read another tenant's records by asking for them through
+    // a parent it may not see.
+    if (parentScope.length > 0) await this.readInScope(parent, id, parentScope)
 
     const target = await this.requireRelationTarget(parent, relationField)
-    await this.assertAllowed(context, target.name, 'list')
+    const targetScope = await this.assertAllowed(context, target.name, 'list')
 
     // Parsed against the target's metadata: the query describes the records
     // being listed, not the one they hang off.
@@ -433,7 +458,7 @@ export class AdminService implements OnModuleInit {
         model,
         id,
         relationField,
-        this.scopeToFields(target, parseListQuery(rawQuery, target)),
+        this.withScope(this.scopeToFields(target, parseListQuery(rawQuery, target)), targetScope),
       ),
     )
   }
@@ -638,10 +663,29 @@ export class AdminService implements OnModuleInit {
     model: string,
     operation: AdminOperation,
   ): Promise<boolean> {
+    return (await this.decide(context, model, operation)).allowed
+  }
+
+  /**
+   * The policy's full answer: whether, and over which rows.
+   *
+   * The same error handling `permits` has always had - a thrown
+   * `ForbiddenError` is a denial, anything else is a bug in the policy and
+   * propagates. Kept in one place so the two readings cannot drift.
+   */
+  private async decide(
+    context: ExecutionContext,
+    model: string,
+    operation: AdminOperation,
+  ): Promise<{ allowed: boolean; filters: readonly FilterRule[] }> {
     try {
-      return (await this.resourceAuth.authorize({ context, model, operation })) !== false
+      return readDecision(await this.resourceAuth.authorize({ context, model, operation }))
     } catch (error) {
-      if (isNestAdminError(error) && error.kind === 'forbidden') return false
+      // Not `instanceof`: the policy is the host's, and its `ForbiddenError`
+      // may come from a different copy of Core than this one.
+      if (isNestAdminError(error) && error.kind === 'forbidden') {
+        return { allowed: false, filters: [] }
+      }
       throw error
     }
   }
@@ -752,8 +796,12 @@ export class AdminService implements OnModuleInit {
     name: string,
     id?: RecordId,
   ): Promise<AdminActionResult> {
-    await this.requireModel(model)
-    await this.assertAllowed(context, model, 'action')
+    const metadata = await this.requireModel(model)
+    const scope = await this.assertAllowed(context, model, 'action')
+
+    // An action is application code and can do anything, so a record it should
+    // never have been given is the one thing this layer can still prevent.
+    if (scope.length > 0 && id !== undefined) await this.readInScope(metadata, id, scope)
 
     const action = (this.actions?.[model] ?? []).find((candidate) => candidate.name === name)
     if (!action) {
@@ -785,9 +833,70 @@ export class AdminService implements OnModuleInit {
     context: ExecutionContext,
     model: string,
     operation: AdminOperation,
+  ): Promise<readonly FilterRule[]> {
+    const decision = readDecision(await this.resourceAuth.authorize({ context, model, operation }))
+    if (!decision.allowed) throw new ForbiddenError()
+    return decision.filters
+  }
+
+  /**
+   * Merge a scope into the query the caller asked for.
+   *
+   * ANDed, and the policy's filters go last so the intent reads correctly in a
+   * log. A caller cannot shadow them: there is no filter that removes another.
+   */
+  private withScope(query: ListQuery, scope: readonly FilterRule[]): ListQuery {
+    if (scope.length === 0) return query
+    return { ...query, filters: [...(query.filters ?? []), ...scope] }
+  }
+
+  /**
+   * Refuse a record the scope does not cover, as though it were not there.
+   *
+   * **404, not 403.** A 403 confirms that a record with this id exists, which is
+   * exactly what a scope conceals - "no such order" and "someone else's order"
+   * have to be indistinguishable from outside.
+   *
+   * The membership test is a query rather than an evaluation of the filters in
+   * JavaScript. A second implementation of filter semantics would drift from
+   * the adapter's, and drift here means the wrong rows.
+   *
+   * It costs one extra query, and only when a scope applies. An admin that
+   * configures nothing runs exactly the queries it ran before.
+   */
+  private async assertInScope(
+    model: ModelMetadata,
+    id: RecordId,
+    record: RecordData,
+    scope: readonly FilterRule[],
   ): Promise<void> {
-    const decision = await this.resourceAuth.authorize({ context, model, operation })
-    if (decision === false) throw new ForbiddenError()
+    if (scope.length === 0) return
+
+    const key = model.primaryKey[0]
+    // No single key means no way to ask the question, and guessing is not an
+    // option when the answer decides who sees what.
+    if (key === undefined) throw new ForbiddenError()
+
+    // The key is read off the record rather than from the URL, so it is already
+    // the type the database uses and needs no coercion.
+    const page = await this.adapter.list(model.name, {
+      perPage: 1,
+      filters: [...scope, { field: key, operator: 'eq', value: record[key] }],
+    })
+
+    if (page.data.length === 0) throw new RecordNotFoundError(model.name, id)
+  }
+
+  /** Fetch a record, and refuse it unless the scope covers it. */
+  private async readInScope(
+    model: ModelMetadata,
+    id: RecordId,
+    scope: readonly FilterRule[],
+  ): Promise<RecordData> {
+    const record = await this.adapter.findOne(model.name, id)
+    if (record === null) throw new RecordNotFoundError(model.name, id)
+    await this.assertInScope(model, id, record, scope)
+    return record
   }
 
   /**

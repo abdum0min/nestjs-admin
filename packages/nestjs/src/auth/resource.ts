@@ -17,6 +17,7 @@
  * describing every table in the database - and the admin UI renders itself from
  * that endpoint. Resource authorization has to live where metadata is produced.
  */
+import type { FilterRule } from '@nest-admin/core'
 import type { ExecutionContext } from '@nestjs/common'
 
 /**
@@ -71,6 +72,62 @@ export interface ResourceAuthorization {
  * }
  * ```
  */
+/**
+ * Which *rows* a principal may touch, rather than whether it may touch the
+ * model at all.
+ *
+ * Returned from {@link AdminResourceAuth.authorize} instead of `true` when the
+ * answer is "yes, but only some of them". The filters are merged into the query
+ * the adapter runs, exactly as if the caller had typed them into the URL.
+ *
+ * ## Why a filter and not a check on the way out
+ *
+ * Fetching a page and then discarding the rows this principal may not see would
+ * be simpler and wrong in four ways at once: `total` would count rows nobody is
+ * allowed to know about, a page of 25 would show 3, "next page" would sometimes
+ * be empty, and a large table would be read in full to return a handful. The
+ * database has to do the filtering, so the constraint has to reach it.
+ *
+ * ## An empty list means unscoped
+ *
+ * `{ filters: [] }` and `true` mean the same thing. That matters because a
+ * policy that builds its filters conditionally should not have to remember to
+ * return a different type when it built none.
+ */
+export interface AdminScope {
+  /**
+   * Combined with the caller's own filters using AND, and with any other scope
+   * that applies. There is no OR: two scopes both apply, they do not compete.
+   */
+  readonly filters: readonly FilterRule[]
+}
+
+/**
+ * What a policy may answer.
+ *
+ * `void` and `true` allow; `false` denies; an {@link AdminScope} allows a
+ * subset. Widening this from `void | boolean` was backward compatible - an
+ * implementation returning a boolean still satisfies it, and a truthy object
+ * already meant "allow", so nothing changed meaning.
+ */
+export type ResourceDecision = void | boolean | AdminScope
+
+/** The filters a decision carries, and whether it allowed anything at all. */
+export function readDecision(decision: ResourceDecision): {
+  readonly allowed: boolean
+  readonly filters: readonly FilterRule[]
+} {
+  if (decision === false) return { allowed: false, filters: [] }
+  if (decision === true || decision === undefined || decision === null) {
+    return { allowed: true, filters: [] }
+  }
+
+  const filters = (decision as AdminScope).filters
+  // A policy that returns some other object is allowing the request - that is
+  // what a truthy return has always meant - and simply scoping nothing.
+  return { allowed: true, filters: Array.isArray(filters) ? filters : [] }
+}
+
 export interface AdminResourceAuth {
   /**
    * Decide whether this principal may perform `operation` on `model`.
@@ -93,7 +150,7 @@ export interface AdminResourceAuth {
    *
    * May be synchronous or asynchronous.
    */
-  authorize(resource: ResourceAuthorization): void | boolean | Promise<void | boolean>
+  authorize(resource: ResourceAuthorization): ResourceDecision | Promise<ResourceDecision>
 }
 
 /**
