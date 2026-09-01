@@ -80,9 +80,13 @@ far side of it is no longer the consumer's problem to solve from scratch.
 | 0.9.0   | Authentication                     | The single largest adoption barrier, and it needs the design system for its login screen       |
 | 0.10.0  | Dashboard                          | The landing page. Needs the design system; independent of auth                                 |
 | 0.11.0  | Second adapter, and the docs       | The contract had one implementation and 1.0 freezes it; docs had drifted three releases behind |
-| 0.11.5  | Customisation                      | You cannot design a customisation API before you know what needs customising                   |
-| 0.12.0  | Docs, demo, publishing preparation | Once there is something worth showing                                                          |
-| 1.0.0   | API freeze and first publish       | Only after all of the above is stable                                                          |
+| 0.12.0  | Permissions, roles and scoping     | Scoping touches every read path, so it is cheapest before more read paths exist                |
+| 0.13.0  | Files                              | The most-asked-for gap, and mock images and import both sit on top of it                       |
+| 0.14.0  | Developer tools                    | Mock data, and the empty-admin problem. Needs 0.13 for avatars and covers                      |
+| 0.15.0  | Import and export                  | Needs 0.13 for the upload half                                                                 |
+| 0.16.0  | Customisation                      | Deliberately after the functional set: you cannot design it before knowing what needs bending  |
+| 0.17.0  | Docs site, demo, publishing polish | Once there is something worth showing                                                          |
+| 1.0.0   | API freeze                         | Only after all of the above is stable                                                          |
 
 ---
 
@@ -243,10 +247,173 @@ What that did and did not prove is recorded in
 
 ---
 
-### 0.11.5 — Customisation
+### The rule every release below is checked against
 
-Everything that turns "the admin" into "our admin", now that there is enough
-built to know what needs bending.
+**Zero configuration must keep behaving exactly as it does today.** Everything
+added from here is opt-in. A single-admin project should still be able to write
+no configuration at all after 0.15.0 and get the same admin it gets now.
+
+That is the whole reason roles, scoping, files, dev tools and import are four
+separate releases with four separate switches rather than one "enterprise mode".
+
+---
+
+### 0.12.0 — Permissions, roles and scoping
+
+Three separate things, usually confused, each opt-in on its own:
+
+|             | What it decides                  | Needed by           |
+| ----------- | -------------------------------- | ------------------- |
+| Roles       | what a principal _is_            | more than one admin |
+| Permissions | what that role may do, per model | more than one admin |
+| Scoping     | which **rows** it may see        | multi-tenant        |
+
+**Scoping is a filter, never a post-filter.** `AdminResourceAuth.authorize` may
+return a scope instead of a boolean, and it is merged into `ListQuery.filters`:
+
+```ts
+authorize({ model, operation, context }) {
+  const user = context.switchToHttp().getRequest().user
+  if (user.isAdmin) return true
+  if (model !== 'Order') return true
+  return { filters: [{ field: 'ownerId', operator: 'eq', value: user.id }] }
+}
+```
+
+Filtering after the query would break `total`, so a page of 25 would show 3 and
+"next page" would be empty - and on a large table it would read every row.
+Widening the return type is backward compatible: an existing implementation
+returns a boolean, which still satisfies it, and a truthy object already meant
+"allow" so nothing changes meaning.
+
+**Three places scoping is easy to forget**, and each gets a test:
+
+1. the dashboard - an unscoped `count` leaks the number
+2. `listRelated` - the child model needs the scope too
+3. writes - a row you cannot see must not be one you can update
+
+**Roles are sugar over the same contract**, so an application with its own
+policy function is unaffected:
+
+```ts
+roles: {
+  admin: '*',
+  editor: { Post: ['list', 'read', 'create', 'update'] },
+  support: { Order: ['list', 'read'] },
+},
+roleOf: (context) => context.switchToHttp().getRequest().user.role,
+```
+
+For `builtInAuth`, `AdminAccount` gains a role and the admin gets a **Team**
+screen. That screen is a privilege-escalation surface and is designed as one:
+only a role holding `manageTeam` may open it, nobody may grant a role above
+their own, and nobody may change their own. Three rules, three tests.
+
+**Also here:** an edit-conflict guard. Two admins on one record is not a problem
+today because most installs have one admin - this release is what changes that.
+The record's `updatedAt` travels with the patch and is compared server-side.
+
+**Out of scope:** field-level permissions per principal. Wanted, but it changes
+the metadata document's shape and belongs with the customisation work that also
+touches it.
+
+**Acceptance:** an application with no `roles` and no scope behaves exactly as
+0.11 did; one with both can express "support sees only their own tenant's
+orders, and cannot delete".
+
+---
+
+### 0.13.0 — Files
+
+The most-asked-for missing feature, and the layer two later releases sit on.
+
+- **`AdminStorage`**: `put`, `url`, `remove`. **Local disk is the default**, so
+  uploads work with nothing configured; S3 or anything else is an
+  implementation of three methods. A startup warning if local disk is still in
+  use where the deployment looks like production.
+- **What the schema needs: nothing.** The value is a string column - the
+  `avatarUrl String?` most schemas already have. `widget: 'file'` or
+  `'image'` declares the intent.
+- **Upload security is the substance of this release**, not an afterthought.
+  Serving user uploads from the admin's own origin is a session-stealing XSS in
+  waiting. So: content type sniffed from the bytes rather than trusted from the
+  extension or the filename; inline display only for an allowlist of image
+  types; `Content-Disposition: attachment` for everything else; size limits;
+  filename sanitised; path traversal refused.
+- **Soft delete**, folded in here because it is closer to a defect than a
+  feature: schemas with `deletedAt` currently show deleted rows as live and
+  `delete` destroys instead of marking. One override fixes both.
+
+**Acceptance:** an image field uploads, previews, replaces and clears with no
+storage configuration; a `.html` disguised as a `.png` is refused.
+
+---
+
+### 0.14.0 — Developer tools
+
+Enabled in configuration, and a page appears in the admin. This is the release
+most likely to be the reason someone chooses this admin over another.
+
+- **Mock data engine.** Believable rows from metadata alone: an `email` field
+  gets an email, a `slug` gets a slug, an enum gets its own values, a unique
+  column stays unique, a relation links to a row that exists, and `createdAt`
+  is spread backwards through time so the dashboard chart looks alive.
+- **`@faker-js/faker` is an optional peer.** Install it if you want mock data;
+  the base package stays at one runtime dependency and one megabyte. The
+  dev-tools module says so plainly when it is missing.
+- **Default images, generated rather than shipped.** Identicon-style avatars and
+  gradient covers drawn as SVG from the record itself: nothing added to the
+  tarball, no network call, deterministic, and they look deliberate. When
+  storage is configured they are written as real files - so mock data exercises
+  the upload path from 0.13 rather than working around it.
+- **Rich text.** TipTap, **loaded as its own chunk**, so only a form with a
+  rich-text field pays for it. The generator produces real HTML - headings,
+  paragraphs, lists, links - because a "description" of one flat sentence tests
+  nothing.
+- **Reset, truncate, seed snapshot.**
+- **Schema doctor**: what the admin had to guess or could not resolve - models
+  with no display field, relations whose other half could not be paired,
+  composite keys it cannot address, models with no creation timestamp. All of
+  that degrades silently today; this turns it into a list.
+
+**Keeping it out of production is a security feature, not a convenience**, and
+it does not rest on `NODE_ENV` - staging runs as production, and some hosts do
+not set it at all. Four layers:
+
+1. a separate subpath, `@nest-admin/nestjs/dev-tools` - not imported, not bundled
+2. explicitly enabled in configuration, off by default
+3. **refuses to start** where the deployment looks like production, without a
+   second explicit acknowledgement
+4. every destructive tool behind `resourceAuth`, a confirmation, and a startup
+   warning - the same treatment `unsafeAllowAllRequests()` gets
+
+**Acceptance:** a fresh database becomes a convincing demo in one click; the
+same build refuses to do it in production.
+
+---
+
+### 0.15.0 — Import and export
+
+- **Export** is nearly free - the list query already does the work - and
+  respects `hidden` and `writeOnly`, or it becomes a hole in the permission
+  boundary.
+- **Import** is the hard half. **A dry run is mandatory**: show what would
+  happen, then ask. Partial failure is reported in both halves, the way bulk
+  delete already does. Relations resolve by key or by display field.
+- **CSV and JSON**, both written here with no dependency. Excel is deferred
+  rather than refused - it needs a library or three hundred lines of zip and
+  XML, and shipping the two formats that need neither is the faster way to find
+  out whether the third is actually wanted.
+
+**Acceptance:** a thousand-row CSV imports with three bad rows reported by row
+number and reason, and nothing written until it is confirmed.
+
+---
+
+### 0.16.0 — Customisation
+
+Deliberately after the functional set. Everything that turns "the admin" into
+"our admin", now that there is enough built to know what needs bending.
 
 - **Navigation**: groups with headings, ordering, icons, custom links, dividers.
 - **List presentation** per model: which columns, default sort, page size,
@@ -255,10 +422,11 @@ built to know what needs bending.
 - **Saved views** — a named filter and sort a person returns to.
 - **Theming to the full token set**: fonts, radius, density, a complete palette
   rather than one accent.
-- **Row-level authorization.** Moved here from "after 1.0", because it is
-  API-shaped and 1.0 freezes APIs. `AdminResourceAuth` can say who may list
-  `Order`; it cannot say "only their own". Adding it afterwards is either a
-  breaking change or a bolt-on.
+- **Field-level permissions per principal**, which shares the metadata-shape
+  change the items above need.
+- **More dashboard widgets, and the beginnings of custom pages** - server
+  declared, drawn from the same closed vocabulary, so still no build step in the
+  consuming project.
 - **Carried debt, closed here**: the non-owning half of a one-to-one is
   currently invisible (`User.profile` is absent from the record and its nested
   route answers 400); composite primary keys can be listed but not addressed,
@@ -272,7 +440,7 @@ domain, using configuration only — no forked component, no build step.
 
 ---
 
-### 0.12.0 — Docs, demo, publishing preparation
+### 0.17.0 — Docs site, demo, publishing polish
 
 - A documentation site covering every configuration key, hook, widget, action
   and relation scenario. Tooling still undecided — see below.
@@ -280,26 +448,28 @@ domain, using configuration only — no forked component, no build step.
   already the right size for it.
 - README rewrite: a recording, a three-line install, and an honest list of what
   is still missing.
-- Changesets and the publishing pipeline; a final review of `npm pack` contents.
-- **Claim the `@nest-admin` npm scope.** Free, and irreversible if someone
-  else takes it first, so it should happen well before this release. Checked
-  in 0.11.0: the scoped name is available, while the unscoped `nest-admin` and
-  `nestjs-admin` are both taken by packages abandoned in 2022 — which is
-  itself the argument for the scope.
-- **A `repository` field in the published manifest**, which it does not yet
-  have. The npm page would otherwise have no link to the source.
+- Changesets and a release pipeline. `prepublishOnly` already refuses a
+  tarball with pieces missing; what is absent is anything that runs the tests
+  before a publish rather than trusting whoever typed the command.
+
+**Already done, ahead of this release:** the `@nest-admin` scope is claimed,
+0.11.0 and 0.11.1 are published, and the manifest carries `repository`,
+`homepage`, `bugs` and `author` — without the first of those, every
+documentation link on the npm page would have been broken.
 
 **Acceptance:** a stranger installs the admin from the documentation alone.
 
 ---
 
-### 1.0.0 — API freeze and first publish
+### 1.0.0 — API freeze
+
+The first publish happened in 0.11.0, which is why this is a freeze rather than
+a launch. 0.x has been saying "this may still change"; 1.0 stops saying it.
 
 - Audit the public API: every export deliberate, documented and used.
 - A semver guarantee and a support policy.
-- Final review of the `OrmAdapter` contract, which the second adapter will build
-  on.
-- The first npm publish.
+- Final review of the `OrmAdapter` contract, which a second adapter now builds on.
+- Settle `RecordId` and best-effort constraint fields, below.
 
 **Done in 0.11.0**: the second adapter this section asked for. It is not thin
 and it is shipped — Drizzle, with its own suite and an end-to-end HTTP suite
