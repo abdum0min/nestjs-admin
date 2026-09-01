@@ -48,6 +48,7 @@ import { buildDashboard, type DashboardDto } from '../dashboard/service.js'
 import type { AdminDashboard } from '../dashboard/contract.js'
 import type { AdminAuth } from '../auth/contract.js'
 import { readDecision, type AdminOperation, type AdminResourceAuth } from '../auth/resource.js'
+import type { AdminCapability } from '../auth/roles.js'
 import { clientMessage } from '../http/exception.filter.js'
 import { parseListQuery, type RawQuery } from '../http/query-parser.js'
 import type { AdminActionResult, AdminActionsByModel } from '../actions/contract.js'
@@ -56,7 +57,9 @@ import {
   ADMIN_ACTIONS,
   ADMIN_ADAPTER,
   ADMIN_AUTH,
+  ADMIN_CAPABILITIES,
   ADMIN_DASHBOARD,
+  ADMIN_TEAM,
   ADMIN_HOOKS,
   ADMIN_MODELS,
   ADMIN_RESOURCE_AUTH,
@@ -103,6 +106,11 @@ export class AdminService implements OnModuleInit {
     @Inject(ADMIN_ACTIONS) private readonly actions: AdminActionsByModel | undefined,
     @Inject(ADMIN_AUTH) private readonly auth: AdminAuth,
     @Inject(ADMIN_DASHBOARD) private readonly dashboard: AdminDashboard | undefined,
+    // Both optional: an admin without a built-in login has no team screen, and
+    // one without roles gives every administrator every capability.
+    @Inject(ADMIN_TEAM) private readonly team: unknown,
+    @Inject(ADMIN_CAPABILITIES)
+    private readonly can: (context: ExecutionContext, capability: AdminCapability) => boolean,
   ) {}
 
   private readonly logger = new Logger('NestAdmin')
@@ -274,6 +282,11 @@ export class AdminService implements OnModuleInit {
       this.overrides,
       await this.permissionsFor(context, visible),
       await this.actionsFor(context, visible),
+      {
+        // Both halves: the deployment has to have a team screen, and this role
+        // has to be allowed to open it.
+        manageTeam: this.team !== undefined && this.can(context, 'manageTeam'),
+      },
     )
   }
 

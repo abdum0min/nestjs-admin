@@ -15,6 +15,8 @@ import type {
   AdminErrorCode,
   AdminSession,
   Dashboard,
+  TeamMember,
+  TeamView,
   BulkDeleteResult,
   AdminRecord,
   ErrorEnvelope,
@@ -347,4 +349,38 @@ export async function runAction(
 
   const { data } = await request<{ message?: string }>(path, { method: 'POST' })
   return data ?? {}
+}
+
+/** `GET /admin/team` - the accounts that can sign in. */
+export async function fetchTeam(): Promise<TeamView> {
+  const { data } = await request<TeamView>('/team')
+  return data
+}
+
+export async function createTeamMember(body: {
+  email: string
+  name?: string
+  role?: string
+  password: string
+}): Promise<TeamMember> {
+  const { data } = await request<TeamMember>('/team', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return data
+}
+
+export async function updateTeamMember(
+  id: string,
+  body: { name?: string; role?: string; disabled?: boolean; password?: string },
+): Promise<TeamMember> {
+  const { data } = await request<TeamMember>(`/team/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+  return data
+}
+
+export async function deleteTeamMember(id: string): Promise<void> {
+  await request(`/team/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

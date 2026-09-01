@@ -258,12 +258,48 @@ are ANDed; expressing that properly means changing the adapter contract, so it
 is deferred rather than half-built. A principal that needs two roles today needs
 a third role that is their union.
 
-### Where roles are granted — not here
+### The team screen
 
-`AdminAccountStore` is read-only by design: an admin that could mint its own
-administrators is an escalation waiting for its first mistake. Roles are
-assigned wherever accounts are created — a migration, a seed script, or your own
-form. The admin reads a role and never writes one.
+When the login is `builtInAuth` and its store can list accounts, the admin gets
+a **Team** page, reached from the user menu. It is not the account table exposed
+as a resource — that stays excluded, and must:
+
+> As an ordinary model resource, anyone with `update` on it could write another
+> account's `passwordHash` directly. A complete takeover, from a form, with no
+> password ever typed.
+
+The screen is the opposite arrangement:
+
+|                            |                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| A password hash            | **never accepted.** A password is typed, and the hash is derived on the server                                     |
+| Who may open it            | a role holding the `manageTeam` capability. Without `roles`, every administrator — which is what they already were |
+| Your own row               | you cannot delete it, disable it, or change its role                                                               |
+| A role you did not declare | refused — it would create an account that signs in and sees nothing                                                |
+| A store that cannot write  | the screen is read-only; one that cannot list has no screen at all, and the routes answer 404                      |
+
+```ts
+roles: {
+  owner: '*',                                                    // manageTeam included
+  manager: { models: { … }, capabilities: ['manageTeam'] },
+  editor: { models: { … } },                                     // cannot open it
+}
+```
+
+**What this does not defend against**, stated plainly: someone who already holds
+`manageTeam` can create another account that holds it. That is not an escalation
+— they are already an administrator — but it is _persistence_, so `manageTeam`
+is a capability a role has to name rather than one everybody gets.
+
+To implement it against your own storage, add the four optional methods to
+`AdminAccountStore`: `listAccounts`, `createAccount`, `updateAccount`,
+`deleteAccount`. A store without them keeps working.
+
+### Where roles are granted
+
+On the team screen above, or wherever accounts are created — a migration, a seed
+script, or your own form. A store that does not implement the write methods
+keeps the older arrangement, where the admin reads a role and never writes one.
 
 ### What the interface does with it
 

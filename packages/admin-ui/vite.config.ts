@@ -54,6 +54,15 @@ export default defineConfig({
     environment: 'jsdom',
     globals: false,
     setupFiles: ['./test/setup.ts'],
+    /*
+     * Above the five seconds Testing Library waits in test/setup.ts.
+     *
+     * When the two are equal, a query that will never succeed exhausts the
+     * test budget first and the report says "Test timed out" - which names
+     * neither the element nor the DOM it searched. Headroom lets the query
+     * fail first, with something to read.
+     */
+    testTimeout: 15_000,
     include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
     passWithNoTests: true,
   },

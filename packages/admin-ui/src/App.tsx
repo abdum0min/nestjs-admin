@@ -13,6 +13,7 @@ import { fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
 import type { AdminAccountSummary, ModelDescriptor } from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
 import { DashboardView } from './components/DashboardView.jsx'
+import { TeamView } from './components/TeamView.jsx'
 import { ListView } from './components/ListView.jsx'
 import { LoginPage } from './components/LoginPage.jsx'
 import { RecordForm } from './components/RecordForm.jsx'
@@ -131,12 +132,25 @@ function Admin({
     )
   }
 
-  const active = route.kind === 'home' ? undefined : models.find((m) => m.name === route.model)
+  const active =
+    route.kind === 'home' || route.kind === 'team'
+      ? undefined
+      : models.find((m) => m.name === route.model)
 
   return (
-    <Shell models={models} activeModel={active?.name} {...shellProps}>
+    <Shell
+      models={models}
+      activeModel={active?.name}
+      canManageTeam={metadata.data?.capabilities?.manageTeam === true}
+      {...shellProps}
+    >
       {route.kind === 'home' ? (
         <DashboardView />
+      ) : route.kind === 'team' ? (
+        // Rendered only when the metadata says so. Reaching the URL without the
+        // capability still gets a page - one whose first request is refused,
+        // which is the same shape every other unauthorized screen has.
+        <TeamView />
       ) : active === undefined ? (
         // The hash named something metadata does not contain. It may not exist,
         // or may be hidden from this principal - the UI cannot tell them apart,
@@ -190,12 +204,15 @@ function Shell({
   activeModel,
   account,
   onSignedOut,
+  canManageTeam = false,
   children,
 }: {
   readonly models?: readonly ModelDescriptor[]
   readonly activeModel?: string
   /** Absent when the application brought its own authentication. */
   readonly account?: AdminAccountSummary | undefined
+  /** Whether to offer the team screen. Decided by the server, not here. */
+  readonly canManageTeam?: boolean
   readonly onSignedOut?: () => void
   readonly children: React.ReactNode
 }) {
@@ -295,7 +312,7 @@ function Shell({
                 people out through its own interface should not be offered a
                 button here that cannot do it. */}
             {account && onSignedOut ? (
-              <UserMenu account={account} onSignedOut={onSignedOut} />
+              <UserMenu account={account} onSignedOut={onSignedOut} canManageTeam={canManageTeam} />
             ) : null}
           </div>
         </header>

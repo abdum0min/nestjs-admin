@@ -142,6 +142,12 @@ export interface ModelDescriptor {
 
 export interface Metadata {
   readonly models: readonly ModelDescriptor[]
+  /**
+   * Absent from a server older than 0.12, and treated as nothing permitted -
+   * which is right: a screen this build has never heard of should not appear
+   * because an older server did not mention it.
+   */
+  readonly capabilities?: Capabilities
 }
 
 /** A record as it crosses the wire. Values are whatever JSON allows. */
@@ -284,4 +290,28 @@ export interface ListData {
 export interface ChartData {
   readonly points: readonly { readonly at: string; readonly value: number }[]
   readonly total: number
+}
+
+/** One account that can sign in to the admin. Never carries a password hash. */
+export interface TeamMember {
+  readonly id: string
+  readonly email: string
+  readonly name?: string
+  readonly role?: string
+  readonly disabled: boolean
+  /** True for the account viewing the page - the rules are all about this. */
+  readonly isYou: boolean
+}
+
+export interface TeamView {
+  readonly members: readonly TeamMember[]
+  /** False when the account store can be read but not written. */
+  readonly writable: boolean
+  /** Role names to offer, in the order the application declared them. */
+  readonly roles: readonly string[]
+}
+
+/** What this principal may do that is not about a model. */
+export interface Capabilities {
+  readonly manageTeam: boolean
 }

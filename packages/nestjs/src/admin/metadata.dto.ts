@@ -207,8 +207,21 @@ export interface ModelDto {
   readonly icon?: ModelIcon
 }
 
+/**
+ * What this principal may do that is not about a model.
+ *
+ * Sent so the interface knows whether to offer a screen at all. It is not
+ * trusted for anything: every route checks again when the request arrives, and
+ * withholding a link has never been a permission.
+ */
+export interface CapabilitiesDto {
+  /** True only when this admin has a team screen and this role may open it. */
+  readonly manageTeam: boolean
+}
+
 export interface MetadataDto {
   readonly models: readonly ModelDto[]
+  readonly capabilities: CapabilitiesDto
 }
 
 /**
@@ -325,10 +338,12 @@ export function toMetadataDto(
   overrides?: ModelOverrides,
   permissions?: ReadonlyMap<string, ModelPermissionsDto>,
   actions?: ReadonlyMap<string, readonly ActionDto[]>,
+  capabilities: CapabilitiesDto = { manageTeam: false },
 ): MetadataDto {
   const present = new Set(models.map((model) => model.name))
 
   return {
+    capabilities,
     models: byOrder(models, (model) => overrides?.[model.name]?.order).map((model) => ({
       name: model.name,
       primaryKey: [...model.primaryKey],

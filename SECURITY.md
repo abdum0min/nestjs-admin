@@ -51,10 +51,13 @@ per email and per address, and failures decay.
 table. Pointing it at the table the admin manages would put a credential that
 opens the admin on every customer record.
 
-**The account store is read-only.** The admin cannot create accounts or grant
-roles. An admin that could mint its own administrators is an escalation waiting
-for its first mistake, so roles are granted where accounts are created — a
-migration, a seed, or your own form.
+**The account table is never a resource.** It stays excluded from `resources`,
+because as an ordinary model anyone with `update` on it could write another
+account's password hash — a complete takeover from a form, with no password
+typed. The team screen is a purpose-built page instead: it never accepts a hash,
+only a password it derives one from; it sits behind the `manageTeam` capability;
+and it refuses to let you delete, disable or demote your own account. A store
+that does not implement the optional write methods has no team screen at all.
 
 ## What it does not guarantee
 
@@ -69,7 +72,9 @@ Stated so nobody discovers them the hard way.
 - **No rate limiting outside sign-in.** A principal who is allowed to list can
   list as often as they like.
 - **No protection against a compromised administrator.** An account with
-  permission to delete can delete.
+  permission to delete can delete. One holding `manageTeam` can also create
+  another account that holds it, which is persistence rather than escalation —
+  withhold the capability from roles that do not need it.
 
 ## Things you have to get right
 

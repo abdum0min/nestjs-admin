@@ -19,6 +19,16 @@ import { useEffect, useState } from 'react'
 
 export type Route =
   | { readonly kind: 'home' }
+  /**
+   * The team screen.
+   *
+   * `~team` rather than `team`, because every other route in this space is a
+   * model name and a schema is free to contain one called `Team`. The tilde is
+   * not a legal first character for a model in any ORM this supports, so the
+   * two can never collide - the same problem the server solves by declaring
+   * literal segments before `:model`, solved the same way.
+   */
+  | { readonly kind: 'team' }
   | {
       readonly kind: 'list'
       readonly model: string
@@ -47,6 +57,7 @@ export function parseHash(hash: string): Route {
   const [model, second, third] = segments
 
   if (model === undefined) return { kind: 'home' }
+  if (model === '~team') return { kind: 'team' }
   if (second === undefined) return { kind: 'list', model, ...(filter ? { filter } : {}) }
   if (second === 'new') return { kind: 'create', model }
   if (third === 'edit') return { kind: 'edit', model, id: second }
@@ -57,6 +68,8 @@ export function href(route: Route): string {
   switch (route.kind) {
     case 'home':
       return '#/'
+    case 'team':
+      return '#/~team'
     case 'list':
       return (
         `#/${encodeURIComponent(route.model)}` +

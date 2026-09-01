@@ -10,7 +10,7 @@
  * own `AdminAuth` signs people out through its own interface, and a button here
  * that cannot do it would be a lie.
  */
-import { LogOut, User } from 'lucide-react'
+import { LogOut, User, Users } from 'lucide-react'
 import { useState } from 'react'
 
 import { signOut } from '../api/client.js'
@@ -29,9 +29,11 @@ import {
 export function UserMenu({
   account,
   onSignedOut,
+  canManageTeam = false,
 }: {
   readonly account: AdminAccountSummary
   readonly onSignedOut: () => void
+  readonly canManageTeam?: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const name = account.name ?? account.email
@@ -83,6 +85,17 @@ export function UserMenu({
         </DropdownMenuLabel>
 
         <DropdownMenuSeparator />
+
+        {/* Only when the server said so. The link is a convenience; the routes
+            behind it refuse the request on their own. */}
+        {canManageTeam ? (
+          <DropdownMenuItem asChild>
+            <a href="#/~team">
+              <Users />
+              Team
+            </a>
+          </DropdownMenuItem>
+        ) : null}
 
         <DropdownMenuItem disabled={busy} onSelect={() => void leave()}>
           <LogOut />

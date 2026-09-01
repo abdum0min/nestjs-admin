@@ -152,9 +152,9 @@ async function signIn(app: INestApplication, email: string): Promise<string> {
 
 const team = (app: INestApplication, cookie: string) => ({
   list: () => request(app.getHttpServer()).get('/admin/team').set('cookie', cookie),
-  create: (body: unknown) =>
+  create: (body: Record<string, unknown>) =>
     request(app.getHttpServer()).post('/admin/team').set('cookie', cookie).send(body),
-  update: (id: string, body: unknown) =>
+  update: (id: string, body: Record<string, unknown>) =>
     request(app.getHttpServer()).patch(`/admin/team/${id}`).set('cookie', cookie).send(body),
   remove: (id: string) =>
     request(app.getHttpServer()).delete(`/admin/team/${id}`).set('cookie', cookie),
