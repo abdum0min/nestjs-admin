@@ -21,7 +21,9 @@ export type { ModelIcon } from './config/overrides.js'
 export {
   summarise,
   type AdminAccount,
+  type AdminAccountChanges,
   type AdminAccountStore,
+  type NewAdminAccount,
   type AdminAccountSummary,
 } from './auth/account.js'
 export { createdFieldFor } from './metadata/created-field.js'

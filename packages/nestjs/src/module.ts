@@ -34,7 +34,10 @@ import { AdminAuthController } from './auth/controller.js'
 import { AdminService } from './admin/service.js'
 import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
 import { AdminAuthGuard } from './auth/guard.js'
+import { adminAccountOf, builtInRuntimeOf } from './auth/built-in.js'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
+import { AdminTeamController } from './auth/team.controller.js'
+import { TeamService, teamAvailable } from './auth/team.js'
 import {
   capabilityChecker,
   combineResourceAuth,
@@ -60,6 +63,7 @@ import {
   ADMIN_MOUNT_PATH,
   ADMIN_OPTIONS,
   ADMIN_CAPABILITIES,
+  ADMIN_TEAM,
   ADMIN_RESOURCE_AUTH,
   ADMIN_RESOURCES,
   ADMIN_THEME,
@@ -334,6 +338,30 @@ function resolvePolicy(options: {
   return combineResourceAuth(fromRoles, options.resourceAuth)
 }
 
+/**
+ * The team service, when this deployment can have one.
+ *
+ * Three things have to be true: the login is the built-in one, its store can
+ * list accounts, and - for writes - it can also create, update and delete. Any
+ * of them missing and the routes answer 404, because the feature is not part
+ * of that admin rather than forbidden inside it.
+ */
+function resolveTeam(options: {
+  readonly auth: AdminAuth
+  readonly roles?: AdminRoles
+  readonly roleOf?: RoleResolver
+}): TeamService | undefined {
+  const runtime = builtInRuntimeOf(options.auth)
+  if (runtime === undefined || !teamAvailable(runtime.store)) return undefined
+
+  return new TeamService({
+    store: runtime.store,
+    roles: options.roles,
+    can: capabilityChecker(options.roles, options.roleOf),
+    accountOf: adminAccountOf,
+  })
+}
+
 function warnIfUiMissing(resolvedUiRoot: string, mountPath: string): void {
   if (uiAvailable(resolvedUiRoot)) return
 
@@ -377,7 +405,9 @@ function defineModule(
     // reason and at the same cost: a model named `auth` is unreachable, as one
     // named `assets` or `actions` already was. Everything else falls through to
     // the API controller.
-    controllers: [AdminUiController, AdminAuthController, AdminController],
+    // Order decides: every literal segment has to be declared before the
+    // controller that owns the `:model` parameter, or the parameter swallows it.
+    controllers: [AdminUiController, AdminAuthController, AdminTeamController, AdminController],
     providers: [
       ...optionProviders,
       { provide: ADMIN_UI_ROOT, useValue: resolvedUiRoot },
@@ -494,6 +524,7 @@ export class AdminModule {
       // supplied a policy. The default permits every model.
       { provide: ADMIN_RESOURCE_AUTH, useValue: resolvePolicy(options) },
       { provide: ADMIN_CAPABILITIES, useValue: capabilityChecker(options.roles, options.roleOf) },
+      { provide: ADMIN_TEAM, useValue: resolveTeam(options) },
     ])
   }
 
@@ -558,6 +589,7 @@ export class AdminModule {
         derive(ADMIN_CAPABILITIES, (resolved) =>
           capabilityChecker(resolved.roles, resolved.roleOf),
         ),
+        derive(ADMIN_TEAM, (resolved) => resolveTeam(resolved)),
       ],
       options.imports ?? [],
     )

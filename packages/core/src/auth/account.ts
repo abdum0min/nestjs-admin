@@ -105,13 +105,58 @@ export function summarise(account: AdminAccount): AdminAccountSummary {
   }
 }
 
+/** What a new account is made of. Never a hash the caller chose. */
+export interface NewAdminAccount {
+  readonly email: string
+  readonly name?: string | undefined
+  readonly role?: string | undefined
+  /**
+   * Already derived, by the admin, from a password it was given.
+   *
+   * A store never hashes and a caller never supplies a hash: the key
+   * derivation lives in one place, and a route that accepted a hash would let
+   * anyone who could reach it install a password they knew the hash of.
+   */
+  readonly passwordHash: string
+}
+
+/** What may be changed about an existing account. */
+export interface AdminAccountChanges {
+  readonly name?: string | undefined
+  readonly role?: string | undefined
+  readonly disabled?: boolean | undefined
+  /** Present only when a new password was set. Derived by the admin, as above. */
+  readonly passwordHash?: string | undefined
+}
+
 /**
  * How the admin reaches its accounts.
  *
- * Read-only by design. Creating and editing accounts is the application's
- * business: it owns the storage, it knows whether that is a migration, a seed
- * script or a form somewhere else, and an admin that could mint its own
- * administrators is an escalation waiting for its first mistake.
+ * ## Reading is required; writing is not
+ *
+ * The three methods below the reads are **optional**, and a store that omits
+ * them still works - the team screen is simply read-only, or absent.
+ *
+ * ## The rule that used to be stated here, restated more precisely
+ *
+ * This contract used to say it was read-only by design, because "an admin that
+ * could mint its own administrators is an escalation waiting for its first
+ * mistake". That is right about one thing and too broad as a rule.
+ *
+ * What it is right about: exposing the account table as an ordinary **model
+ * resource**. Anyone with `update` on it could then write another account's
+ * `passwordHash` directly, which is a complete takeover reachable from a form.
+ * That is still forbidden, and the module still warns when the account model is
+ * not excluded from `resources`.
+ *
+ * What it was too broad about: a purpose-built screen is not that. It never
+ * accepts a hash, it holds invariants a generic resource cannot - you may not
+ * remove your own access, or the last account that could restore anyone's - and
+ * it sits behind a capability of its own rather than a model permission.
+ *
+ * And the alternative was not safer. Adding a colleague meant a shell on the
+ * production machine running a script, which is a larger privilege than a form
+ * behind a permission. The risk was not removed, only moved somewhere worse.
  */
 export interface AdminAccountStore {
   /**
@@ -153,6 +198,34 @@ export interface AdminAccountStore {
    * something the person signing in can act on.
    */
   recordLogin?(id: string): Promise<void>
+
+  /**
+   * Every account, for the team screen. Optional.
+   *
+   * Returning them all rather than a page: an admin has administrators, not
+   * users, and a deployment with enough of them to need pagination has
+   * outgrown a screen like this one anyway.
+   */
+  listAccounts?(): Promise<readonly AdminAccount[]>
+
+  /**
+   * Add one. Optional.
+   *
+   * Must reject a duplicate email by throwing - the admin surfaces that as a
+   * constraint violation rather than pretending it worked.
+   */
+  createAccount?(account: NewAdminAccount): Promise<AdminAccount>
+
+  /**
+   * Change one. Optional.
+   *
+   * Only the fields present are written. A store must never interpret an
+   * absent key as a request to clear the column.
+   */
+  updateAccount?(id: string, changes: AdminAccountChanges): Promise<AdminAccount>
+
+  /** Remove one. Optional. */
+  deleteAccount?(id: string): Promise<void>
 
   /**
    * What this store reads, for diagnostics. Optional.

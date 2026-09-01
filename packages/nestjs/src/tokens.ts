@@ -19,6 +19,15 @@ export const ADMIN_AUTH = Symbol('NEST_ADMIN_AUTH')
  * whether roles were configured at all - without them it answers true, which is
  * what an admin with a single superuser has always meant.
  */
+/**
+ * The team service, when this admin has one.
+ *
+ * `undefined` when the login is not the built-in one, or its store cannot list
+ * accounts - the routes then answer 404, because the feature is not part of
+ * that deployment rather than forbidden within it.
+ */
+export const ADMIN_TEAM = Symbol.for('nest-admin.team')
+
 export const ADMIN_CAPABILITIES = Symbol.for('nest-admin.capabilities')
 
 export const ADMIN_RESOURCE_AUTH = Symbol('NEST_ADMIN_RESOURCE_AUTH')

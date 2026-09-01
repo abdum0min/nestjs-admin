@@ -35,6 +35,7 @@
  */
 import type { AdminAccount, AdminAccountStore } from '@nest-admin/core'
 
+import { AdapterError } from '@nest-admin/core'
 import { resolveDelegate } from '../client/delegate.js'
 
 export interface PrismaAccountStoreOptions {
@@ -155,6 +156,61 @@ export function prismaAccountStore(options: PrismaAccountStoreOptions): AdminAcc
 
     async count() {
       return delegate().count()
+    },
+
+    async listAccounts() {
+      const rows = (await delegate().findMany({
+        orderBy: { [column.email]: 'asc' },
+      })) as unknown[]
+
+      // A row with no usable hash is dropped by `toAccount`, and dropping it
+      // here too is right: this screen lists accounts that could sign in.
+      return rows.map(toAccount).filter((account) => account !== null)
+    },
+
+    async createAccount(account) {
+      const created = await delegate().create({
+        data: {
+          [column.email]: account.email,
+          [column.passwordHash]: account.passwordHash,
+          ...(account.name !== undefined ? { [column.name]: account.name } : {}),
+          ...(account.role !== undefined ? { [column.role]: account.role } : {}),
+        },
+      })
+
+      const stored = toAccount(created)
+      if (stored === null) {
+        // Written, then unreadable: a column mapping is wrong, and saying so
+        // is better than returning something the caller cannot use.
+        throw new AdapterError(
+          'Created an account in "' +
+            model +
+            '" that this store cannot read back. Check the `fields` mapping.',
+        )
+      }
+      return stored
+    },
+
+    async updateAccount(id, changes) {
+      // Only what was sent. An absent key is not a request to clear a column,
+      // and treating it as one would wipe a name on every role change.
+      const data: Record<string, unknown> = {}
+      if (changes.name !== undefined) data[column.name] = changes.name
+      if (changes.role !== undefined) data[column.role] = changes.role
+      if (changes.disabled !== undefined) data[column.disabled] = changes.disabled
+      if (changes.passwordHash !== undefined) data[column.passwordHash] = changes.passwordHash
+
+      const updated = await delegate().update({ where: { [column.id]: id }, data })
+
+      const stored = toAccount(updated)
+      if (stored === null) {
+        throw new AdapterError('Updated an account in "' + model + '" that cannot be read back.')
+      }
+      return stored
+    },
+
+    async deleteAccount(id) {
+      await delegate().delete({ where: { [column.id]: id } })
     },
 
     async recordLogin(id) {
