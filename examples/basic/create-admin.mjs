@@ -17,10 +17,11 @@ import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 
 import { PrismaClient } from './dist/generated/prisma/client.js'
 
-const [email, password] = process.argv.slice(2)
+const [email, password, role = 'admin'] = process.argv.slice(2)
 
 if (!email || !password) {
-  console.error('Usage: node create-admin.mjs <email> <password>')
+  console.error('Usage: node create-admin.mjs <email> <password> [role]')
+  console.error('Roles in this example: admin, editor, support')
   process.exit(1)
 }
 
@@ -34,13 +35,14 @@ const prisma = new PrismaClient({
 // who registered as `Ada@example.com` will type `ada@example.com` eventually.
 const account = await prisma.adminAccount.upsert({
   where: { email: email.trim().toLowerCase() },
-  update: { passwordHash: await hashAdminPassword(password), disabled: false },
+  update: { passwordHash: await hashAdminPassword(password), disabled: false, role },
   create: {
     email: email.trim().toLowerCase(),
     name: email.split('@')[0],
     passwordHash: await hashAdminPassword(password),
+    role,
   },
 })
 
-console.log(`Admin account ready: ${account.email}`)
+console.log(`Admin account ready: ${account.email} (${account.role})`)
 await prisma.$disconnect()

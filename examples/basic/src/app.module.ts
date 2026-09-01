@@ -1,7 +1,14 @@
 import { randomBytes, scryptSync } from 'node:crypto'
 
 import { Module } from '@nestjs/common'
-import { AdminModule, builtInAuth, ValidationError, type AdminDashboard } from '@nest-admin/nestjs'
+import {
+  AdminModule,
+  builtInAuth,
+  builtInRoleOf,
+  ValidationError,
+  type AdminDashboard,
+  type AdminRoles,
+} from '@nest-admin/nestjs'
 import { PrismaAdapter, prismaAccountStore } from '@nest-admin/nestjs/prisma'
 
 import { PrismaService } from './prisma.service.js'
@@ -260,6 +267,47 @@ function dashboard(prisma: PrismaService) {
 }
 
 /**
+ * Who may do what, once they are in.
+ *
+ * Optional. Deleting this block and the two options that use it leaves an admin
+ * where every account may do everything - which is what an admin with a single
+ * administrator is, and what this example was before roles existed.
+ *
+ * Three roles, chosen to show the three things worth knowing:
+ *
+ *   admin    everything, including the models the others cannot see
+ *   editor   the publishing models, and no access to orders or people at all -
+ *            not read-only, *invisible*: they never reach the metadata document
+ *            so the interface never draws them
+ *   support  reads orders and customers, and only the pending orders, which is
+ *            row-level scoping rather than a per-model rule
+ */
+const roles = {
+  admin: '*',
+
+  editor: {
+    models: {
+      Post: ['metadata', 'list', 'read', 'create', 'update', 'action'],
+      Comment: ['metadata', 'list', 'read', 'delete'],
+      Category: ['metadata', 'list', 'read'],
+      Tag: ['metadata', 'list', 'read', 'create', 'update'],
+    },
+  },
+
+  support: {
+    models: {
+      Order: ['metadata', 'list', 'read'],
+      OrderItem: ['metadata', 'list', 'read'],
+      User: ['metadata', 'list', 'read'],
+    },
+    // Filters, not a refusal: support sees the orders that need attention and
+    // the query never returns the rest, so the count is right too.
+    scope: ({ model }) =>
+      model === 'Order' ? [{ field: 'status', operator: 'eq', value: 'PENDING' }] : undefined,
+  },
+} as const satisfies AdminRoles
+
+/**
  * Who may open the admin.
  *
  * This example has no identity system of its own, which is the case
@@ -331,6 +379,11 @@ class DatabaseModule {}
         resources: { exclude: ['AdminAccount'] },
 
         models,
+
+        // Both optional. Without them every account may do everything, which
+        // is exactly how this example behaved before 0.12.
+        roles,
+        roleOf: builtInRoleOf(),
 
         dashboard: dashboard(prisma),
 

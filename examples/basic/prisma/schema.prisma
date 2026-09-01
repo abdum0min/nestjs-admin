@@ -267,6 +267,10 @@ model AdminAccount {
   email        String    @unique
   name         String?
   passwordHash String
+  // Read by prismaAccountStore and matched against the `roles` table in
+  // app.module.ts. Defaulted so existing rows keep working: an account that
+  // predates roles is an administrator, which is what it was.
+  role         String    @default("admin")
   disabled     Boolean   @default(false)
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
