@@ -63,6 +63,19 @@ export interface AdminAccount {
    * "never existed".
    */
   readonly disabled?: boolean | undefined
+
+  /**
+   * Which role this account has, for an admin that declares `roles`.
+   *
+   * **Read, never written.** The store is read-only by design - see the note
+   * on {@link AdminAccountStore} - so a role is granted wherever accounts are
+   * created: the application's own migration, seed script or form. An admin
+   * that could hand out its own roles would be exactly the escalation that
+   * note is about, arriving by a quieter route.
+   *
+   * Absent when the admin declares no roles, which is the ordinary case.
+   */
+  readonly role?: string | undefined
 }
 
 /**
@@ -76,6 +89,7 @@ export interface AdminAccountSummary {
   readonly id: string
   readonly email: string
   readonly name?: string | undefined
+  readonly role?: string | undefined
 }
 
 /** Everything but the hash. The only shape that may reach a client. */
@@ -84,6 +98,10 @@ export function summarise(account: AdminAccount): AdminAccountSummary {
     id: account.id,
     email: account.email,
     ...(account.name !== undefined ? { name: account.name } : {}),
+    // Safe to send: a name the application chose, used by the interface to say
+    // who you are signed in as. What that role may *do* is decided on the
+    // server on every request regardless of what a client believes.
+    ...(account.role !== undefined ? { role: account.role } : {}),
   }
 }
 

@@ -13,6 +13,98 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.12.0
+
+Permissions, roles and row-level scoping. All three are optional, and an admin
+that configures none of them behaves exactly as 0.11 did.
+
+### Added
+
+- **Row-level scoping.** `AdminResourceAuth.authorize` may return
+  `{ filters }` instead of `true`, and those filters are merged into the query
+  the adapter runs:
+
+  ```ts
+  authorize({ model, context }) {
+    const user = context.switchToHttp().getRequest().user
+    if (user.isAdmin || model !== 'Order') return true
+    return { filters: [{ field: 'tenantId', operator: 'eq', value: user.tenantId }] }
+  }
+  ```
+
+  Filtering after the query would have been simpler and wrong four ways at once:
+  `total` would count rows nobody may know about, a page of 25 would show 3,
+  "next page" would sometimes be empty, and a large table would be read in full
+  to return a handful. So the constraint reaches the database.
+
+  Applied at every place a row can be reached — list, single record, update,
+  delete, bulk delete, both sides of a related list, dashboard widgets and
+  record actions. A scope that held in seven of eight would not be a scope.
+
+  Addressing a row outside the scope answers **404, not 403**: a 403 would
+  confirm the record exists, which is what the scope conceals.
+
+  Widening the return type is backward compatible — an implementation returning
+  a boolean still satisfies it, and a truthy object already meant "allow".
+
+- **Named roles**, as a shorthand for that policy:
+
+  ```ts
+  roles: {
+    admin: '*',
+    editor: { models: { Post: ['metadata', 'list', 'read', 'create', 'update'] } },
+    support: {
+      models: { Order: ['metadata', 'list', 'read'] },
+      scope: ({ context }) => [{ field: 'tenantId', operator: 'eq', value: tenantOf(context) }],
+    },
+  },
+  roleOf: builtInRoleOf(),
+  ```
+
+  Roles compile into an `AdminResourceAuth` and then stop existing, so a rule
+  written as a role and one written as a function are checked by identical
+  code — one enforcement path, not two. An application that outgrows roles
+  writes the function and loses nothing.
+
+  A model a role never mentions is **invisible**, not read-only: it fails the
+  `metadata` check, so the interface never learns it exists. An `action` is
+  never implied by `update` — an action runs application code, and permission to
+  edit a post is not permission to publish it.
+
+  `roles` beside your own `resourceAuth` means both must agree. Fail closed:
+  adding a rule can only remove access, never grant it.
+
+- **`builtInRoleOf()`**, so an admin using the built-in login wires roles in one
+  line. The role is read off the signed-in account and cannot be supplied by a
+  client.
+
+- **`AdminAccount.role`**, read by `prismaAccountStore` from a `role` column and
+  shown in the user menu.
+
+- **[SECURITY.md](SECURITY.md)** — what the admin guarantees, what it does not,
+  and the four things a deployment has to get right.
+
+### Notes
+
+- **The account store stays read-only, and so there is no team-management
+  screen.** One was planned, and then the contract's own note was found:
+  _"an admin that could mint its own administrators is an escalation waiting for
+  its first mistake."_ Overturning that in the release that adds permissions
+  would have been the wrong trade. Roles are granted where accounts are created.
+
+- **One role per request.** Combining two roles' scopes needs OR, and
+  `ListQuery.filters` are ANDed. Doing it properly means changing the adapter
+  contract, so it is deferred rather than half-built.
+
+- **The edit-conflict guard moved to 0.12.1.** It is write safety rather than
+  authorization, it needs its own error code and its own dialog, and bundling it
+  would have delayed this.
+
+- `roles` without `roleOf` refuses to start, naming the missing option. Denying
+  every request instead would be a locked-out admin with no explanation.
+
+---
+
 ## 0.11.1
 
 Fixes the first defect reported from a published release.

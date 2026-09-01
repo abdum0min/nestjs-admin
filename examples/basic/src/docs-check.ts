@@ -10,6 +10,7 @@
  */
 import {
   builtInAuth,
+  builtInRoleOf,
   ForbiddenError,
   UnauthorizedError,
   unsafeAllowAllRequests,
@@ -19,6 +20,8 @@ import {
   type AdminDashboard,
   type AdminHooksByModel,
   type AdminResourceAuth,
+  type AdminRoles,
+  type RoleResolver,
   type ModelOverrides,
 } from '@nest-admin/nestjs'
 import { prismaAccountStore } from '@nest-admin/nestjs/prisma'
@@ -51,6 +54,38 @@ const resourceAuth: AdminResourceAuth = {
   authorize({ model, operation }) {
     if (model === 'Invoice') return operation === 'metadata' || operation === 'list'
     return true
+  },
+}
+
+/* configuration.md and getting-started.md - roles */
+const roles = {
+  admin: '*',
+
+  editor: {
+    models: {
+      Post: ['metadata', 'list', 'read', 'create', 'update'],
+      Comment: ['metadata', 'list', 'read', 'delete'],
+    },
+  },
+
+  support: {
+    models: { Order: ['metadata', 'list', 'read'] },
+    scope: ({ model }) =>
+      model === 'Order'
+        ? [{ field: 'status', operator: 'eq' as const, value: 'PENDING' }]
+        : undefined,
+  },
+} as const satisfies AdminRoles
+
+/* getting-started.md - the built-in login supplies the role */
+const roleOf: RoleResolver = builtInRoleOf()
+
+/* configuration.md - a policy that scopes rows rather than refusing a model */
+const scoped: AdminResourceAuth = {
+  authorize({ model, context }) {
+    const request = context.switchToHttp().getRequest<{ user?: { tenantId?: string } }>()
+    if (model !== 'Order') return true
+    return { filters: [{ field: 'status', operator: 'eq', value: request.user?.tenantId ?? '' }] }
   },
 }
 
@@ -128,6 +163,9 @@ const dashboard = [
 
 /* Referenced so nothing above is dropped as unused. */
 export const documented = {
+  roles,
+  roleOf,
+  scoped,
   hostAuth,
   packageAuth,
   openAuth,

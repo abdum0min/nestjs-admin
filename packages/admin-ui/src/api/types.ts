@@ -224,6 +224,14 @@ export interface AdminAccountSummary {
   readonly id: string
   readonly email: string
   readonly name?: string
+  /**
+   * Present only when the admin declares roles.
+   *
+   * Shown, never acted on: what a role may do is decided on the server for
+   * every request, and the interface withholds controls from the `can` block
+   * in the metadata rather than from this.
+   */
+  readonly role?: string
 }
 
 export interface AdminSession {

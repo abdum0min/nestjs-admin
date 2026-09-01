@@ -66,6 +66,7 @@ export type {
 // Roles: a shorthand that compiles into the resource-authorization contract,
 // so an application can start with roles and drop to a function later without
 // changing anything it already relies on.
+export { builtInRoleOf } from './auth/built-in.js'
 export type {
   AdminCapability,
   AdminRoles,

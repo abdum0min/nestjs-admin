@@ -2,7 +2,7 @@
 
 An admin panel for NestJS applications, generated from your ORM schema.
 
-> **Status: 0.11.1, published.** Everything described below works and is
+> **Status: 0.12.0, published.** Everything described below works and is
 > tested against a real database, a real NestJS HTTP server and the built
 > interface. The API is not frozen — 0.x means it may still change, and 1.0.0
 > is planned once row-level authorization lands. See
@@ -39,17 +39,17 @@ Open `/admin`.
 
 ## What you get
 
-|                           |                                                                                                          |
-| ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **CRUD, from the schema** | Every model, every field, with types read from the schema — no column lists to maintain                  |
-| **Relations**             | To-one pickers, to-many lists with their own pagination, attach and detach, join tables                  |
-| **Search, filter, sort**  | `field:operator:value` in the URL, coerced against the schema, ten operators                             |
-| **A dashboard**           | Counts, lists, charts, and statistics your own code computes — or a generated one if you declare nothing |
-| **A login**               | Optional, with its own account table so admin credentials never touch your users                         |
-| **Authorization**         | Per model and per operation, enforced in one place, invisible resources absent from the API              |
-| **Per-field control**     | Labels, widgets, ordering, hidden, read-only, write-only                                                 |
-| **Your own rules**        | Hooks around every write, and buttons the interface draws from configuration                             |
-| **Two ORMs**              | Prisma and Drizzle, behind one contract                                                                  |
+|                           |                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **CRUD, from the schema** | Every model, every field, with types read from the schema — no column lists to maintain                             |
+| **Relations**             | To-one pickers, to-many lists with their own pagination, attach and detach, join tables                             |
+| **Search, filter, sort**  | `field:operator:value` in the URL, coerced against the schema, ten operators                                        |
+| **A dashboard**           | Counts, lists, charts, and statistics your own code computes — or a generated one if you declare nothing            |
+| **A login**               | Optional, with its own account table so admin credentials never touch your users                                    |
+| **Authorization**         | Roles, per-model permissions and row-level scoping, enforced on the server; invisible resources absent from the API |
+| **Per-field control**     | Labels, widgets, ordering, hidden, read-only, write-only                                                            |
+| **Your own rules**        | Hooks around every write, and buttons the interface draws from configuration                                        |
+| **Two ORMs**              | Prisma and Drizzle, behind one contract                                                                             |
 
 ## Installing
 
@@ -76,8 +76,9 @@ Stated plainly, because the alternative is finding out later:
   drawn by the interface. There is no way to ship your own React component into
   it, and there deliberately never has been — that would mean every consumer
   runs a front-end build.
-- **Not row-level security yet.** You can say who may list `Order`. You cannot
-  yet say "only their own orders". Planned before 1.0.
+- **Not a permission store.** Roles and row-level scoping exist, but who holds
+  which role is your application's to decide — the admin reads a role and never
+  grants one.
 - **Not published.** See the status note above.
 
 ## How it fits together

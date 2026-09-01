@@ -15,6 +15,7 @@ import { useState } from 'react'
 
 import { signOut } from '../api/client.js'
 import type { AdminAccountSummary } from '../api/types.js'
+import { Badge } from './ui/badge.jsx'
 import { Button } from './ui/button.jsx'
 import {
   DropdownMenu,
@@ -68,6 +69,15 @@ export function UserMenu({
             <span className="text-foreground truncate font-medium">{name}</span>
             {account.name === undefined ? null : (
               <span className="truncate text-xs">{account.email}</span>
+            )}
+            {/* Only when the admin has roles at all. Someone who is the only
+                administrator does not need to be told which role they hold. */}
+            {account.role === undefined ? null : (
+              <span className="mt-1">
+                <Badge variant="secondary" className="font-normal">
+                  {account.role}
+                </Badge>
+              </span>
             )}
           </span>
         </DropdownMenuLabel>

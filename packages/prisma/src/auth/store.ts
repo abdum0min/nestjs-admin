@@ -56,6 +56,8 @@ export interface PrismaAccountStoreOptions {
     readonly email?: string
     readonly name?: string
     readonly passwordHash?: string
+    /** The column holding the role name, for an admin that declares roles. */
+    readonly role?: string
     readonly disabled?: string
     /** Written on a successful sign-in, when the column exists. */
     readonly lastLoginAt?: string
@@ -67,6 +69,7 @@ const DEFAULTS = {
   email: 'email',
   name: 'name',
   passwordHash: 'passwordHash',
+  role: 'role',
   disabled: 'disabled',
   lastLoginAt: 'lastLoginAt',
 } as const
@@ -111,11 +114,15 @@ export function prismaAccountStore(options: PrismaAccountStoreOptions): AdminAcc
 
     const name = record[column.name]
     const disabled = record[column.disabled]
+    // Absent from most schemas, which is the ordinary case: an admin that
+    // declares no roles never asks for it.
+    const role = record[column.role]
 
     return {
       id: String(id),
       email,
       passwordHash: hash,
+      ...(typeof role === 'string' && role !== '' ? { role } : {}),
       ...(typeof name === 'string' && name !== '' ? { name } : {}),
       ...(typeof disabled === 'boolean' ? { disabled } : {}),
     }

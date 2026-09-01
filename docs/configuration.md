@@ -10,6 +10,7 @@ the order you actually need it. This page is for looking things up.
 - [`adapter`](#adapter)
 - [`auth`](#auth)
 - [`resourceAuth`](#resourceauth)
+- [`roles` and `roleOf`](#roles-and-roleof)
 - [`resources`](#resources)
 - [`models`](#models)
 - [`hooks`](#hooks)
@@ -38,19 +39,21 @@ factory arrives too late to be used. Returning one is a startup error naming
 the option — TypeScript cannot catch it, because excess property checks do not
 run through a function's return type.
 
-| Option         | Required | Where   |
-| -------------- | -------- | ------- |
-| `adapter`      | yes      | factory |
-| `auth`         | yes      | factory |
-| `resourceAuth` | no       | factory |
-| `resources`    | no       | factory |
-| `models`       | no       | factory |
-| `hooks`        | no       | factory |
-| `actions`      | no       | factory |
-| `dashboard`    | no       | factory |
-| `path`         | no       | outer   |
-| `uiRoot`       | no       | outer   |
-| `theme`        | no       | outer   |
+| Option         | Required   | Where   |
+| -------------- | ---------- | ------- |
+| `adapter`      | yes        | factory |
+| `auth`         | yes        | factory |
+| `resourceAuth` | no         | factory |
+| `roles`        | no         | factory |
+| `roleOf`       | with roles | factory |
+| `resources`    | no         | factory |
+| `models`       | no         | factory |
+| `hooks`        | no         | factory |
+| `actions`      | no         | factory |
+| `dashboard`    | no         | factory |
+| `path`         | no         | outer   |
+| `uiRoot`       | no         | outer   |
+| `theme`        | no         | outer   |
 
 ---
 
@@ -147,8 +150,127 @@ is built. Refusing a write leaves the model visible and its buttons absent.
 
 This is server-side. There is no client-side hiding anywhere in the admin.
 
-**Not yet available:** row-level rules. You can refuse `Order`; you cannot yet
-refuse _someone else's_ orders. Planned before 1.0.
+### Which rows: scoping
+
+Return filters instead of `true` and they are merged into the query, so the
+database does the filtering:
+
+```ts
+resourceAuth: {
+  authorize({ model, operation, context }) {
+    const user = context.switchToHttp().getRequest().user
+    if (user.isAdmin) return true
+    if (model !== 'Order') return true
+    return { filters: [{ field: 'tenantId', operator: 'eq', value: user.tenantId }] }
+  },
+}
+```
+
+`{ filters: [] }` means the same as `true`, so a policy that builds its filters
+conditionally need not change its return type when it builds none. The filters
+use the same `field`, `operator`, `value` vocabulary the query string does, and
+are ANDed with whatever the caller asked for — a caller cannot widen them.
+
+**Everywhere a row can be reached**, not only lists:
+
+| Route                             | With a scope                                       |
+| --------------------------------- | -------------------------------------------------- |
+| `GET /admin/:model`               | filtered, and `total` counts only what is in scope |
+| `GET /admin/:model/:id`           | **404** for a row outside it                       |
+| `PATCH` / `DELETE`                | 404, and before any hook runs                      |
+| bulk delete                       | checked per row; the rest come back as failures    |
+| `GET /admin/:model/:id/:relation` | both the parent and the children                   |
+| dashboard widgets                 | counts, lists and charts all respect it            |
+| record actions                    | the id is checked before your code sees it         |
+
+**404 rather than 403**, deliberately: a 403 confirms a record with that id
+exists. "No such record" and "not yours" have to be indistinguishable, or the
+scope leaks the thing it was added to hide.
+
+**What it costs.** One extra query per _addressed_ record, and only when a scope
+applies. An admin that configures no scope issues exactly the queries it issued
+before.
+
+---
+
+## `roles` and `roleOf`
+
+Named roles, as a shorthand for the policy above. Optional: without them every
+administrator may do everything, which is what an admin has always been.
+
+```ts
+roles: {
+  admin: '*',
+
+  editor: {
+    models: {
+      Post: ['metadata', 'list', 'read', 'create', 'update'],
+      Comment: ['metadata', 'list', 'read', 'delete'],
+    },
+  },
+
+  support: {
+    models: { Order: ['metadata', 'list', 'read'] },
+    scope: ({ context, model }) =>
+      model === 'Order'
+        ? [{ field: 'tenantId', operator: 'eq', value: tenantOf(context) }]
+        : undefined,
+  },
+},
+
+roleOf: (context) => context.switchToHttp().getRequest().user.role,
+```
+
+With the built-in login the role comes off the signed-in account, and the
+resolver is one call:
+
+```ts
+import { builtInRoleOf } from '@nest-admin/nestjs'
+
+roleOf: builtInRoleOf(),
+```
+
+### Rules worth knowing before writing a table
+
+|                                     |                                                                                                                                       |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| A model a role does not mention     | **invisible**, not read-only — it fails the `metadata` check, so the interface never learns it exists                                 |
+| `'*'` as the whole role             | every operation on every model, and every capability                                                                                  |
+| `'*'` as a model's operations       | every operation on that model                                                                                                         |
+| `action`                            | never implied by `update`: an action runs your code and can do anything, so permission to edit a post is not permission to publish it |
+| A role name `roles` does not define | denied — a typo in `roleOf` must not quietly grant everything                                                                         |
+| No role on the request              | denied                                                                                                                                |
+| `roles` without `roleOf`            | **refuses to start**, naming the missing option                                                                                       |
+
+### Roles beside a policy of your own
+
+Supplying both is allowed and means **both must agree**: a request needs
+permission from the roles _and_ from `resourceAuth`, and both scopes apply.
+
+Fail closed is the only sane direction — adding a rule can then only remove
+access, never grant it. Use it when roles cover the ordinary cases and one model
+needs something they cannot express.
+
+### One role, not several
+
+`roleOf` returns one role. Combining two roles' _scopes_ needs OR, and filters
+are ANDed; expressing that properly means changing the adapter contract, so it
+is deferred rather than half-built. A principal that needs two roles today needs
+a third role that is their union.
+
+### Where roles are granted — not here
+
+`AdminAccountStore` is read-only by design: an admin that could mint its own
+administrators is an escalation waiting for its first mistake. Roles are
+assigned wherever accounts are created — a migration, a seed script, or your own
+form. The admin reads a role and never writes one.
+
+### What the interface does with it
+
+Nothing it is trusted for. The role appears in the user menu so a person can see
+who they are signed in as. Which buttons appear comes from the `can` block in
+the metadata document, computed on the server per request — and every request is
+checked again when it arrives.
 
 ---
 

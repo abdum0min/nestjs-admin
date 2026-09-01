@@ -200,6 +200,44 @@ A model this returns `false` for is **absent from `/admin/meta`**, so the
 interface never draws it. This is not client-side hiding: the routes refuse it
 too, and a dashboard widget over it is dropped before anything is queried.
 
+### When there is more than one administrator
+
+Two things, and they are separate. **Roles** say what a person may _do_;
+**scoping** says which _rows_ they may do it to. Neither is needed for a single
+administrator, and configuring neither leaves the admin exactly as it is.
+
+```ts
+roles: {
+  admin: '*',
+  editor: { models: { Post: ['metadata', 'list', 'read', 'create', 'update'] } },
+},
+
+// With the built-in login, the role comes off the signed-in account.
+roleOf: builtInRoleOf(),
+```
+
+A model a role does not mention is **invisible** rather than read-only — it
+never reaches the metadata document, so the interface never learns it exists.
+
+For multi-tenant, return filters instead of `true` and they reach the database:
+
+```ts
+support: {
+  models: { Order: ['metadata', 'list', 'read'] },
+  scope: ({ context }) => [
+    { field: 'tenantId', operator: 'eq', value: tenantOf(context) },
+  ],
+},
+```
+
+The filters are applied everywhere a row can be reached — lists, single records,
+writes, related lists, dashboard counts and record actions — and a row outside
+the scope answers **404**, because a 403 would confirm it exists.
+
+Roles are granted wherever accounts are created, not in the admin: the account
+store is read-only on purpose. Full reference:
+[configuration.md](configuration.md#roles-and-roleof).
+
 ## 4. Make it yours
 
 Everything here is optional, and the admin is usable before you write any of it.
@@ -361,6 +399,8 @@ The full comparison is in [adapters.md](adapters.md).
 ## Where to go next
 
 - **[Configuration reference](configuration.md)** — every option, in one place.
+- **[Security](../SECURITY.md)** — what is guaranteed, what is not, and the
+  three things you have to get right.
 - **[Adapters](adapters.md)** — the `OrmAdapter` contract, and writing one.
 - **[Architecture](architecture.md)** — why the pieces are shaped this way.
 - **[Project state](project-state.md)** — what is missing, and the open risks.

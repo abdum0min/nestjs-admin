@@ -119,6 +119,26 @@ export function builtInRuntimeOf(auth: unknown): BuiltInAuthRuntime | undefined 
  * `undefined` when the admin is not using the built-in auth, which is why it
  * is optional rather than assumed.
  */
+/**
+ * A `roleOf` for an admin that uses the built-in login.
+ *
+ * Saves the one line everyone would otherwise write, and writes it correctly:
+ * the account on the request is the one this request's session resolved to, so
+ * the role cannot be supplied by a client.
+ *
+ * ```ts
+ * roles: { admin: '*', editor: { models: { Post: ['metadata', 'list', 'read'] } } },
+ * roleOf: builtInRoleOf(),
+ * ```
+ *
+ * An account with no role gets none, and a role table denies what it does not
+ * recognise - so a schema that has not added the column yet fails closed rather
+ * than granting everything.
+ */
+export function builtInRoleOf(): (context: ExecutionContext) => string | undefined {
+  return (context) => adminAccountOf(context)?.role
+}
+
 export function adminAccountOf(context: ExecutionContext): AdminAccountSummary | undefined {
   const request = context.switchToHttp().getRequest<{ adminAccount?: AdminAccountSummary }>()
   return request?.adminAccount
