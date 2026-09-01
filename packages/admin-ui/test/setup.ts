@@ -5,8 +5,26 @@
  * leak into the next, and fills the two gaps between jsdom and a browser that
  * the interface's own dependencies fall into.
  */
+import { configure } from '@testing-library/dom'
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
+
+/*
+ * How long an async query waits before giving up.
+ *
+ * Testing Library defaults to one second, which is generous for a component in
+ * isolation and far too tight here: these suites run beside ones that boot a
+ * Nest application and talk to SQLite, so the machine is busy and a render that
+ * normally settles in 20ms occasionally takes longer than the budget.
+ *
+ * The symptom was intermittent failures scattered across unrelated files -
+ * five in one run, none in the next - which is the worst kind, because it
+ * teaches people to re-run the suite instead of reading it.
+ *
+ * Raising the ceiling does not weaken anything. A query that will never find
+ * its element still fails; it just fails five seconds later instead of one.
+ */
+configure({ asyncUtilTimeout: 5000 })
 
 /*
  * jsdom has no ResizeObserver, and cmdk uses one to keep the command list
