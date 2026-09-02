@@ -48,3 +48,7 @@ pnpm-debug.log*
 # is working on this machine, not for the repository. `.local.` in the name is
 # the signal; the rule below is what enforces it.
 *.local.md
+
+# Throwaway patch scripts. Used to apply an edit and then deleted - three of
+# them reached a commit anyway, so the rule is here rather than in a habit.
+na-*.mjs
