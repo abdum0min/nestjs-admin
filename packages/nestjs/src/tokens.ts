@@ -26,6 +26,15 @@ export const ADMIN_AUTH = Symbol('NEST_ADMIN_AUTH')
  * accounts - the routes then answer 404, because the feature is not part of
  * that deployment rather than forbidden within it.
  */
+/**
+ * Whether a write must carry the version it was based on.
+ *
+ * A string rather than a boolean so the option reads as a choice between two
+ * strategies, which is what it is - and so a third could be added without
+ * changing its shape.
+ */
+export const ADMIN_CONCURRENCY = Symbol.for('nest-admin.concurrency')
+
 export const ADMIN_TEAM = Symbol.for('nest-admin.team')
 
 export const ADMIN_CAPABILITIES = Symbol.for('nest-admin.capabilities')

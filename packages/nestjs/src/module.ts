@@ -63,6 +63,7 @@ import {
   ADMIN_MOUNT_PATH,
   ADMIN_OPTIONS,
   ADMIN_CAPABILITIES,
+  ADMIN_CONCURRENCY,
   ADMIN_TEAM,
   ADMIN_RESOURCE_AUTH,
   ADMIN_RESOURCES,
@@ -133,6 +134,26 @@ export interface AdminModuleOptions {
    * from, so whatever attached the principal is reachable here too.
    */
   readonly roleOf?: RoleResolver
+
+  /**
+   * What happens when two people edit the same record.
+   *
+   * `'last-write-wins'` is the default and is what the admin has always done:
+   * the second save overwrites the first, and neither person is told. That is
+   * fine while there is one administrator, and this release is the one that
+   * stops being true.
+   *
+   * `'optimistic'` refuses a write whose version no longer matches the stored
+   * one, with a 409 and nothing applied. It needs a field the schema updates on
+   * every write - `updatedAt` and its usual spellings - and warns at startup
+   * for every model that has none, because a guard nobody can see is not a
+   * guard.
+   *
+   * Opt-in, because turning it on can refuse a write that succeeds today, and
+   * "zero configuration behaves exactly as before" is a rule this release is
+   * not going to break for a default.
+   */
+  readonly concurrency?: 'last-write-wins' | 'optimistic'
 
   /**
    * Where the admin is mounted. Defaults to `/admin`.
@@ -525,6 +546,7 @@ export class AdminModule {
       { provide: ADMIN_RESOURCE_AUTH, useValue: resolvePolicy(options) },
       { provide: ADMIN_CAPABILITIES, useValue: capabilityChecker(options.roles, options.roleOf) },
       { provide: ADMIN_TEAM, useValue: resolveTeam(options) },
+      { provide: ADMIN_CONCURRENCY, useValue: options.concurrency ?? 'last-write-wins' },
     ])
   }
 
@@ -590,6 +612,7 @@ export class AdminModule {
           capabilityChecker(resolved.roles, resolved.roleOf),
         ),
         derive(ADMIN_TEAM, (resolved) => resolveTeam(resolved)),
+        derive(ADMIN_CONCURRENCY, (resolved) => resolved.concurrency ?? 'last-write-wins'),
       ],
       options.imports ?? [],
     )

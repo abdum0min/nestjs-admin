@@ -248,10 +248,22 @@ export async function updateRecord(
   model: string,
   id: string,
   body: AdminRecord,
+  /**
+   * What the record's updated-at column held when this form was opened.
+   *
+   * Sent whenever the record had one. The server ignores it unless the admin
+   * is configured with `concurrency: 'optimistic'`, so sending it always is
+   * cheaper than asking whether it matters.
+   */
+  version?: string,
 ): Promise<AdminRecord> {
   const { data } = await request<AdminRecord>(
     `/${encodeURIComponent(model)}/${encodeURIComponent(id)}`,
-    { method: 'PATCH', body: JSON.stringify(body) },
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      ...(version === undefined ? {} : { headers: { 'x-admin-version': version } }),
+    },
   )
   return data
 }

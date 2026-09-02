@@ -129,6 +129,16 @@ function mapError(error: unknown): MappedError {
     // The database refused the write for a reason the caller can act on. The
     // message is built from field names rather than taken from the ORM, so it
     // carries no paths or query fragments and is safe to forward.
+    // The write was legal and still refused: it would have overwritten a
+    // change the caller never saw. Nothing was applied, so re-reading and
+    // trying again is a complete recovery.
+    case 'conflict':
+      return {
+        status: HttpStatus.CONFLICT,
+        code: 'CONFLICT',
+        message: error.message,
+      }
+
     case 'constraint': {
       const failure = error as ConstraintError
       return {

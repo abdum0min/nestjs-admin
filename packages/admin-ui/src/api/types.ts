@@ -136,6 +136,13 @@ export interface ModelDescriptor {
    * again - but what the interface should offer.
    */
   readonly can?: ModelPermissions
+  /**
+   * The field to send back as a version on a write.
+   *
+   * Named by the server, and present only when it is actually checking. The
+   * interface never works it out for itself.
+   */
+  readonly versionField?: string
   /** Buttons the application added, already filtered by the policy. */
   readonly actions?: readonly ActionDescriptor[]
 }
@@ -172,6 +179,7 @@ export type AdminErrorCode =
   | 'INVALID_QUERY'
   | 'VALIDATION_ERROR'
   | 'CONSTRAINT_VIOLATION'
+  | 'CONFLICT'
   | 'INTERNAL_ERROR'
 
 export interface SuccessEnvelope<T> {

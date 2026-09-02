@@ -12,6 +12,7 @@
  */
 import {
   applyOverrides,
+  ConflictError,
   detachBlockedReason,
   FieldNotFoundError,
   ForbiddenError,
@@ -19,6 +20,7 @@ import {
   isNestAdminError,
   isReadOnly,
   ModelNotFoundError,
+  updatedFieldFor,
   RecordNotFoundError,
   type ListQuery,
   type FieldMetadata,
@@ -58,6 +60,7 @@ import {
   ADMIN_ADAPTER,
   ADMIN_AUTH,
   ADMIN_CAPABILITIES,
+  ADMIN_CONCURRENCY,
   ADMIN_DASHBOARD,
   ADMIN_TEAM,
   ADMIN_HOOKS,
@@ -82,6 +85,19 @@ import {
  * finish.
  */
 /** The fields a response may carry. Excludes anything marked write-only. */
+/**
+ * A timestamp as one comparable string.
+ *
+ * The stored value is a `Date`; the one that came back from a client is the
+ * ISO string it was serialised to. Comparing them directly always differs, so
+ * both go through `Date` - and anything that is not a date compares as itself,
+ * which fails closed rather than passing by accident.
+ */
+function stamp(value: unknown): string {
+  const parsed = value instanceof Date ? value : new Date(String(value))
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString()
+}
+
 function readableFields(model: ModelMetadata): readonly FieldMetadata[] {
   return model.fields.filter((field) => field.writeOnly !== true)
 }
@@ -111,6 +127,8 @@ export class AdminService implements OnModuleInit {
     @Inject(ADMIN_TEAM) private readonly team: unknown,
     @Inject(ADMIN_CAPABILITIES)
     private readonly can: (context: ExecutionContext, capability: AdminCapability) => boolean,
+    @Inject(ADMIN_CONCURRENCY)
+    private readonly concurrency: 'last-write-wins' | 'optimistic',
   ) {}
 
   private readonly logger = new Logger('NestAdmin')
@@ -156,7 +174,9 @@ export class AdminService implements OnModuleInit {
     // hiding it means no record can ever be created. The database reports that
     // as a constraint violation, which the admin can only pass on as an
     // internal error - a long way from the line that caused it.
-    await this.checkBuiltInAuth(selectModels(schema, this.resources))
+    const exposed = selectModels(schema, this.resources)
+    await this.checkBuiltInAuth(exposed)
+    this.warnAboutUnversionedModels(exposed)
 
     const unwritable = unwritableHiddenFields(selectModels(schema, this.resources), this.overrides)
     if (unwritable.length > 0) {
@@ -179,6 +199,30 @@ export class AdminService implements OnModuleInit {
    * table is empty is an admin nobody can seed, because the seed script
    * imports the module.
    */
+  /**
+   * Name the models optimistic concurrency cannot protect.
+   *
+   * Said once, at startup, because the alternative is a guard that quietly does
+   * nothing on half a schema - which is the failure mode of every safety check
+   * nobody can see. A model with no updated-at column keeps the old behaviour,
+   * and now the person who turned the option on knows which ones.
+   */
+  private warnAboutUnversionedModels(exposed: readonly ModelMetadata[]): void {
+    if (this.concurrency !== 'optimistic') return
+
+    const unversioned = exposed
+      .filter((model) => updatedFieldFor(model) === undefined)
+      .map((model) => model.name)
+
+    if (unversioned.length === 0) return
+
+    new Logger('NestAdmin').warn(
+      `concurrency: 'optimistic' cannot protect ${unversioned.join(', ')} - ` +
+        'no column recording when a row last changed. Edits to those models ' +
+        'still overwrite each other silently.',
+    )
+  }
+
   private async checkBuiltInAuth(exposed: readonly ModelMetadata[]): Promise<void> {
     const runtime = builtInRuntimeOf(this.auth)
     if (!runtime) return
@@ -287,6 +331,9 @@ export class AdminService implements OnModuleInit {
         // has to be allowed to open it.
         manageTeam: this.team !== undefined && this.can(context, 'manageTeam'),
       },
+      // Only when the guard is on: naming a field the server will ignore would
+      // suggest a protection that is not running.
+      (model) => (this.concurrency === 'optimistic' ? updatedFieldFor(model) : undefined),
     )
   }
 
@@ -343,14 +390,29 @@ export class AdminService implements OnModuleInit {
     model: string,
     id: RecordId,
     data: RecordData,
+    /**
+     * The version this write was based on, if the caller sent one.
+     *
+     * Only consulted under `concurrency: 'optimistic'`. Absent is permitted
+     * rather than refused: a script patching one field is not the collision
+     * this exists for, and refusing it would break every non-browser caller
+     * the moment the option is turned on.
+     */
+    version?: string,
   ): Promise<RecordData> {
     const metadata = await this.requireModel(model)
     const scope = await this.assertAllowed(context, model, 'update')
     this.assertWritable(metadata, data)
 
-    // Before the hooks run: a hook must never see a record this principal was
-    // not allowed to reach.
-    if (scope.length > 0) await this.readInScope(metadata, id, scope)
+    // Read when either reason needs it, and only once. A hook must never see a
+    // record this principal could not reach, and a stale write has to be
+    // refused before anything runs.
+    const current =
+      scope.length > 0 || this.concurrency === 'optimistic'
+        ? await this.readInScope(metadata, id, scope)
+        : undefined
+
+    if (current !== undefined) this.assertFresh(metadata, current, version)
 
     const prepared = await this.runBefore(context, metadata, 'beforeUpdate', data, id)
     const updated = await this.adapter.update(model, id, prepared)
@@ -668,6 +730,37 @@ export class AdminService implements OnModuleInit {
     }
 
     return permissions
+  }
+
+  /**
+   * Refuse a write built on a version of the record that no longer exists.
+   *
+   * The version is whatever the model's updated-at column held when the caller
+   * read it. Two people who opened the same record hold the same value; the
+   * second to save is holding a stale one - and the form sends every field, so
+   * saving it would silently undo the first person's work.
+   *
+   * Three ways this does nothing, all deliberate:
+   *
+   *   - the strategy is `last-write-wins`: the caller did not ask for it
+   *   - the caller sent no version: a script, not a person in a form
+   *   - the model has no updated-at column: warned about at startup, because a
+   *     guard nobody can see is not a guard
+   */
+  private assertFresh(
+    model: ModelMetadata,
+    current: RecordData,
+    version: string | undefined,
+  ): void {
+    if (this.concurrency !== 'optimistic' || version === undefined) return
+
+    const field = updatedFieldFor(model)
+    if (field === undefined) return
+
+    const stored = current[field]
+    if (stored === null || stored === undefined) return
+
+    if (stamp(stored) !== stamp(version)) throw new ConflictError(model.name)
   }
 
   /** The policy's answer for one operation, with a thrown denial read as `false`. */

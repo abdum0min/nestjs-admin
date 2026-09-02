@@ -29,6 +29,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   Patch,
   Post,
@@ -137,14 +138,25 @@ export class AdminController {
     return success(await this.service.create(context, model, body))
   }
 
+  /**
+   * `PATCH /admin/:model/:id` - change one record.
+   *
+   * `x-admin-version` carries the value the record's updated-at column held
+   * when the caller read it. A header rather than a key in the body: the body
+   * is validated field by field against the schema, and a reserved key there
+   * would collide with a model that happens to have a column of that name.
+   *
+   * Ignored unless the admin is configured with `concurrency: 'optimistic'`.
+   */
   @Patch(':model/:id')
   async update(
     @AdminContext() context: ExecutionContext,
     @Param('model') model: string,
     @Param('id') id: string,
     @Body() body: RecordData,
+    @Headers('x-admin-version') version?: string,
   ): Promise<SuccessResponse<RecordData>> {
-    return success(await this.service.update(context, model, id, body))
+    return success(await this.service.update(context, model, id, body, version))
   }
 
   /**

@@ -12,6 +12,7 @@ the order you actually need it. This page is for looking things up.
 - [`resourceAuth`](#resourceauth)
 - [`roles` and `roleOf`](#roles-and-roleof)
 - [`resources`](#resources)
+- [`concurrency`](#concurrency)
 - [`models`](#models)
 - [`hooks`](#hooks)
 - [`actions`](#actions)
@@ -329,6 +330,67 @@ admin is structural rather than a permission.
 
 ---
 
+## `concurrency`
+
+What happens when two people edit the same record.
+
+```ts
+concurrency: 'optimistic',   // default: 'last-write-wins'
+```
+
+### The problem it solves
+
+Anna and Bora open the same post at 10:00. Anna changes the title and saves.
+Bora changes only the summary a minute later — but the form sends every field,
+including the title as it was when he opened it. Anna’s change is gone, and
+neither of them is told anything.
+
+That is fine while an admin has one administrator. Roles are what stop that
+being true.
+
+### How it works
+
+|                |                                                                                                                                                                      |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The version    | whatever the model’s updated-at column held when the record was read                                                                                                 |
+| How it travels | the `x-admin-version` header on `PATCH`. A header, not a body key: the body is validated field by field, and a reserved key would collide with a column of that name |
+| A stale write  | **409 `CONFLICT`**, and **nothing is applied** — not even the field the person meant to change                                                                       |
+| The recovery   | reload, then save again. Nothing is locked and nobody waits, which is what “optimistic” means                                                                        |
+
+The interface sends it automatically. The metadata document names the field
+(`versionField` on each model), so the interface never works it out for itself —
+a second implementation of that rule would drift from the one enforcing it.
+
+### What it needs, and what it says when it cannot
+
+A column that **moves on every write** — `updatedAt` and its usual spellings, and
+one the schema maintains (`@updatedAt` in Prisma, `$onUpdate` in Drizzle). A column
+called `updatedAt` that nothing updates would produce a version that never changes,
+and a guard comparing an unchanging value passes every time.
+
+Metadata cannot tell those apart, so the admin does not pretend to. At startup it
+names every model it cannot protect:
+
+```text
+WARN [NestAdmin] concurrency: 'optimistic' cannot protect Profile, Category,
+Product, Tag, Order, OrderItem, Comment, Review - no column recording when a row
+last changed. Edits to those models still overwrite each other silently.
+```
+
+A guard nobody can see is not a guard.
+
+### Two things it deliberately does not do
+
+**A caller that sends no version is allowed through.** A script patching one
+field is not the collision this exists for, and refusing it would break every
+non-browser caller the moment the option is turned on.
+
+**It is off by default.** Turning it on can refuse a write that succeeds today,
+and “zero configuration behaves exactly as before” is worth more than a better
+default. That changes at 1.0, which is where defaults are allowed to.
+
+---
+
 ## `models`
 
 Per-model and per-field configuration.
@@ -553,6 +615,7 @@ Every failure crosses the wire in one shape:
 | `INVALID_QUERY`        | 400    | `InvalidQueryError`                                              |
 | `VALIDATION_ERROR`     | 400    | `ValidationError` — yours, from a hook                           |
 | `CONSTRAINT_VIOLATION` | 409    | The database refused it. A missing required value is 400 instead |
+| `CONFLICT`             | 409    | The record changed after it was read; nothing was written        |
 | `INTERNAL_ERROR`       | 500    | Everything else                                                  |
 
 Only the first eight carry a real message. `INTERNAL_ERROR` is replaced with a

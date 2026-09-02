@@ -27,6 +27,7 @@ export {
   type AdminAccountSummary,
 } from './auth/account.js'
 export { createdFieldFor } from './metadata/created-field.js'
+export { updatedFieldFor } from './metadata/updated-field.js'
 export { displayFieldFor } from './metadata/display-field.js'
 
 export type { RelationShape } from './metadata/relation-shape.js'
@@ -67,6 +68,7 @@ export type { AdminErrorKind, ConstraintKind } from './errors/errors.js'
 
 export {
   AdapterError,
+  ConflictError,
   ConstraintError,
   FieldNotFoundError,
   ForbiddenError,

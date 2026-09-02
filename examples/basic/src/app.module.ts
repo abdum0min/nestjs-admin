@@ -385,6 +385,19 @@ class DatabaseModule {}
         roles,
         roleOf: builtInRoleOf(),
 
+        /*
+         * Two people editing one record.
+         *
+         * Opt-in, and this example opts in because it now has three
+         * accounts. A save built on a version of the record that has since
+         * changed is refused whole - nothing is applied, and the person is
+         * told - rather than silently overwriting the other one.
+         *
+         * It needs a column that moves on every write; the module names the
+         * models that have none at startup.
+         */
+        concurrency: 'optimistic',
+
         dashboard: dashboard(prisma),
 
         // Optional. Left permissive so the example is usable for exploring;

@@ -8,7 +8,15 @@
  * internal is replaced with a generic string before it leaves the server. No
  * stack trace, path or ORM detail can reach here.
  */
-import { CircleAlert, Inbox, Lock, RefreshCw, ShieldOff, TriangleAlert } from 'lucide-react'
+import {
+  CircleAlert,
+  History,
+  Inbox,
+  Lock,
+  RefreshCw,
+  ShieldOff,
+  TriangleAlert,
+} from 'lucide-react'
 import type { ComponentType } from 'react'
 
 import { AdminApiError } from '../api/client.js'
@@ -119,6 +127,7 @@ const HEADINGS: Readonly<Record<AdminErrorCode, string>> = {
   INVALID_QUERY: 'Invalid request',
   VALIDATION_ERROR: 'Not accepted',
   CONSTRAINT_VIOLATION: 'Not accepted',
+  CONFLICT: 'Someone else changed this',
   INTERNAL_ERROR: 'Something went wrong',
 }
 
@@ -133,6 +142,9 @@ const HINTS: Readonly<Record<AdminErrorCode, string>> = {
   // hint only has to point at where the correction goes.
   VALIDATION_ERROR: 'Change the value and try again.',
   CONSTRAINT_VIOLATION: 'The database refused this. Change the value and try again.',
+  // Nothing was written, so reloading loses only what is on this screen - and
+  // saying so is the difference between a warning and a threat.
+  CONFLICT: 'Nothing was saved. Reload to see the current values, then make your change again.',
   INTERNAL_ERROR: 'Try again. If it keeps happening, contact an administrator.',
 }
 
@@ -146,6 +158,7 @@ const ICONS: Readonly<Record<AdminErrorCode, ComponentType<{ className?: string 
   INVALID_QUERY: CircleAlert,
   VALIDATION_ERROR: TriangleAlert,
   CONSTRAINT_VIOLATION: TriangleAlert,
+  CONFLICT: History,
   INTERNAL_ERROR: TriangleAlert,
 }
 

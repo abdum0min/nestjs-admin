@@ -13,6 +13,56 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.12.1
+
+The other half of what roles started: more than one administrator means two of
+them can edit the same record.
+
+### Added
+
+- **`concurrency: 'optimistic'`** — refuse a write built on a version of the
+  record that has since changed, instead of letting it silently overwrite.
+
+  The failure it prevents produces no error today. Anna changes a title and
+  saves; Bora, who opened the same record earlier, changes only the summary —
+  but the form sends every field, so Anna’s change is gone and neither of them
+  is told. A test reproduces exactly that with the option off, so what the rest
+  of the file prevents is on the record rather than described.
+
+  The version is the model’s updated-at value, carried in an `x-admin-version`
+  header. A stale write answers **409 `CONFLICT`** and applies nothing — not even
+  the field the person meant to change — so reloading and saving again is a
+  complete recovery. Nothing is locked and nobody waits.
+
+  The interface sends it without being asked. The metadata document names the
+  field (`versionField`), so the interface never works the rule out for itself:
+  a second implementation would drift from the one that enforces it.
+
+- **A startup warning naming every model it cannot protect.** A column called
+  `updatedAt` that nothing updates would produce a version that never changes,
+  and metadata cannot tell that apart from one the schema maintains. Rather than
+  pretend, the admin says which models are unguarded:
+
+```text
+  WARN [NestAdmin] concurrency: 'optimistic' cannot protect Profile, Category,
+  Product, Tag, Order, OrderItem, Comment, Review - no column recording when a
+  row last changed.
+```
+
+The lesson is the one 0.12.0 paid for: a guard nobody can see is not a guard.
+
+### Notes
+
+- **Off by default**, and the default stays wrong on purpose until 1.0. Turning
+  it on can refuse a write that succeeds today, and "zero configuration behaves
+  exactly as before" is worth more than a better default in a 0.x release.
+
+- **A caller that sends no version is allowed through.** A script patching one
+  field is not the collision this exists for, and refusing it would break every
+  non-browser caller the moment the option is turned on.
+
+---
+
 ## 0.12.0
 
 Permissions, roles and row-level scoping. All three are optional, and an admin

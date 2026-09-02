@@ -54,6 +54,14 @@ export type AdminErrorKind =
   | 'validation'
   /** The database refused the write: unique, foreign key, or required. */
   | 'constraint'
+  /**
+   * The record changed since the caller last read it.
+   *
+   * Distinct from `constraint`, which is the database refusing a value. This
+   * is the admin refusing a *write order*: the value may be perfectly legal
+   * and still overwrite work the caller never saw.
+   */
+  | 'conflict'
   | 'adapter'
   /** A subclass that declared no kind of its own. Treated as internal. */
   | 'unknown'
@@ -191,6 +199,29 @@ export type ConstraintKind =
   | 'foreign-key'
   /** A value the database requires was not supplied. */
   | 'required'
+
+/**
+ * The record changed since the caller last read it.
+ *
+ * Raised when a write carries a version that no longer matches the stored one.
+ * The write is refused whole: nothing is applied, so the caller can re-read,
+ * see what changed, and decide - which is the difference between losing work
+ * and being told about it.
+ *
+ * The message names no values. Which field changed, and to what, is something
+ * the caller can ask for by re-reading the record with its own permissions;
+ * putting it in an error would report a value the caller may not be allowed to
+ * see.
+ */
+export class ConflictError extends NestAdminError {
+  override readonly kind = 'conflict' as const
+
+  constructor(readonly model: string) {
+    super(
+      'This record changed after you opened it. Reload it to see the current values, then try again.',
+    )
+  }
+}
 
 export class ConstraintError extends NestAdminError {
   override readonly kind = 'constraint' as const

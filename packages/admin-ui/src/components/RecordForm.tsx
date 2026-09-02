@@ -99,6 +99,21 @@ export function RecordForm({
   )
 }
 
+/**
+ * The value this form was opened with, for the field the server nominated.
+ *
+ * `undefined` whenever the server did not name one - either the guard is off
+ * or the model has no column recording a change - and the header is then not
+ * sent at all.
+ */
+function versionOf(model: ModelDescriptor, initial: AdminRecord | undefined): string | undefined {
+  const field = model.versionField
+  if (field === undefined || initial === undefined) return undefined
+
+  const value = initial[field]
+  return value === null || value === undefined ? undefined : String(value)
+}
+
 function Form({
   model,
   models,
@@ -184,7 +199,7 @@ function Form({
       const saved =
         id === undefined
           ? await createRecord(model.name, body)
-          : await updateRecord(model.name, id, body)
+          : await updateRecord(model.name, id, body, versionOf(model, initial))
 
       const savedId = id ?? readId(model, saved)
       navigate(

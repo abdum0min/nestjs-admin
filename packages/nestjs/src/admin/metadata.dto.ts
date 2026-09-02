@@ -187,6 +187,17 @@ export interface ModelDto {
   readonly can: ModelPermissionsDto
 
   /**
+   * The field whose value a write should send back as its version.
+   *
+   * Present only when the admin runs with `concurrency: 'optimistic'` and this
+   * model has a column recording when a row last changed. The interface does
+   * not work it out for itself: a second implementation of the rule would drift
+   * from the one that enforces it, and drift here means a guard that quietly
+   * stops guarding.
+   */
+  readonly versionField?: string
+
+  /**
    * Application-defined actions this principal may run.
    *
    * Already filtered by the policy: an action that would be refused is absent,
@@ -339,6 +350,7 @@ export function toMetadataDto(
   permissions?: ReadonlyMap<string, ModelPermissionsDto>,
   actions?: ReadonlyMap<string, readonly ActionDto[]>,
   capabilities: CapabilitiesDto = { manageTeam: false },
+  versionFieldOf: (model: ModelMetadata) => string | undefined = () => undefined,
 ): MetadataDto {
   const present = new Set(models.map((model) => model.name))
 
@@ -349,6 +361,7 @@ export function toMetadataDto(
       primaryKey: [...model.primaryKey],
       displayField: displayFieldFor(model),
       can: permissions?.get(model.name) ?? ALL_PERMITTED,
+      ...(versionFieldOf(model) !== undefined ? { versionField: versionFieldOf(model) } : {}),
       actions: actions?.get(model.name) ?? [],
       ...(overrides?.[model.name]?.label !== undefined
         ? { label: overrides[model.name]?.label }

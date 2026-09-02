@@ -38,6 +38,8 @@ export type AdminErrorCode =
   | 'INVALID_QUERY'
   | 'VALIDATION_ERROR'
   | 'CONSTRAINT_VIOLATION'
+  /** The record changed after the caller read it; the write was not applied. */
+  | 'CONFLICT'
   | 'INTERNAL_ERROR'
 
 export interface ErrorResponse {

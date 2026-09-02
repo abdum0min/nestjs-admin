@@ -66,6 +66,8 @@ Stated so nobody discovers them the hard way.
 - **No field-level permissions per principal.** `hidden` and `readOnly` are the
   same for everyone who can see the model.
 - **No audit log.** Nothing records who changed what.
+- **No protection against two people overwriting each other, by default.**
+  `concurrency: 'optimistic'` adds it, and names the models it cannot cover.
 - **No CSRF token.** The session cookie is `SameSite=Lax` and the login route
   checks the origin, which covers the browser cases. An application with
   stricter requirements should put its own protection in front.
