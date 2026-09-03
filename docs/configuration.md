@@ -14,6 +14,7 @@ the order you actually need it. This page is for looking things up.
 - [`resources`](#resources)
 - [`concurrency`](#concurrency)
 - [`files`](#files)
+- [`devTools`](#devtools)
 - [`models`](#models)
 - [`hooks`](#hooks)
 - [`actions`](#actions)
@@ -28,13 +29,13 @@ the order you actually need it. This page is for looking things up.
 
 ```ts
 AdminModule.forRoot(options)
-AdminModule.forRootAsync({ imports, inject, useFactory, path, uiRoot, theme })
+AdminModule.forRootAsync({ imports, inject, useFactory, path, uiRoot, theme, devTools })
 ```
 
 `forRootAsync` also accepts `useClass` / `useExisting` with an
 `AdminModuleOptionsFactory`.
 
-**`path`, `uiRoot` and `theme` are structural** and belong on the outer object
+**`path`, `uiRoot`, `theme` and `devTools` are structural** and belong on the outer object
 of `forRootAsync`, never on what the factory returns. Routes are registered and
 the interface is rendered before any provider exists, so a value produced by a
 factory arrives too late to be used. Returning one is a startup error naming
@@ -53,6 +54,7 @@ run through a function's return type.
 | `hooks`        | no         | factory |
 | `actions`      | no         | factory |
 | `dashboard`    | no         | factory |
+| `devTools`     | no         | outer   |
 | `path`         | no         | outer   |
 | `uiRoot`       | no         | outer   |
 | `theme`        | no         | outer   |
@@ -633,8 +635,99 @@ serverless hosts lose it on the next deploy, so the module warns at startup
 when it is still in use with `NODE_ENV=production`.
 
 **A replaced file is not deleted.** Another record may hold the same key and
-nothing here can count references. Finding orphans is a job for the dev tools
-in 0.14, where scanning makes sense.
+nothing here can count references. Finding orphans is a job for the dev tools,
+where scanning makes sense.
+
+---
+
+## `devTools`
+
+Believable data, from your own schema. The answer to opening a fresh admin and
+finding empty tables, a flat dashboard chart and relation pickers with nothing
+in them.
+
+```ts
+import { devTools } from '@nest-admin/nestjs/dev-tools'
+
+AdminModule.forRoot({ adapter, auth, devTools: devTools() })
+```
+
+A **Developer tools** entry appears at the bottom of the navigation, marked, and
+separated from the resources — a tool that can empty a table must not look like
+a table.
+
+### What it does
+
+|                     |                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------- |
+| **Fill this admin** | every model, in an order the relations allow, so a post always has an author      |
+| Generate one model  | with a preview first, which writes nothing                                        |
+| Seeds               | the same seed gives the same records, so a demo can be rebuilt or screenshotted   |
+| Pictures            | identicons and gradients drawn from the record, written through your file storage |
+| **Undo**            | deletes what the last run created — records you made by hand are left alone       |
+| Empty a model       | one model, named, with a confirmation                                             |
+
+Values come from the field's **name** first (`email`, `slug`, `price`, `city`)
+and its **kind** second. Nothing branches on a model name: the admin renders
+schemas it has never seen, and a generator that knew about `User` would work on
+one application. Unique columns stay unique, enums stay inside their values,
+relations point at rows that exist — including one-to-ones, where each parent is
+handed out once.
+
+Dates are spread backwards over ninety days, so the dashboard chart has a shape.
+
+### What it is not
+
+**Not a person filling in a form.** Records are written through the adapter, so
+generated timestamps can be set — and so **your hooks do not run**. Two hundred
+fake users should not send two hundred welcome emails.
+
+Authorization is _not_ skipped: every model goes through the same `resourceAuth`
+boundary the HTTP routes use.
+
+### `@faker-js/faker` is optional
+
+Installed, it is used automatically and the words get more varied. Absent, the
+built-in lists do the job. "Install ten megabytes before you can see any data"
+is not a first step this package asks for.
+
+### Options
+
+```ts
+devTools({
+  allowInProduction: false, // second, explicit acknowledgement
+  models: ['User', 'Post'], // default: everything you may write
+  images: true,
+  maxPerRun: 500,
+  generators: {
+    // The escape hatch. One column with a format nothing could infer should
+    // not make the feature useless for that model.
+    'Product.sku': (index) => `SKU-${1000 + index}`,
+  },
+})
+```
+
+### Keeping it away from a real database
+
+Four layers, and the first is the strongest:
+
+1. **A separate entrypoint.** A build that does not import
+   `@nest-admin/nestjs/dev-tools` does not contain the generator, the word
+   lists or the routes. Absent, not disabled — which no configuration mistake
+   can undo.
+2. The option has to be passed.
+3. **It refuses to start where the process looks deployed** — `NODE_ENV`, and
+   any of `VERCEL`, `RENDER`, `FLY_APP_NAME`, `RAILWAY_*`, `DYNO`, `K_SERVICE`,
+   `KUBERNETES_SERVICE_HOST` and friends. `NODE_ENV` alone is not the check:
+   staging runs as production and plenty of deployments never set it.
+   `allowInProduction: true` gets through, and warns on every start-up.
+4. The role needs the `useDevTools` capability. Without roles, every
+   administrator has it, exactly as with `manageTeam`.
+
+`devTools` is **structural**, like `path` and `theme`: it decides which
+controllers exist, so on `forRootAsync` it goes on the outer object rather than
+in the factory.
+
 ---
 
 ## `hooks`

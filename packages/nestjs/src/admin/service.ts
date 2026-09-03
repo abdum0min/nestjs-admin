@@ -66,6 +66,7 @@ import {
   ADMIN_CAPABILITIES,
   ADMIN_CONCURRENCY,
   ADMIN_DASHBOARD,
+  ADMIN_DEV_TOOLS,
   ADMIN_FILES,
   ADMIN_TEAM,
   ADMIN_HOOKS,
@@ -131,6 +132,8 @@ export class AdminService implements OnModuleInit {
     // one without roles gives every administrator every capability.
     @Inject(ADMIN_TEAM) private readonly team: unknown,
     @Inject(ADMIN_FILES) private readonly files: unknown,
+    // Present only when the application imported the dev-tools entrypoint.
+    @Inject(ADMIN_DEV_TOOLS) private readonly devTools: unknown,
     @Inject(ADMIN_CAPABILITIES)
     private readonly can: (context: ExecutionContext, capability: AdminCapability) => boolean,
     @Inject(ADMIN_CONCURRENCY)
@@ -362,6 +365,11 @@ export class AdminService implements OnModuleInit {
         // Both halves: the deployment has to have a team screen, and this role
         // has to be allowed to open it.
         manageTeam: this.team !== undefined && this.can(context, 'manageTeam'),
+        // The same two halves. A build that never imported the dev tools and a
+        // role that may not use them are indistinguishable from here, which is
+        // what a screen should see: in both cases they are not part of this
+        // admin.
+        useDevTools: this.devTools !== undefined && this.can(context, 'useDevTools'),
       },
       // Only when the guard is on: naming a field the server will ignore would
       // suggest a protection that is not running.
@@ -1177,6 +1185,31 @@ export class AdminService implements OnModuleInit {
    * Every path goes through here, so an excluded model is absent from the
    * metadata document and unknown to every route.
    */
+  /**
+   * The models this admin has, and the boundary that decides who may touch
+   * them - for callers outside this class.
+   *
+   * Two methods rather than a general escape hatch, and they exist for one
+   * caller: the developer tools, which write through the adapter rather than
+   * through `create` (they are a seeder, not a person) and so would otherwise
+   * have to re-implement both. Re-implementing the second one is the part that
+   * matters: `resourceAuth` is the single authorization boundary in this
+   * package, and a second copy of it is a second place for a mistake to hide.
+   */
+  async schema(): Promise<readonly ModelMetadata[]> {
+    return this.exposedModels()
+  }
+
+  /** Throws `ForbiddenError` unless the policy allows it. Returns its row scope. */
+  async authorize(
+    context: ExecutionContext,
+    model: string,
+    operation: AdminOperation,
+  ): Promise<readonly FilterRule[]> {
+    await this.requireModel(model)
+    return this.assertAllowed(context, model, operation)
+  }
+
   private async exposedModels(): Promise<readonly ModelMetadata[]> {
     return applyOverrides(
       selectModels(await this.adapter.getModels(), this.resources),

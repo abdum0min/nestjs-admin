@@ -29,6 +29,8 @@ export type Route =
    * literal segments before `:model`, solved the same way.
    */
   | { readonly kind: 'team' }
+  /** The developer tools. `~dev` for the same reason `~team` is. */
+  | { readonly kind: 'dev' }
   | {
       readonly kind: 'list'
       readonly model: string
@@ -58,6 +60,7 @@ export function parseHash(hash: string): Route {
 
   if (model === undefined) return { kind: 'home' }
   if (model === '~team') return { kind: 'team' }
+  if (model === '~dev') return { kind: 'dev' }
   if (second === undefined) return { kind: 'list', model, ...(filter ? { filter } : {}) }
   if (second === 'new') return { kind: 'create', model }
   if (third === 'edit') return { kind: 'edit', model, id: second }
@@ -70,6 +73,8 @@ export function href(route: Route): string {
       return '#/'
     case 'team':
       return '#/~team'
+    case 'dev':
+      return '#/~dev'
     case 'list':
       return (
         `#/${encodeURIComponent(route.model)}` +

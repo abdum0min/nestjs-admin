@@ -13,6 +13,115 @@ since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
 
 ---
 
+## 0.14.0
+
+Developer tools: an empty admin becomes something you can click through.
+
+### Added
+
+- **`@nest-admin/nestjs/dev-tools`**, a new entrypoint:
+
+  ```ts
+  import { devTools } from '@nest-admin/nestjs/dev-tools'
+
+  AdminModule.forRoot({ adapter, auth, devTools: devTools() })
+  ```
+
+  A **Developer tools** entry appears at the bottom of the navigation, marked
+  and separated from the resources - a tool that can empty a table must not
+  look like a table.
+
+- **Fill this admin.** Every model, in an order the relations allow, so a post
+  always has an author. The problem this release exists for is the first thirty
+  seconds of using the package: empty tables, a flat dashboard chart, and
+  relation pickers with nothing in them.
+
+- **A mock data engine that reads only metadata.** Values come from a column's
+  name first (`email`, `slug`, `price`, `city`) and its kind second. Nothing
+  branches on a model name - the admin renders schemas it has never seen, and a
+  generator that knew about `User` would work on one application. Unique
+  columns stay unique, enums stay inside their values, and relations point at
+  rows that exist, including one-to-ones, where each parent is handed out once.
+  Dates are spread backwards over ninety days so the dashboard chart has a
+  shape.
+
+- **Seeds.** The same seed gives the same records, which turns generated data
+  from a novelty into something a demo can be built on: screenshottable,
+  describable, and reproducible after a truncate.
+
+- **Undo.** Deletes what the last run created and nothing else, so generating
+  into a database that also holds your own hand-made rows is not frightening.
+
+- **Pictures, computed rather than downloaded.** Identicon avatars and gradient
+  covers drawn from the record itself, deterministic, and written through the
+  same storage a real upload uses. Nothing is fetched from a placeholder
+  service and nothing is added to the tarball.
+
+- **`@faker-js/faker` as an optional peer.** Installed, it is used
+  automatically and the words get more varied; absent, the built-in lists do
+  the job. "Install ten megabytes before you can see any data" is not a first
+  step this package asks for.
+
+- **`generators`**, the escape hatch: `{ 'Product.sku': (i) => … }`. One column
+  with a format nothing could infer should not make the feature useless for
+  that model.
+
+- **Preview** before generating, which writes nothing and runs the same code
+  path, and **Empty a model**, one model at a time and named explicitly.
+
+### Security
+
+Four layers keep this away from a real database, and the first is the strongest:
+
+1. **A separate entrypoint.** `AdminModule` has no reference to any of this
+   code, so a build that does not import the subpath does not contain the
+   generator, the word lists or the routes. Absent, not disabled - which no
+   configuration mistake can undo, and which the packed-consumer checks now
+   assert.
+2. The option has to be passed.
+3. **It refuses to start where the process looks deployed** - `NODE_ENV`, and
+   any of `VERCEL`, `RENDER`, `FLY_APP_NAME`, `RAILWAY_*`, `DYNO`, `K_SERVICE`,
+   `KUBERNETES_SERVICE_HOST` and friends. `NODE_ENV` alone is not the check:
+   staging runs as production and plenty of deployments never set it.
+4. The `useDevTools` capability, granted like `manageTeam`.
+
+Records are written through the adapter rather than through the admin - so
+generated timestamps can be set, and **hooks do not run**: two hundred fake
+users should not send two hundred welcome emails. Authorization is not skipped;
+every model goes through the same `resourceAuth` boundary the HTTP routes use.
+
+### Fixed
+
+- **Injection tokens are now `Symbol.for`, all of them.** The CJS build has no
+  code splitting, so each entrypoint inlines its own copy of every internal
+  module - and a plain `Symbol('X')` in `dev-tools.cjs` is a _different symbol_
+  than the one `index.cjs` registered. The same is true of classes used as
+  tokens, so `AdminService` is now reachable by token as well. Both would have
+  been a start-up failure in CommonJS only, naming a token that looks identical
+  to the one that was registered.
+
+- **`typesVersions` was missing `./drizzle`.** A consumer on TypeScript's
+  `moduleResolution: "node"` - which is what the NestJS CLI's own tsconfig uses
+  - could not see the types for the Drizzle adapter shipped in 0.11.0. Runtime
+    resolution was never affected.
+
+### Three defects found by running it, not by reading it
+
+- **Dependency injection across entrypoints.** The example application would
+  not start: the dev-tools controller asked for an `AdminService` class object
+  its own bundle had a separate copy of. This is what the token change above
+  is for.
+- **A one-to-one handed the same parent to every row.** Five profiles were
+  asked for and two arrived, because each picked a user at random from the same
+  pool. A `@unique` foreign key is a one-to-one, which the metadata says
+  plainly and the generator was not reading.
+- **And then it only counted the rows it had just made.** With that fixed, a
+  second press still failed: the parents already taken by rows _in the table_
+  were not excluded. Both are read now, and filling the example's ten-model
+  schema twice in a row creates 50 records each time with nothing refused.
+
+---
+
 ## 0.13.2
 
 Deleting a record by marking it.

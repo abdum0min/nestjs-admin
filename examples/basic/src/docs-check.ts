@@ -24,6 +24,7 @@ import {
   type RoleResolver,
   type ModelOverrides,
 } from '@nest-admin/nestjs'
+import { devTools } from '@nest-admin/nestjs/dev-tools'
 import { prismaAccountStore } from '@nest-admin/nestjs/prisma'
 
 import { PrismaService } from './prisma.service.js'
@@ -76,6 +77,18 @@ const roles = {
         : undefined,
   },
 } as const satisfies AdminRoles
+
+/* configuration.md - the developer tools, and the escape hatch */
+const tools = devTools({
+  allowInProduction: false,
+  models: ['User', 'Post'],
+  images: true,
+  maxPerRun: 500,
+  generators: {
+    'Product.sku': (index: number) => `SKU-${1000 + index}`,
+  },
+})
+void tools
 
 /* getting-started.md - the built-in login supplies the role */
 const roleOf: RoleResolver = builtInRoleOf()

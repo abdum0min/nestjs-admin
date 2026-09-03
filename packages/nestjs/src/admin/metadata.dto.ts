@@ -262,6 +262,14 @@ export interface ModelDto {
 export interface CapabilitiesDto {
   /** True only when this admin has a team screen and this role may open it. */
   readonly manageTeam: boolean
+  /**
+   * True only when the developer tools are mounted and this role may use them.
+   *
+   * Two conditions, and the interface cannot tell them apart - which is right.
+   * A build without the tools and a role without the capability should look
+   * identical from a screen: in both cases they are not part of this admin.
+   */
+  readonly useDevTools?: boolean
 }
 
 export interface MetadataDto {

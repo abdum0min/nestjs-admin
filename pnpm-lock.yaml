@@ -238,6 +238,9 @@ importers:
         specifier: 7.10.0
         version: 7.10.0
     devDependencies:
+      '@faker-js/faker':
+        specifier: 10.1.0
+        version: 10.1.0
       '@nest-admin/admin-ui':
         specifier: workspace:*
         version: link:../admin-ui

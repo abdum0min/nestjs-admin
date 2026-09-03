@@ -349,4 +349,10 @@ export interface TeamView {
 /** What this principal may do that is not about a model. */
 export interface Capabilities {
   readonly manageTeam: boolean
+  /**
+   * Both halves at once: this build has the developer tools, and this role
+   * may use them. The interface cannot tell the two apart, which is right -
+   * either way they are not part of this admin.
+   */
+  readonly useDevTools?: boolean
 }

@@ -470,3 +470,82 @@ export function uploadFile(
 export function fileUrl(key: string): string {
   return `${API_BASE}/files/${key.split('/').map(encodeURIComponent).join('/')}`
 }
+
+/**
+ * The developer tools.
+ *
+ * Present only when the application mounted them and this role may use them,
+ * which the metadata says once - every function here 404s or 403s otherwise,
+ * and the screen is not reachable in the first place.
+ */
+export interface DevStatus {
+  readonly models: readonly string[]
+  /** Whether `@faker-js/faker` is installed. It works either way. */
+  readonly faker: boolean
+  readonly images: boolean
+  readonly lastRun: { readonly at: string; readonly runs: readonly DevRun[] } | undefined
+}
+
+export interface DevRun {
+  readonly model: string
+  readonly created: number
+  readonly ids: readonly string[]
+  readonly failed: readonly { readonly reason: string; readonly count: number }[]
+  /** True about the run, but not a failure - a one-to-one that ran out of parents. */
+  readonly note?: string
+}
+
+export async function devStatus(): Promise<DevStatus> {
+  const { data } = await request<DevStatus>('/dev')
+  return data
+}
+
+export async function devPreview(body: {
+  model: string
+  count?: number
+  seed?: string
+}): Promise<{ model: string; records: readonly AdminRecord[] }> {
+  const { data } = await request<{ model: string; records: readonly AdminRecord[] }>(
+    '/dev/preview',
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+  return data
+}
+
+export async function devGenerate(body: {
+  model: string
+  count?: number
+  seed?: string
+  images?: boolean
+}): Promise<DevRun> {
+  const { data } = await request<DevRun>('/dev/generate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return data
+}
+
+export async function devFill(body: {
+  perModel?: number
+  seed?: string
+  images?: boolean
+}): Promise<readonly DevRun[]> {
+  const { data } = await request<readonly DevRun[]>('/dev/fill', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return data
+}
+
+export async function devUndo(): Promise<readonly DevRun[]> {
+  const { data } = await request<readonly DevRun[]>('/dev/undo', { method: 'POST' })
+  return data
+}
+
+export async function devTruncate(model: string): Promise<{ deleted: number; remaining: number }> {
+  const { data } = await request<{ deleted: number; remaining: number }>('/dev/truncate', {
+    method: 'POST',
+    body: JSON.stringify({ model }),
+  })
+  return data
+}

@@ -6,13 +6,14 @@
  * authorization simply is not in the document and therefore is not in the UI -
  * no client-side filtering, and nothing to keep in sync.
  */
-import { LayoutDashboard, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
+import { FlaskConical, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
 
 import { fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
 import type { AdminAccountSummary, ModelDescriptor } from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
 import { DashboardView } from './components/DashboardView.jsx'
+import { DevToolsView } from './components/DevToolsView.jsx'
 import { TeamView } from './components/TeamView.jsx'
 import { ListView } from './components/ListView.jsx'
 import { LoginPage } from './components/LoginPage.jsx'
@@ -133,7 +134,7 @@ function Admin({
   }
 
   const active =
-    route.kind === 'home' || route.kind === 'team'
+    route.kind === 'home' || route.kind === 'team' || route.kind === 'dev'
       ? undefined
       : models.find((m) => m.name === route.model)
 
@@ -142,10 +143,14 @@ function Admin({
       models={models}
       activeModel={active?.name}
       canManageTeam={metadata.data?.capabilities?.manageTeam === true}
+      canUseDevTools={metadata.data?.capabilities?.useDevTools === true}
+      activeDev={route.kind === 'dev'}
       {...shellProps}
     >
       {route.kind === 'home' ? (
         <DashboardView />
+      ) : route.kind === 'dev' ? (
+        <DevToolsView />
       ) : route.kind === 'team' ? (
         // Rendered only when the metadata says so. Reaching the URL without the
         // capability still gets a page - one whose first request is refused,
@@ -205,6 +210,8 @@ function Shell({
   account,
   onSignedOut,
   canManageTeam = false,
+  canUseDevTools = false,
+  activeDev = false,
   children,
 }: {
   readonly models?: readonly ModelDescriptor[]
@@ -213,6 +220,13 @@ function Shell({
   readonly account?: AdminAccountSummary | undefined
   /** Whether to offer the team screen. Decided by the server, not here. */
   readonly canManageTeam?: boolean
+  /**
+   * Whether to offer the developer tools. Decided by the server, and it means
+   * both halves at once: the build has them, and this role may use them.
+   */
+  readonly canUseDevTools?: boolean
+  /** Whether the developer tools are the page being shown. */
+  readonly activeDev?: boolean
   readonly onSignedOut?: () => void
   readonly children: React.ReactNode
 }) {
@@ -337,7 +351,13 @@ function Shell({
               collapsed ? 'w-14' : 'w-56',
             )}
           >
-            <ResourceNav models={models} activeModel={activeModel} collapsed={collapsed} />
+            <ResourceNav
+              models={models}
+              activeModel={activeModel}
+              collapsed={collapsed}
+              canUseDevTools={canUseDevTools}
+              activeDev={activeDev}
+            />
           </nav>
 
           {/* `tabIndex={-1}` so the skip link can move focus here. It makes the
@@ -359,7 +379,13 @@ function Shell({
           >
             <DialogTitle className="px-2 text-sm font-semibold">Resources</DialogTitle>
             <nav aria-label="Resources">
-              <ResourceNav models={models} activeModel={activeModel} collapsed={false} />
+              <ResourceNav
+                models={models}
+                activeModel={activeModel}
+                collapsed={false}
+                canUseDevTools={canUseDevTools}
+                activeDev={activeDev}
+              />
             </nav>
           </DialogContent>
         </Dialog>
@@ -384,10 +410,14 @@ function ResourceNav({
   models,
   activeModel,
   collapsed,
+  canUseDevTools = false,
+  activeDev = false,
 }: {
   readonly models: readonly ModelDescriptor[]
   readonly activeModel?: string
   readonly collapsed: boolean
+  readonly canUseDevTools?: boolean
+  readonly activeDev?: boolean
 }) {
   return (
     <ul className="flex flex-col gap-0.5">
@@ -424,6 +454,27 @@ function ResourceNav({
           </li>
         )
       })}
+
+      {/*
+       * Below the resources and separated from them, because it is not one.
+       *
+       * Deliberately not in the user menu, where the team screen lives: this is
+       * used while building, over and over, and a menu is one click of friction
+       * per use. Deliberately not among the models either - a tool that can
+       * empty a table must never look like a table.
+       */}
+      {canUseDevTools ? (
+        <li className="mt-1 border-t pt-1">
+          <NavLink
+            href={href({ kind: 'dev' })}
+            label="Developer tools"
+            icon={FlaskConical}
+            current={activeDev}
+            collapsed={collapsed}
+            marker="Dev"
+          />
+        </li>
+      ) : null}
     </ul>
   )
 }
@@ -441,12 +492,21 @@ function NavLink({
   icon: Icon,
   current,
   collapsed,
+  marker,
 }: {
   readonly href: string
   readonly label: string
   readonly icon: ComponentType<{ className?: string }> | undefined
   readonly current: boolean
   readonly collapsed: boolean
+  /**
+   * A word beside the label, for an entry that is not a resource.
+   *
+   * The developer tools sit in the same list as the data, and something has to
+   * say that they are not part of it - the sort of thing that matters most on
+   * the day somebody demonstrates the admin to a room.
+   */
+  readonly marker?: string
 }) {
   return (
     <a
@@ -475,6 +535,11 @@ function NavLink({
         </span>
       )}
       {collapsed ? null : <span className="truncate">{label}</span>}
+      {collapsed || marker === undefined ? null : (
+        <span className="ml-auto rounded border border-amber-500/40 px-1 text-[10px] font-medium tracking-wide text-amber-600 uppercase dark:text-amber-400">
+          {marker}
+        </span>
+      )}
     </a>
   )
 }

@@ -30,6 +30,7 @@ import {
 import { RouterModule } from '@nestjs/core'
 
 import { AdminController } from './admin/controller.js'
+import type { DevToolsContribution } from './dev-tools/contract.js'
 import { AdminAuthController } from './auth/controller.js'
 import { AdminService } from './admin/service.js'
 import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
@@ -80,10 +81,12 @@ import {
   ADMIN_OPTIONS,
   ADMIN_CAPABILITIES,
   ADMIN_CONCURRENCY,
+  ADMIN_DEV_TOOLS,
   ADMIN_FILES,
   ADMIN_TEAM,
   ADMIN_RESOURCE_AUTH,
   ADMIN_RESOURCES,
+  ADMIN_SERVICE,
   ADMIN_THEME,
   ADMIN_UI_ROOT,
 } from './tokens.js'
@@ -183,6 +186,26 @@ export interface AdminModuleOptions {
    * and would rather not serve any.
    */
   readonly files?: AdminFilesOptions | false
+
+  /**
+   * The developer tools, if this build has them.
+   *
+   * ```ts
+   * import { devTools } from '@nest-admin/nestjs/dev-tools'
+   *
+   * AdminModule.forRoot({ adapter, auth, devTools: devTools() })
+   * ```
+   *
+   * **Structural**, like `path` and `theme`: it decides which controllers the
+   * module registers, and that happens before any provider exists. On
+   * `forRootAsync` it belongs on the outer object, not on what the factory
+   * returns.
+   *
+   * The type is deliberately what `devTools()` returns rather than a set of
+   * options, so nothing in the main entrypoint imports the generator: an
+   * application that does not import the subpath does not have any of it.
+   */
+  readonly devTools?: DevToolsContribution
 
   /**
    * Where the admin is mounted. Defaults to `/admin`.
@@ -327,7 +350,10 @@ function assertUsableOptions(options: AdminModuleOptions, caller: string): void 
  * Everything except the structural options, which are decided when the module
  * is defined and so cannot come from a provider - see `forRootAsync`.
  */
-export type AdminModuleFactoryOptions = Omit<AdminModuleOptions, 'path' | 'uiRoot' | 'theme'>
+export type AdminModuleFactoryOptions = Omit<
+  AdminModuleOptions,
+  'path' | 'uiRoot' | 'theme' | 'devTools'
+>
 
 /** Supply options from a class rather than a factory function. */
 export interface AdminModuleOptionsFactory {
@@ -346,6 +372,13 @@ export interface AdminModuleAsyncOptions {
    * the shell is rendered from it and no provider exists at that point.
    */
   readonly theme?: AdminTheme
+
+  /**
+   * As `AdminModuleOptions.devTools`. Structural for the same reason: it
+   * decides which controllers are registered, which happens before a factory
+   * has run.
+   */
+  readonly devTools?: DevToolsContribution
 
   /** Modules whose providers the factory needs. */
   readonly imports?: ModuleMetadata['imports']
@@ -486,6 +519,14 @@ function defineModule(
   theme: AdminTheme | undefined,
   optionProviders: readonly Provider[],
   extraImports: ModuleMetadata['imports'] = [],
+  /**
+   * What `devTools()` returned, when the application imported it.
+   *
+   * Passed in rather than imported: nothing in this file references the
+   * dev-tools directory, which is what keeps the generator, the word lists and
+   * the routes out of a build that never asked for them.
+   */
+  devTools?: DevToolsContribution,
 ): DynamicModule {
   return {
     module: AdminModule,
@@ -511,14 +552,21 @@ function defineModule(
       AdminAuthController,
       AdminTeamController,
       AdminFilesController,
+      // Before the controller that owns `:model`, like every other literal.
+      ...(devTools?.controllers ?? []),
       AdminController,
     ],
     providers: [
       ...optionProviders,
+      ...(devTools?.providers ?? []),
       { provide: ADMIN_UI_ROOT, useValue: resolvedUiRoot },
       { provide: ADMIN_MOUNT_PATH, useValue: mountPath },
       { provide: ADMIN_THEME, useValue: theme },
       AdminService,
+      // The same instance, reachable by token. Anything in another
+      // entrypoint holds a different copy of the class object and cannot ask
+      // for it by name - see ADMIN_SERVICE in tokens.ts.
+      { provide: ADMIN_SERVICE, useExisting: AdminService },
       // Provided so Nest can resolve them for `@UseGuards` / `@UseFilters` on
       // the controller. Deliberately not APP_GUARD or APP_FILTER: either would
       // take over behaviour for the whole host application rather than just the
@@ -526,7 +574,7 @@ function defineModule(
       AdminAuthGuard,
       AdminExceptionFilter,
     ],
-    exports: [AdminService],
+    exports: [AdminService, ADMIN_SERVICE],
   }
 }
 
@@ -619,22 +667,30 @@ export class AdminModule {
 
     const files = resolveFiles(options, mountPath)
 
-    return defineModule(mountPath, resolvedUiRoot, options.theme, [
-      { provide: ADMIN_ADAPTER, useValue: options.adapter },
-      { provide: ADMIN_RESOURCES, useValue: options.resources },
-      { provide: ADMIN_MODELS, useValue: options.models },
-      { provide: ADMIN_HOOKS, useValue: options.hooks },
-      { provide: ADMIN_ACTIONS, useValue: options.actions },
-      { provide: ADMIN_DASHBOARD, useValue: options.dashboard },
-      { provide: ADMIN_AUTH, useValue: options.auth },
-      // Always provided, so injection resolves whether or not the consumer
-      // supplied a policy. The default permits every model.
-      { provide: ADMIN_RESOURCE_AUTH, useValue: resolvePolicy(options) },
-      { provide: ADMIN_CAPABILITIES, useValue: capabilityChecker(options.roles, options.roleOf) },
-      { provide: ADMIN_TEAM, useValue: resolveTeam(options) },
-      { provide: ADMIN_CONCURRENCY, useValue: options.concurrency ?? 'last-write-wins' },
-      { provide: ADMIN_FILES, useValue: files },
-    ])
+    return defineModule(
+      mountPath,
+      resolvedUiRoot,
+      options.theme,
+      [
+        { provide: ADMIN_ADAPTER, useValue: options.adapter },
+        { provide: ADMIN_RESOURCES, useValue: options.resources },
+        { provide: ADMIN_MODELS, useValue: options.models },
+        { provide: ADMIN_HOOKS, useValue: options.hooks },
+        { provide: ADMIN_ACTIONS, useValue: options.actions },
+        { provide: ADMIN_DASHBOARD, useValue: options.dashboard },
+        { provide: ADMIN_AUTH, useValue: options.auth },
+        // Always provided, so injection resolves whether or not the consumer
+        // supplied a policy. The default permits every model.
+        { provide: ADMIN_RESOURCE_AUTH, useValue: resolvePolicy(options) },
+        { provide: ADMIN_CAPABILITIES, useValue: capabilityChecker(options.roles, options.roleOf) },
+        { provide: ADMIN_TEAM, useValue: resolveTeam(options) },
+        { provide: ADMIN_CONCURRENCY, useValue: options.concurrency ?? 'last-write-wins' },
+        { provide: ADMIN_FILES, useValue: files },
+        { provide: ADMIN_DEV_TOOLS, useValue: options.devTools?.options },
+      ],
+      [],
+      options.devTools,
+    )
   }
 
   /**
@@ -701,8 +757,10 @@ export class AdminModule {
         derive(ADMIN_TEAM, (resolved) => resolveTeam(resolved)),
         derive(ADMIN_CONCURRENCY, (resolved) => resolved.concurrency ?? 'last-write-wins'),
         derive(ADMIN_FILES, (resolved) => resolveFiles(resolved, mountPath)),
+        { provide: ADMIN_DEV_TOOLS, useValue: options.devTools?.options },
       ],
       options.imports ?? [],
+      options.devTools,
     )
   }
 }

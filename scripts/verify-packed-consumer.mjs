@@ -296,21 +296,50 @@ NestFactory.create(AppModule).then((app) => app.listen(${PORT}))
   // That is why framework errors carry a brand instead - see errors.ts in Core.
   // These assert the arrangement rather than hope for it: if CJS ever gains a
   // shared chunk the count changes here first.
-  const coreCopies = (file) => {
+  const classCopies = (file, name) => {
     const source = readFileSync(join(pkgDir, file), 'utf8')
-    return (source.match(/class FieldNotFoundError|FieldNotFoundError = class/g) ?? []).length
+    return (source.match(new RegExp(`class ${name}\\b|${name} = class`, 'g')) ?? []).length
   }
-  const chunk = readdirSync(join(pkgDir, 'dist')).find(
+  const coreCopies = (file) => classCopies(file, 'FieldNotFoundError')
+  // Summed across every chunk rather than read from one. With four entrypoints
+  // esbuild emits more than one shared chunk, and asking the first one whether
+  // it holds Core answered "no" while the arrangement was perfectly correct -
+  // a check that failed for a reason that had nothing to do with what it was
+  // checking. What matters is that Core exists once in total, not where.
+  const chunks = readdirSync(join(pkgDir, 'dist')).filter(
     (entry) => entry.startsWith('chunk-') && entry.endsWith('.js'),
   )
+  const inChunks = chunks.reduce((total, entry) => total + coreCopies(`dist/${entry}`), 0)
 
-  check('ESM: Core lives in a shared chunk', chunk ? coreCopies(`dist/${chunk}`) : 0, 1)
+  check('ESM: Core lives in a shared chunk', inChunks, 1)
   check('  not in dist/index.js', coreCopies('dist/index.js'), 0)
   check('  not in dist/prisma.js', coreCopies('dist/prisma.js'), 0)
   check('  not in dist/drizzle.js', coreCopies('dist/drizzle.js'), 0)
+  check('  not in dist/dev-tools.js', coreCopies('dist/dev-tools.js'), 0)
   check('CJS: one copy per entrypoint (known)', coreCopies('dist/index.cjs'), 1)
   check('  and one in prisma.cjs', coreCopies('dist/prisma.cjs'), 1)
   check('  and one in drizzle.cjs', coreCopies('dist/drizzle.cjs'), 1)
+  // Asked about a different class, because the dev-tools entrypoint imports
+  // only the few errors it throws and esbuild drops the rest. The point stands
+  // and is the reason errors carry a brand: the `InvalidQueryError` it throws
+  // is not the one `index.cjs` holds, so `instanceof` across them is false.
+  check('  and one in dev-tools.cjs', classCopies('dist/dev-tools.cjs', 'InvalidQueryError'), 1)
+
+  /*
+   * The developer tools must not be in the main entrypoint.
+   *
+   * This is the first of the four things keeping a mock-data generator away
+   * from a production database, and the only one a configuration mistake
+   * cannot undo: an application that never imports the subpath does not have
+   * the code. It is asserted rather than assumed because it depends on nothing
+   * in `src/index.ts` ever importing `src/dev-tools/`, which is exactly the
+   * kind of edge somebody adds without noticing.
+   */
+  const carriesGenerator = (file) => readFileSync(join(pkgDir, file), 'utf8').includes('Lovelace')
+
+  check('dev tools are absent from index.js', carriesGenerator('dist/index.js'), false)
+  check('  and from index.cjs', carriesGenerator('dist/index.cjs'), false)
+  check('  and present in dev-tools.js', carriesGenerator('dist/dev-tools.js'), true)
 
   const failed = checks.filter((entry) => !entry.ok)
   console.log(`\n${checks.length - failed.length}/${checks.length} checks passed`)

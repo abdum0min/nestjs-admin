@@ -1,6 +1,6 @@
 {
   "name": "@nest-admin/nestjs",
-  "version": "0.13.2",
+  "version": "0.14.0",
   "description": "NestJS integration for Nest Admin. This is the single package published to npm.",
   "keywords": [
     "nestjs",
@@ -62,6 +62,16 @@
         "default": "./dist/drizzle.cjs"
       }
     },
+    "./dev-tools": {
+      "import": {
+        "types": "./dist/dev-tools.d.ts",
+        "default": "./dist/dev-tools.js"
+      },
+      "require": {
+        "types": "./dist/dev-tools.d.cts",
+        "default": "./dist/dev-tools.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -87,13 +97,17 @@
     "@prisma/client": "^7.0.0",
     "reflect-metadata": "^0.1.13 || ^0.2.0",
     "rxjs": "^7.0.0",
-    "drizzle-orm": ">=0.44.0 <1"
+    "drizzle-orm": ">=0.44.0 <1",
+    "@faker-js/faker": ">=9"
   },
   "peerDependenciesMeta": {
     "@prisma/client": {
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "@faker-js/faker": {
       "optional": true
     }
   },
@@ -118,12 +132,19 @@
     "rxjs": "catalog:",
     "supertest": "7.1.4",
     "tsup": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@faker-js/faker": "10.1.0"
   },
   "typesVersions": {
     "*": {
       "prisma": [
         "./dist/prisma.d.ts"
+      ],
+      "drizzle": [
+        "./dist/drizzle.d.ts"
+      ],
+      "dev-tools": [
+        "./dist/dev-tools.d.ts"
       ]
     }
   }

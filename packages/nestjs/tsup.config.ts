@@ -5,6 +5,10 @@ export default defineConfig({
     index: 'src/index.ts',
     prisma: 'src/prisma.ts',
     drizzle: 'src/drizzle.ts',
+    // The developer tools are their own entrypoint so that an application which
+    // never imports them does not carry the generator, the word lists or the
+    // routes - see src/dev-tools/index.ts.
+    'dev-tools': 'src/dev-tools/index.ts',
   },
   format: ['esm', 'cjs'],
   // The declaration build must be told to follow the workspace packages, not
@@ -31,6 +35,10 @@ export default defineConfig({
     // The consumer's own Drizzle instance and schema are built against their
     // copy; a second one here would produce tables that fail every `is()` check.
     'drizzle-orm',
+    // An optional peer: the mock data generator uses it when the application
+    // installed it and its own word lists when it did not. Bundling it would
+    // make it mandatory and add ten megabytes to a one-megabyte package.
+    '@faker-js/faker',
     'reflect-metadata',
     'rxjs',
   ],

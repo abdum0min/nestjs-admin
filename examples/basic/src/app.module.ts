@@ -9,6 +9,7 @@ import {
   type AdminDashboard,
   type AdminRoles,
 } from '@nest-admin/nestjs'
+import { devTools } from '@nest-admin/nestjs/dev-tools'
 import { PrismaAdapter, prismaAccountStore } from '@nest-admin/nestjs/prisma'
 
 import { PrismaService } from './prisma.service.js'
@@ -381,6 +382,28 @@ class DatabaseModule {}
         title: 'Nest Admin Example',
         brandColor: '#3f6212',
       },
+
+      /*
+       * The developer tools. Structural for the same reason the theme is: they
+       * decide which controllers exist.
+       *
+       * Imported from a subpath, which is the first of the four things keeping
+       * a mock-data generator away from a real database - a build that does not
+       * import it does not contain the generator at all. They also refuse to
+       * start where the process looks deployed, need this option, and need the
+       * role to hold `useDevTools`.
+       */
+      devTools: devTools({
+        generators: {
+          // The one column nothing could infer: this schema's SKUs have a
+          // shape, and a guessed one would look wrong in every screenshot.
+          // The column is unique, so this has to be unique across runs as well
+          // as within one - a fixed sequence collides with whatever the last
+          // run left behind, and every row fails on the second press.
+          'Product.sku': (index: number) =>
+            `SKU-${Date.now().toString(36).slice(-4).toUpperCase()}-${100 + index}`,
+        },
+      }),
 
       useFactory: (prisma: PrismaService) => ({
         adapter: new PrismaAdapter({ client: prisma }),

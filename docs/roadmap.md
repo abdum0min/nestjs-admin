@@ -7,18 +7,16 @@ Prisma is the only adapter until 1.0. A second ORM before the first one is
 finished would mean two half-products, and would freeze the `OrmAdapter`
 contract before relations have tested it.
 
-**Product first.** Documentation, a live demo and the first npm publish are
-deliberately last. Nothing is published while the interface is still changing
-shape, because the first impression is the one that sticks — and because
-nothing installed means the API, and even the package name, stay free to
-change.
+**Product first.** That held until 0.11.0, when the package was published: the
+interface had stopped changing shape, and a second adapter had proved the
+`OrmAdapter` contract. A live demo and the documentation site are still last.
 
 ---
 
 ## Delivered
 
-0.1.0 through 0.7.0 are complete. Detail is in [CHANGELOG.md](../CHANGELOG.md); the
-one-line version:
+0.1.0 through 0.14.0 are complete and published. Detail is in
+[CHANGELOG.md](../CHANGELOG.md); the one-line version:
 
 | Release | What it settled                                                             |
 | ------- | --------------------------------------------------------------------------- |
@@ -29,8 +27,20 @@ one-line version:
 | 0.5.0   | `hidden` and `readOnly` enforced server-side; permissions in the metadata   |
 | 0.6.0   | Hooks, actions, `ValidationError`, theming without a rebuild                |
 | 0.7.0   | Constraint errors that name the field, bulk delete, accessibility, 50k rows |
+| 0.8.0   | Design system: Tailwind, vendored shadcn, dark mode, command palette        |
+| 0.9.0   | A login screen in the box, without moving the `AdminAuth` boundary          |
+| 0.10.0  | Dashboard, and rows per page                                                |
+| 0.11.0  | Drizzle adapter, documentation rewritten, **first npm publish**             |
+| 0.11.1  | Numeric ids on relation routes — the first consumer-reported bug            |
+| 0.12.0  | Roles, capabilities and row-level scoping; the team screen                  |
+| 0.12.1  | Optimistic concurrency: the second save no longer overwrites the first      |
+| 0.13.0  | File uploads, working with nothing configured                               |
+| 0.13.1  | A file column drawn wherever it is read, not printed as a key               |
+| 0.13.2  | Soft delete, and `eq null` fixed in the Drizzle adapter                     |
+| 0.14.0  | Developer tools: mock data, pictures, undo, four-layer production gating    |
 
-**627 tests, 48/48 packed-consumer checks, nothing published.**
+**1186 tests, 67/67 packed-consumer checks, published as
+[`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs).**
 
 Where the project stands in full, including risks and carried debt:
 [`project-state.md`](project-state.md).
