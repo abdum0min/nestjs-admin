@@ -13,6 +13,88 @@ the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
+## 0.13.0
+
+File uploads, and they work with nothing configured.
+
+### Added
+
+- **`widget: 'file'` and `widget: 'image'`**, on an ordinary string column:
+
+  ```ts
+  fields: {
+    avatarUrl: { widget: 'image', accept: ['image/*'], maxSize: '2mb' },
+  }
+  ```
+
+  Nothing in the schema changes - most projects already have an unused
+  `avatarUrl String?`. With no `files` option the bytes go to the local disk and
+  are served behind the same guard as every other route, so an image field is
+  one line and no decisions.
+
+  The interface takes a file three ways: click, drag and drop, or **paste**.
+  It previews pictures, shows progress, and replaces or removes in place.
+
+- **`AdminStorage`** - `put`, `url`, `remove`. `url()` may be asynchronous,
+  which is what makes a private S3 or R2 bucket work: it mints a signed link
+  per request. No cloud adapter ships in the package -
+  `@aws-sdk/client-s3` is ten megabytes and this package has one runtime
+  dependency - so the documentation carries a complete implementation to copy,
+  about twenty lines, and R2 differs from S3 by one of them.
+
+- **`files`**: `storage`, `directory`, `maxSize`. `files: false` turns the routes
+  off entirely.
+
+### Security
+
+This is most of the release. Serving an uploaded file inline from the admin’s
+own origin is a session-stealing XSS in waiting, so nothing here believes the
+uploader about anything.
+
+- The content type is **sniffed from the bytes**, never taken from the
+  extension or the header. An HTML file called `avatar.png` and announced as a
+  PNG is refused at upload, and would download rather than execute even if it
+  got in.
+- Only PNG, JPEG, GIF and WebP are ever served inline. **SVG deliberately is
+  not** - it is an image that can contain script.
+- Size is refused on the announced length before a byte is read, and counted
+  again as the stream arrives.
+- Keys are generated here, and one that resolves outside the upload directory
+  is refused.
+
+### Three defects found by running it rather than by reading it
+
+- **A character class with a stray range.** `[/\\:*?"<>| -]` had turned into a
+  control-character range, so the space it was meant to replace survived and
+  `ada avatar.png` became a key with a space in it. Rewritten as an
+  allowlist: a denylist fails open for everything it forgets, and forgets
+  silently.
+- **An ASCII allowlist.** The first fix collapsed every non-Latin filename to a
+  dash. Unicode letters and digits are letters and digits.
+- **A header cannot carry a non-Latin name.** The interface percent-encodes it;
+  the server was not decoding, so those names arrived as escapes and sanitised
+  into dashes anyway. Thirteen tests now cover this function, because it had
+  shipped broken twice in one afternoon.
+
+Also fixed: refusing an upload answered while the client was still sending, and
+the half-finished connection went back into its pool looking reusable - so a
+later, unrelated request failed with ECONNRESET. The refusal now closes its own
+connection, which moves the failure onto the request that caused it.
+
+### Notes
+
+- **The body is raw bytes, not multipart.** No parser on either side, a stream
+  from the first byte, and no dependency. A browser form post would need one;
+  the admin has never used one.
+- **A replaced file is not deleted.** Another record may hold the same key and
+  nothing here can count references. Finding orphans belongs with the dev tools
+  in 0.14, where scanning makes sense.
+- **One file per field.** A gallery needs a different column shape and a
+  different interface; this is the shape that needs no migration.
+- The interface bundle went from 137.8 KB to 141.1 KB gzipped.
+
+---
+
 ## 0.12.1
 
 The other half of what roles started: more than one administrator means two of

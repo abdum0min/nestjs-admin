@@ -33,6 +33,12 @@ export const ADMIN_AUTH = Symbol('NEST_ADMIN_AUTH')
  * strategies, which is what it is - and so a third could be added without
  * changing its shape.
  */
+/**
+ * File storage and the size ceiling, or `undefined` when this admin has
+ * neither - in which case the file routes answer as though they do not exist.
+ */
+export const ADMIN_FILES = Symbol.for('nest-admin.files')
+
 export const ADMIN_CONCURRENCY = Symbol.for('nest-admin.concurrency')
 
 export const ADMIN_TEAM = Symbol.for('nest-admin.team')

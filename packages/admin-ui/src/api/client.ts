@@ -396,3 +396,61 @@ export async function updateTeamMember(
 export async function deleteTeamMember(id: string): Promise<void> {
   await request(`/team/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
+
+/**
+ * `POST /admin/files` — the body is the file itself.
+ *
+ * Not multipart: the server takes the raw bytes and reads the name from a
+ * header, which means no parser on either side and a stream from the first
+ * byte. `XMLHttpRequest` rather than `fetch`, only because it is still the only
+ * way a browser reports upload progress.
+ */
+export function uploadFile(
+  file: File,
+  options: {
+    readonly accept?: readonly string[]
+    readonly maxSize?: number
+    readonly onProgress?: (percent: number) => void
+  } = {},
+): Promise<{ key: string; url: string; type: string; size: number }> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest()
+    request.open('POST', `${API_BASE}/files`)
+
+    request.setRequestHeader('content-type', 'application/octet-stream')
+    request.setRequestHeader('x-admin-filename', encodeURIComponent(file.name))
+    if (options.accept?.length) request.setRequestHeader('x-admin-accept', options.accept.join(','))
+    if (options.maxSize !== undefined) {
+      request.setRequestHeader('x-admin-max-size', String(options.maxSize))
+    }
+
+    request.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) {
+        options.onProgress?.(Math.round((event.loaded / event.total) * 100))
+      }
+    })
+
+    request.addEventListener('load', () => {
+      let body: { success?: boolean; data?: unknown; error?: { message?: string } } = {}
+      try {
+        body = JSON.parse(request.responseText) as typeof body
+      } catch {
+        // A response that is not JSON is a proxy or a crash, not the admin.
+      }
+
+      if (request.status >= 200 && request.status < 300 && body.data) {
+        resolve(body.data as { key: string; url: string; type: string; size: number })
+      } else {
+        reject(new Error(body.error?.message ?? 'That file could not be uploaded.'))
+      }
+    })
+
+    request.addEventListener('error', () => reject(new Error('The upload could not be sent.')))
+    request.send(file)
+  })
+}
+
+/** Where a stored file lives, when the admin is the one serving it. */
+export function fileUrl(key: string): string {
+  return `${API_BASE}/files/${key.split('/').map(encodeURIComponent).join('/')}`
+}

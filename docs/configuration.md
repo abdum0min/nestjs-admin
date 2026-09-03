@@ -13,6 +13,7 @@ the order you actually need it. This page is for looking things up.
 - [`roles` and `roleOf`](#roles-and-roleof)
 - [`resources`](#resources)
 - [`concurrency`](#concurrency)
+- [`files`](#files)
 - [`models`](#models)
 - [`hooks`](#hooks)
 - [`actions`](#actions)
@@ -449,6 +450,123 @@ hole with a reassuring name.
 Anything else is inferred from the field's kind — a date gets a date picker, an
 enum a select, a boolean a checkbox, a relation a picker.
 
+---
+
+## `files`
+
+Uploads. A file field is a **string column** holding a storage key, so nothing
+in the schema changes - most projects already have an unused
+`avatarUrl String?`.
+
+```ts
+models: {
+  User: {
+    fields: {
+      avatarUrl: { widget: 'image', accept: ['image/*'], maxSize: '2mb' },
+      contract: { widget: 'file', accept: ['application/pdf'] },
+    },
+  },
+}
+```
+
+That is the whole of it. With no `files` option the bytes go to the local disk
+under `.nest-admin/uploads` and are served from `/admin/files/…`, behind the same
+guard as every other route.
+
+### What the interface gives you
+
+|                    |                                                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| Three ways in      | click, drag and drop, or **paste** - a screenshot is two keystrokes from being an avatar |
+| Preview            | pictures inline, everything else as an icon and its name                                 |
+| Progress           | a percentage while it uploads                                                            |
+| Replace and remove | in place, no dialog                                                                      |
+| The original name  | read back out of the key, so downloads keep it                                           |
+
+### The key
+
+```text
+2026/09/k3n8vq2f-quarterly-report.pdf
+└─date  └─random  └─the original name
+```
+
+The random part makes it unique and unguessable; the date keeps a directory
+listing usable after a year; the name is what a person sees and downloads as.
+A size is the one thing a string column cannot carry.
+
+Names are reduced to Unicode letters, digits, dots and underscores - an
+allowlist, because a list of characters to _strip_ fails open for every one it
+forgets. `ҳисобот.pdf` survives intact; `../../etc/passwd` does not.
+
+### S3, R2, or anything else
+
+Three methods. No adapter ships in the package, because `@aws-sdk/client-s3`
+is ten megabytes and this one has a single runtime dependency - and because an
+implementation nobody can test against a real bucket is a guess. Copy this:
+
+```ts
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import type { AdminStorage } from '@nest-admin/nestjs'
+
+const client = new S3Client({
+  region: process.env.S3_REGION,
+  // Cloudflare R2 is S3-compatible: the only difference is this line.
+  // endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+  credentials: { accessKeyId: …, secretAccessKey: … },
+})
+
+const Bucket = process.env.S3_BUCKET
+
+export const s3: AdminStorage = {
+  name: 's3',
+  async put({ key, type, bytes }) {
+    await client.send(new PutObjectCommand({ Bucket, Key: key, Body: bytes, ContentType: type }))
+  },
+  url: (key) =>
+    getSignedUrl(client, new GetObjectCommand({ Bucket, Key: key }), { expiresIn: 900 }),
+  remove: async (key) => {
+    await client.send(new DeleteObjectCommand({ Bucket, Key: key }))
+  },
+}
+```
+
+```ts
+files: {
+  storage: s3
+}
+```
+
+`url()` may be asynchronous, which is what makes a **private bucket** work: it
+mints a signed link per request rather than needing the bucket to be public.
+The admin never serves those bytes itself.
+
+### Security
+
+The substance of this feature, not an afterthought. Serving an uploaded file
+inline from the admin's own origin is a session-stealing XSS in waiting.
+
+|              |                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------- |
+| Content type | sniffed **from the bytes**, never from the extension or the header the uploader sent     |
+| Inline       | only for PNG, JPEG, GIF and WebP. Everything else downloads                              |
+| SVG          | uploads and downloads, never renders - it is an image that can contain script            |
+| Size         | counted as the stream arrives, and refused on the announced length before a byte is read |
+| Keys         | generated here. A key that resolves outside the upload directory is refused              |
+| The route    | behind the same guard as the data, because a file belongs to a record                    |
+
+An HTML file uploaded as `avatar.png` is refused at upload, and would download
+rather than execute even if it somehow got in.
+
+### Two things to know
+
+**The local disk is a default, not a recommendation.** Containers and
+serverless hosts lose it on the next deploy, so the module warns at startup
+when it is still in use with `NODE_ENV=production`.
+
+**A replaced file is not deleted.** Another record may hold the same key and
+nothing here can count references. Finding orphans is a job for the dev tools
+in 0.14, where scanning makes sense.
 ---
 
 ## `hooks`

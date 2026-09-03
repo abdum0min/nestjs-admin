@@ -70,7 +70,16 @@ const models = {
       email: { widget: 'email', order: 2 } as const,
       role: { order: 3 },
       bio: { widget: 'textarea', order: 4 } as const,
-      avatarUrl: { label: 'Avatar', widget: 'url', order: 5 } as const,
+      // A string column that holds a storage key. Nothing else in the
+      // schema changes, and with no `files` option the bytes go to the local
+      // disk - which is the whole adoption story for an image field.
+      avatarUrl: {
+        label: 'Avatar',
+        widget: 'image',
+        accept: ['image/*'],
+        maxSize: '2mb',
+        order: 5,
+      } as const,
       managerId: { label: 'Manager', order: 6 },
     },
   },

@@ -47,6 +47,7 @@ import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Button } from './ui/button.jsx'
 import { Card, CardContent } from './ui/card.jsx'
 import { Checkbox } from './ui/checkbox.jsx'
+import { FileField } from './ui/file-field.jsx'
 import { DatePicker } from './ui/date-picker.jsx'
 import { Input } from './ui/input.jsx'
 import { PasswordInput } from './ui/password-input.jsx'
@@ -363,6 +364,20 @@ function FieldInput({
         {...described}
         value={String(value)}
         required={field.isRequired}
+        onChange={onChange}
+      />
+    )
+  } else if (field.widget === 'file' || field.widget === 'image') {
+    // The column holds a storage key. The widget turns it into something a
+    // person can see, replace and remove; `accept` and `maxSize` come from the
+    // metadata and are checked again on the server, from the bytes.
+    control = (
+      <FileField
+        {...described}
+        value={String(value)}
+        image={field.widget === 'image'}
+        {...(field.accept ? { accept: field.accept } : {})}
+        {...(field.maxSize === undefined ? {} : { maxSize: field.maxSize })}
         onChange={onChange}
       />
     )

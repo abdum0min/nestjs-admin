@@ -15,6 +15,7 @@
  *
  * @experimental The HTTP contract is expected to change before 1.0.
  */
+import { toBytes } from '../files/sniff.js'
 import {
   detachBlockedReason,
   displayFieldFor,
@@ -114,7 +115,17 @@ export interface FieldDto {
    * A `string` column may be a sentence, a password or a colour, and the schema
    * cannot tell them apart.
    */
-  readonly widget?: 'textarea' | 'password' | 'email' | 'url' | 'color' | 'json'
+  readonly widget?: 'textarea' | 'password' | 'email' | 'url' | 'color' | 'json' | 'file' | 'image'
+
+  /**
+   * What a file field accepts, and how large.
+   *
+   * Sent so the picker can filter and the interface can refuse an obviously
+   * oversized file before uploading it. Both are enforced again on the server,
+   * from the bytes - this is a courtesy, not the rule.
+   */
+  readonly accept?: readonly string[]
+  readonly maxSize?: number
 
   /**
    * The admin will refuse to write this field.
@@ -284,11 +295,28 @@ function byOrder<T>(items: readonly T[], orderOf: (item: T) => number | undefine
     .map((entry) => entry.item)
 }
 
+/**
+ * The limit a file field should tell the interface about.
+ *
+ * The field's own when it declares one, the module ceiling otherwise, and
+ * nothing at all for a field that is not a file - a size on a text column would
+ * be noise in the document.
+ */
+function maxSizeFor(
+  override: { widget?: string; maxSize?: number | string } | undefined,
+  ceiling: number | undefined,
+): number | undefined {
+  if (override?.maxSize !== undefined) return toBytes(override.maxSize)
+  if (override?.widget === 'file' || override?.widget === 'image') return ceiling
+  return undefined
+}
+
 function toFieldDto(
   field: FieldMetadata,
   modelName: string,
   models: readonly ModelMetadata[],
   overrides: ModelOverrides | undefined,
+  uploadCeiling?: number,
 ): FieldDto {
   const override = fieldOverride(overrides, modelName, field.name)
 
@@ -306,6 +334,13 @@ function toFieldDto(
     ...(field.writeOnly === true ? { writeOnly: true } : {}),
     ...(override?.label !== undefined ? { label: override.label } : {}),
     ...(override?.widget !== undefined ? { widget: override.widget } : {}),
+    // Only meaningful on a file field, and only sent when declared. The
+    // defaults that apply when they are absent live on the server, because
+    // that is where they are enforced.
+    ...(override?.accept !== undefined ? { accept: [...override.accept] } : {}),
+    ...(maxSizeFor(override, uploadCeiling) !== undefined
+      ? { maxSize: maxSizeFor(override, uploadCeiling) }
+      : {}),
     ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
     ...(field.enumValues ? { enumValues: [...field.enumValues] } : {}),
     ...(field.relation
@@ -351,6 +386,15 @@ export function toMetadataDto(
   actions?: ReadonlyMap<string, readonly ActionDto[]>,
   capabilities: CapabilitiesDto = { manageTeam: false },
   versionFieldOf: (model: ModelMetadata) => string | undefined = () => undefined,
+  /**
+   * The upload ceiling, so a file field always carries a limit.
+   *
+   * Sent even when the field declares nothing: the interface checks a file's
+   * size before uploading it, and a field with no limit to check against sends
+   * the whole thing and gets a connection error rather than a sentence. The
+   * server enforces it again either way.
+   */
+  uploadCeiling?: number,
 ): MetadataDto {
   const present = new Set(models.map((model) => model.name))
 
@@ -370,7 +414,7 @@ export function toMetadataDto(
       fields: byOrder(
         model.fields.filter((field) => !field.relation || present.has(field.relation.targetModel)),
         (field) => fieldOverride(overrides, model.name, field.name)?.order,
-      ).map((field) => toFieldDto(field, model.name, models, overrides)),
+      ).map((field) => toFieldDto(field, model.name, models, overrides, uploadCeiling)),
     })),
   }
 }

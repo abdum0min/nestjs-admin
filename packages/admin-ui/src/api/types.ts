@@ -36,7 +36,8 @@ export interface RelationDescriptor {
   readonly targetForeignKey?: string
 }
 
-export type FieldWidget = 'textarea' | 'password' | 'email' | 'url' | 'color' | 'json'
+export type FieldWidget =
+  'textarea' | 'password' | 'email' | 'url' | 'color' | 'json' | 'file' | 'image'
 
 /** An application-defined button. */
 export interface ActionDescriptor {
@@ -73,6 +74,9 @@ export interface FieldDescriptor {
   readonly label?: string
   /** How to edit it, when the kind does not say enough. */
   readonly widget?: FieldWidget
+  /** What a file field accepts, and how large. Enforced again on the server. */
+  readonly accept?: readonly string[]
+  readonly maxSize?: number
   /** Literal default to pre-fill on create, when the schema declares one. */
   readonly defaultValue?: unknown
   readonly enumValues?: readonly string[]

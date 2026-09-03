@@ -28,6 +28,16 @@ export {
 } from './auth/account.js'
 export { createdFieldFor } from './metadata/created-field.js'
 export { updatedFieldFor } from './metadata/updated-field.js'
+
+// Where uploaded files go. Three methods; the local-disk implementation lives
+// in the NestJS package because it needs a filesystem and Core has no I/O.
+export {
+  nameFromKey,
+  safeName,
+  storageKeyFor,
+  type AdminStorage,
+  type StoredFile,
+} from './storage/storage.js'
 export { displayFieldFor } from './metadata/display-field.js'
 
 export type { RelationShape } from './metadata/relation-shape.js'

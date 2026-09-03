@@ -35,7 +35,23 @@ import { AdminService } from './admin/service.js'
 import { warnIfUnsafe, type AdminAuth } from './auth/contract.js'
 import { AdminAuthGuard } from './auth/guard.js'
 import { adminAccountOf, builtInRuntimeOf } from './auth/built-in.js'
+import type { AdminStorage } from '@nest-admin/core'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
+import { AdminFilesController, type FilesRuntime } from './files/controller.js'
+import { isLocalStorage, localStorage } from './files/local.js'
+import { toBytes } from './files/sniff.js'
+
+/** The ceiling when nothing narrows it. Generous for a picture, mean for a video. */
+const DEFAULT_MAX_UPLOAD = '10mb'
+
+export interface AdminFilesOptions {
+  /** Where the bytes go. The local disk when omitted. */
+  readonly storage?: AdminStorage
+  /** Only used by the local store. */
+  readonly directory?: string
+  /** The largest upload any field may take. Bytes, or `'10mb'`. */
+  readonly maxSize?: number | string
+}
 import { AdminTeamController } from './auth/team.controller.js'
 import { TeamService, teamAvailable } from './auth/team.js'
 import {
@@ -64,6 +80,7 @@ import {
   ADMIN_OPTIONS,
   ADMIN_CAPABILITIES,
   ADMIN_CONCURRENCY,
+  ADMIN_FILES,
   ADMIN_TEAM,
   ADMIN_RESOURCE_AUTH,
   ADMIN_RESOURCES,
@@ -154,6 +171,18 @@ export interface AdminModuleOptions {
    * not going to break for a default.
    */
   readonly concurrency?: 'last-write-wins' | 'optimistic'
+
+  /**
+   * Where uploaded files go, and how large they may be.
+   *
+   * Omitted, files go to the local disk under `.nest-admin/uploads` and work
+   * immediately - which is the point: choosing a storage backend should not be
+   * the first thing between somebody and a working image field.
+   *
+   * `false` turns the routes off entirely for an admin that has no file fields
+   * and would rather not serve any.
+   */
+  readonly files?: AdminFilesOptions | false
 
   /**
    * Where the admin is mounted. Defaults to `/admin`.
@@ -383,6 +412,55 @@ function resolveTeam(options: {
   })
 }
 
+/**
+ * File storage, when this admin has any.
+ *
+ * Undefined only when `files: false` was asked for. Otherwise the local disk,
+ * because an `image` widget that needs a decision before it works is an
+ * `image` widget nobody tries.
+ */
+function resolveFiles(
+  options: { readonly files?: AdminFilesOptions | false },
+  mountPath: string,
+): FilesRuntime | undefined {
+  if (options.files === false) return undefined
+
+  const declared = options.files ?? {}
+  const storage =
+    declared.storage ??
+    localStorage({
+      ...(declared.directory === undefined ? {} : { directory: declared.directory }),
+      route: `${mountPath}/files`,
+    })
+
+  const runtime = { storage, maxSize: toBytes(declared.maxSize ?? DEFAULT_MAX_UPLOAD) }
+  warnAboutLocalStorage(runtime)
+  return runtime
+}
+
+/**
+ * Say so when files are going somewhere that will not survive a deploy.
+ *
+ * A container, a serverless function and most PaaS dynos have filesystems that
+ * reset. The local store is the right default because it makes an image field
+ * work with no decisions at all; it is the wrong thing to still be using in
+ * production, and "the avatars vanished last Tuesday" is not a discovery
+ * anyone should make from a support ticket.
+ *
+ * NODE_ENV is a hint rather than the check - staging runs as production and
+ * some hosts set nothing - so this warns and never refuses.
+ */
+function warnAboutLocalStorage(files: FilesRuntime | undefined): void {
+  if (files === undefined || !isLocalStorage(files.storage)) return
+  if (process.env['NODE_ENV'] !== 'production') return
+
+  new Logger('NestAdmin').warn(
+    `Uploaded files are being written to ${files.storage.directory}. On a ` +
+      'container or a serverless host that directory is lost on the next deploy. ' +
+      'Pass `files: { storage }` to keep them somewhere durable.',
+  )
+}
+
 function warnIfUiMissing(resolvedUiRoot: string, mountPath: string): void {
   if (uiAvailable(resolvedUiRoot)) return
 
@@ -428,7 +506,13 @@ function defineModule(
     // the API controller.
     // Order decides: every literal segment has to be declared before the
     // controller that owns the `:model` parameter, or the parameter swallows it.
-    controllers: [AdminUiController, AdminAuthController, AdminTeamController, AdminController],
+    controllers: [
+      AdminUiController,
+      AdminAuthController,
+      AdminTeamController,
+      AdminFilesController,
+      AdminController,
+    ],
     providers: [
       ...optionProviders,
       { provide: ADMIN_UI_ROOT, useValue: resolvedUiRoot },
@@ -533,6 +617,8 @@ export class AdminModule {
     warnIfUiMissing(resolvedUiRoot, mountPath)
     assertUsableTheme(options.theme)
 
+    const files = resolveFiles(options, mountPath)
+
     return defineModule(mountPath, resolvedUiRoot, options.theme, [
       { provide: ADMIN_ADAPTER, useValue: options.adapter },
       { provide: ADMIN_RESOURCES, useValue: options.resources },
@@ -547,6 +633,7 @@ export class AdminModule {
       { provide: ADMIN_CAPABILITIES, useValue: capabilityChecker(options.roles, options.roleOf) },
       { provide: ADMIN_TEAM, useValue: resolveTeam(options) },
       { provide: ADMIN_CONCURRENCY, useValue: options.concurrency ?? 'last-write-wins' },
+      { provide: ADMIN_FILES, useValue: files },
     ])
   }
 
@@ -613,6 +700,7 @@ export class AdminModule {
         ),
         derive(ADMIN_TEAM, (resolved) => resolveTeam(resolved)),
         derive(ADMIN_CONCURRENCY, (resolved) => resolved.concurrency ?? 'last-write-wins'),
+        derive(ADMIN_FILES, (resolved) => resolveFiles(resolved, mountPath)),
       ],
       options.imports ?? [],
     )

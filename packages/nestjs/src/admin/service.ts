@@ -62,6 +62,7 @@ import {
   ADMIN_CAPABILITIES,
   ADMIN_CONCURRENCY,
   ADMIN_DASHBOARD,
+  ADMIN_FILES,
   ADMIN_TEAM,
   ADMIN_HOOKS,
   ADMIN_MODELS,
@@ -125,6 +126,7 @@ export class AdminService implements OnModuleInit {
     // Both optional: an admin without a built-in login has no team screen, and
     // one without roles gives every administrator every capability.
     @Inject(ADMIN_TEAM) private readonly team: unknown,
+    @Inject(ADMIN_FILES) private readonly files: unknown,
     @Inject(ADMIN_CAPABILITIES)
     private readonly can: (context: ExecutionContext, capability: AdminCapability) => boolean,
     @Inject(ADMIN_CONCURRENCY)
@@ -334,6 +336,7 @@ export class AdminService implements OnModuleInit {
       // Only when the guard is on: naming a field the server will ignore would
       // suggest a protection that is not running.
       (model) => (this.concurrency === 'optimistic' ? updatedFieldFor(model) : undefined),
+      (this.files as { maxSize?: number } | undefined)?.maxSize,
     )
   }
 

@@ -32,7 +32,22 @@ import type { FieldMetadata, ModelMetadata } from '../metadata/model.js'
  * to know how to render each one, so an open string would mean silently
  * falling back to a plain input and no way to notice.
  */
-export type FieldWidget = 'textarea' | 'password' | 'email' | 'url' | 'color' | 'json'
+export type FieldWidget =
+  | 'textarea'
+  | 'password'
+  | 'email'
+  | 'url'
+  | 'color'
+  | 'json'
+  /**
+   * A file, held on a string column as a storage key.
+   *
+   * `'image'` is the same thing with a preview and a default that only accepts
+   * pictures. Both need somewhere to put the bytes; without configuration that
+   * is the local disk, which works immediately and warns in production.
+   */
+  | 'file'
+  | 'image'
 
 export interface FieldOverride {
   /**
@@ -63,6 +78,27 @@ export interface FieldOverride {
 
   /** What to call it, when the column name is not what people call the thing. */
   readonly label?: string
+
+  /**
+   * Which content types a file field accepts.
+   *
+   * **Enforced on the server**, from the bytes rather than from the extension
+   * or from whatever the request claimed. The browser is told as well, but only
+   * so the file picker filters - a control in a browser has never been a rule.
+   *
+   * A prefix ending in `/*` matches a family: `['image/*', 'application/pdf']`.
+   * Omitted, an `image` widget accepts pictures and a `file` widget accepts
+   * anything the global limit allows.
+   */
+  readonly accept?: readonly string[]
+
+  /**
+   * The largest this field will take, as bytes or as `'2mb'`.
+   *
+   * Checked while the upload streams, so an oversized file is refused partway
+   * rather than after it has all arrived. Falls back to the module-wide limit.
+   */
+  readonly maxSize?: number | string
 
   /** How to edit it. See {@link FieldWidget}. */
   readonly widget?: FieldWidget

@@ -52,3 +52,4 @@ pnpm-debug.log*
 # Throwaway patch scripts. Used to apply an edit and then deleted - three of
 # them reached a commit anyway, so the rule is here rather than in a habit.
 na-*.mjs
+.nest-admin/
