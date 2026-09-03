@@ -23,6 +23,7 @@
  * hole with a reassuring name.
  */
 import type { FieldMetadata, ModelMetadata } from '../metadata/model.js'
+import { isSoftDeleteField } from './soft-delete.js'
 
 /**
  * How a field should be edited, when its type does not say enough.
@@ -198,6 +199,19 @@ export interface ModelOverride {
   /** Where the model sits in the resource list. Lower first; unset last. */
   readonly order?: number
 
+  /**
+   * The column that marks a record deleted, rather than removing it.
+   *
+   * **Enforced.** With it, Delete writes the current time into this column and
+   * every list hides the marked rows; without it, Delete is what it always was.
+   * The column is also refused in writes, so nothing can mark or unmark a
+   * record by editing a form.
+   *
+   * Must be an optional `DateTime` the database does not generate. Anything
+   * else is refused at startup - see `unusableSoftDeleteFields`.
+   */
+  readonly softDelete?: string
+
   readonly fields?: Readonly<Record<string, FieldOverride>>
 }
 
@@ -220,7 +234,17 @@ export function isReadOnly(
 ): boolean {
   // Generated values are read-only whatever the configuration says: they are
   // the database's to produce, and were never writable.
-  return field.isGenerated || fieldOverride(overrides, model, field.name)?.readOnly === true
+  //
+  // A soft-delete column joins them, and for a related reason: it is the
+  // admin's to write. Leaving it editable would put a date picker on a form
+  // that deletes the record when it is filled in, and restores it when it is
+  // cleared - the same two operations the Delete and Restore buttons perform,
+  // reachable by accident and with no confirmation.
+  return (
+    field.isGenerated ||
+    isSoftDeleteField(overrides, model, field.name) ||
+    fieldOverride(overrides, model, field.name)?.readOnly === true
+  )
 }
 
 /**

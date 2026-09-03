@@ -29,6 +29,7 @@
  */
 import {
   InvalidQueryError,
+  type DeletedView,
   type FieldMetadata,
   type FilterOperator,
   type FilterRule,
@@ -93,7 +94,7 @@ function rejectStructuredValue(name: string, value: unknown): void {
 }
 
 /** Every parameter this API understands. Anything else is a client mistake. */
-const KNOWN_PARAMETERS = new Set(['page', 'perPage', 'search', 'sort', 'filter'])
+const KNOWN_PARAMETERS = new Set(['page', 'perPage', 'search', 'sort', 'filter', 'deleted'])
 
 /**
  * Reject query parameters the API does not define.
@@ -316,4 +317,29 @@ export function parseListQuery(raw: RawQuery, model: ModelMetadata): ListQuery {
     ...(filters ? { filters } : {}),
     ...(search !== undefined && search !== '' ? { search } : {}),
   }
+}
+
+/**
+ * Which records a list should show: live ones, marked ones, or both.
+ *
+ * Separate from `parseListQuery` because it is not part of `ListQuery`. The
+ * adapters know nothing about soft delete - the service turns this into an
+ * ordinary filter on an ordinary column - and putting it in the query contract
+ * would push a configuration concept into the layer that reads a schema.
+ *
+ * Absent means `live`, which is what every screen showed before soft delete
+ * existed. A model that gains the option does not change what anybody sees
+ * until they ask.
+ */
+export function parseDeletedView(raw: RawQuery): DeletedView {
+  const value = toSingleString('deleted', raw['deleted'])
+  if (value === undefined || value === '') return 'live'
+
+  if (value !== 'live' && value !== 'deleted' && value !== 'all') {
+    throw new InvalidQueryError(
+      `Unknown value "${value}" for "deleted". Use live, deleted, or all.`,
+    )
+  }
+
+  return value
 }

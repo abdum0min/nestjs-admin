@@ -28,7 +28,23 @@ import {
   type ModelMetadata,
   type SortRule,
 } from '@nest-admin/core'
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 
 import type { DrizzleColumn, DrizzleTable } from '../schema/introspect.js'
 
@@ -135,10 +151,15 @@ function condition(model: ModelMetadata, entry: DrizzleTable, rule: FilterRule):
         rule.value.map((entryValue) => coerce(field, entryValue, model.name)),
       )
     }
+    // SQL has no equality with null: `col = NULL` is not false, it is unknown,
+    // so a row is never returned by it. Prisma's `equals: null` already means
+    // IS NULL, and without this the two adapters would answer the same filter
+    // differently - the Drizzle one with nothing at all. Soft delete asks
+    // exactly this question of every list, which is how it was found.
     case 'eq':
-      return eq(column as never, value)
+      return value === null ? isNull(column as never) : eq(column as never, value)
     case 'ne':
-      return ne(column as never, value)
+      return value === null ? isNotNull(column as never) : ne(column as never, value)
     case 'gt':
       return gt(column as never, value)
     case 'gte':

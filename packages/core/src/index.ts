@@ -64,6 +64,12 @@ export type {
   ModelOverride,
   ModelOverrides,
 } from './config/overrides.js'
+export type { DeletedView } from './config/soft-delete.js'
+export {
+  isSoftDeleteField,
+  softDeleteFieldOf,
+  unusableSoftDeleteFields,
+} from './config/soft-delete.js'
 export type { ResourceSelection } from './config/resources.js'
 export { selectModels, unknownSelectionNames } from './config/resources.js'
 export {

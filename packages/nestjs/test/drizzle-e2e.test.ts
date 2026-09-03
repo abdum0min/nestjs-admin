@@ -47,6 +47,9 @@ const articles = sqliteTable('articles', {
     .notNull()
     .default('DRAFT'),
   authorId: text('author_id').references(() => authors.id),
+  // Optional, a date, not generated: what soft delete needs of a column. Here
+  // so the whole loop is proved against a real database rather than a double.
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 })
 
 const authorsRelations = relations(authors, ({ many }) => ({ articles: many(articles) }))
@@ -73,7 +76,8 @@ beforeAll(async () => {
     CREATE TABLE articles (
       id TEXT PRIMARY KEY, title TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'DRAFT',
-      author_id TEXT REFERENCES authors(id)
+      author_id TEXT REFERENCES authors(id),
+      deleted_at INTEGER
     );
   `)
 
@@ -83,8 +87,8 @@ beforeAll(async () => {
   sqlite.exec(`
     INSERT INTO authors VALUES ('a1','ada@example.com','Ada',1,${recent});
     INSERT INTO authors VALUES ('a2','bob@example.com','Bob',0,${recent});
-    INSERT INTO articles VALUES ('r1','Hello','PUBLISHED','a1');
-    INSERT INTO articles VALUES ('r2','Draft','DRAFT','a1');
+    INSERT INTO articles VALUES ('r1','Hello','PUBLISHED','a1',NULL);
+    INSERT INTO articles VALUES ('r2','Draft','DRAFT','a1',NULL);
   `)
 
   const moduleRef = await Test.createTestingModule({
@@ -93,7 +97,10 @@ beforeAll(async () => {
         adapter: new DrizzleAdapter({ db, schema }),
         auth: unsafeAllowAllRequests(),
         uiRoot: BUILT_UI_ROOT,
-        models: { authors: { label: 'Writers', displayField: 'name' } },
+        models: {
+          authors: { label: 'Writers', displayField: 'name' },
+          articles: { softDelete: 'deletedAt' },
+        },
       }),
     ],
   }).compile()
@@ -276,5 +283,41 @@ describe('the dashboard', () => {
     const { body } = await get('/admin/dashboard').expect(200)
     const charts = body.data.widgets.filter((w: { kind: string }) => w.kind === 'chart')
     expect(charts.every((w: { model: string }) => w.model !== 'articles')).toBe(true)
+  })
+})
+
+describe('soft delete, on a real database', () => {
+  /**
+   * The reason this is here rather than only against the double.
+   *
+   * Every list on a soft-deleted model asks `deletedAt = null`, and SQL has no
+   * equality with null: `col = NULL` is unknown, never true, so the Drizzle
+   * adapter answered that filter with no rows at all while Prisma answered it
+   * correctly. Two adapters disagreeing about the same filter is exactly what
+   * this suite exists to catch.
+   */
+  it('hides a marked record and shows it again on request', async () => {
+    await request(app.getHttpServer()).delete('/admin/articles/r2').expect(200)
+
+    const live = await get('/admin/articles').expect(200)
+    expect(live.body.data.map((row: { id: string }) => row.id)).toEqual(['r1'])
+
+    const marked = await get('/admin/articles?deleted=deleted').expect(200)
+    expect(marked.body.data.map((row: { id: string }) => row.id)).toEqual(['r2'])
+
+    const all = await get('/admin/articles?deleted=all').expect(200)
+    expect(all.body.data).toHaveLength(2)
+  })
+
+  it('restores it', async () => {
+    await request(app.getHttpServer()).post('/admin/restore/articles/r2').expect(201)
+
+    const live = await get('/admin/articles').expect(200)
+    expect(live.body.data.map((row: { id: string }) => row.id)).toEqual(['r1', 'r2'])
+  })
+
+  it('still removes the row when asked to', async () => {
+    await request(app.getHttpServer()).delete('/admin/articles/r2?permanent=true').expect(200)
+    await get('/admin/articles/r2').expect(404)
   })
 })

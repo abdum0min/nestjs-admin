@@ -22,6 +22,7 @@ import {
   ModelNotFoundError,
   updatedFieldFor,
   RecordNotFoundError,
+  type DeletedView,
   type ListQuery,
   type FieldMetadata,
   type FilterRule,
@@ -33,9 +34,11 @@ import {
   type ModelOverrides,
   type ResourceSelection,
   selectModels,
+  softDeleteFieldOf,
   unknownOverrideNames,
   unknownSelectionNames,
   unusablePlaceholders,
+  unusableSoftDeleteFields,
   unwritableHiddenFields,
 } from '@nest-admin/core'
 import {
@@ -53,7 +56,7 @@ import type { AdminAuth } from '../auth/contract.js'
 import { readDecision, type AdminOperation, type AdminResourceAuth } from '../auth/resource.js'
 import type { AdminCapability } from '../auth/roles.js'
 import { clientMessage } from '../http/exception.filter.js'
-import { parseListQuery, type RawQuery } from '../http/query-parser.js'
+import { parseDeletedView, parseListQuery, type RawQuery } from '../http/query-parser.js'
 import type { AdminActionResult, AdminActionsByModel } from '../actions/contract.js'
 import type { AdminHooksByModel } from '../hooks/contract.js'
 import {
@@ -192,6 +195,18 @@ export class AdminService implements OnModuleInit {
           `that ${one ? 'is' : 'are'} neither an absolute URL, a path starting with "/", ` +
           `nor a data:image/ URI. The admin is one hash-routed page, so a relative path ` +
           `resolves differently on every screen. Use "/img/avatar.png" or a full URL.`,
+      )
+    }
+
+    // A column the admin cannot write `null` into would mark records that can
+    // never be restored; one it cannot write a date into falls through to
+    // destroying the row, which is the behaviour the option exists to stop.
+    const badSoftDelete = unusableSoftDeleteFields(exposed, this.overrides)
+    if (badSoftDelete.length > 0) {
+      throw new Error(
+        `AdminModule \`models\` declares soft delete on a column that cannot carry it: ` +
+          `${badSoftDelete.join('; ')}. Use an optional DateTime column the database does ` +
+          `not generate, for example \`deletedAt DateTime?\`.`,
       )
     }
 
@@ -370,11 +385,17 @@ export class AdminService implements OnModuleInit {
   ): Promise<Page<RecordData>> {
     const metadata = await this.requireModel(model)
     const scope = await this.assertAllowed(context, model, 'list')
+    const view = parseDeletedView(rawQuery)
+
     return this.projectPage(
       metadata,
       await this.adapter.list(
         model,
-        this.withScope(this.scopeToFields(metadata, parseListQuery(rawQuery, metadata)), scope),
+        this.forView(
+          model,
+          this.withScope(this.scopeToFields(metadata, parseListQuery(rawQuery, metadata)), scope),
+          view,
+        ),
       ),
     )
   }
@@ -463,6 +484,7 @@ export class AdminService implements OnModuleInit {
     context: ExecutionContext,
     model: string,
     ids: readonly RecordId[],
+    permanent = false,
   ): Promise<BulkDeleteResult> {
     const metadata = await this.requireModel(model)
     // Once, for the operation - not once per record. The permission is to
@@ -478,7 +500,6 @@ export class AdminService implements OnModuleInit {
       )
     }
 
-    const before = this.hooks?.[model]?.beforeDelete
     const deleted: RecordId[] = []
     const failed: Array<{ id: RecordId; message: string }> = []
 
@@ -489,9 +510,7 @@ export class AdminService implements OnModuleInit {
         // rather than a failed request, which is what the caller wants when
         // forty checkboxes were ticked.
         if (scope.length > 0) await this.readInScope(metadata, id, scope)
-        if (before) await before({ context, model, id })
-        await this.adapter.delete(model, id)
-        await this.runAfter(context, model, 'afterDelete', { id })
+        await this.removeOne(context, model, id, permanent)
         deleted.push(id)
       } catch (cause) {
         // Through the filter's own rule, so a refusal explains itself and an
@@ -503,17 +522,52 @@ export class AdminService implements OnModuleInit {
     return { deleted, failed }
   }
 
-  async delete(context: ExecutionContext, model: string, id: RecordId): Promise<void> {
+  /**
+   * Delete one record - or mark it, on a model that keeps its deleted rows.
+   *
+   * `permanent` is the caller saying "actually remove it", and it is offered
+   * in the interface only on a record that is already marked. There is no
+   * separate permission for it: whoever may delete a record may finish the
+   * job, and inventing a right that nothing else in the configuration mentions
+   * would be a permission nobody knows they have to grant.
+   */
+  async delete(
+    context: ExecutionContext,
+    model: string,
+    id: RecordId,
+    permanent = false,
+  ): Promise<void> {
     const metadata = await this.requireModel(model)
     const scope = await this.assertAllowed(context, model, 'delete')
 
     if (scope.length > 0) await this.readInScope(metadata, id, scope)
 
-    const before = this.hooks?.[model]?.beforeDelete
-    if (before) await before({ context, model, id })
+    await this.removeOne(context, model, id, permanent)
+  }
 
-    await this.adapter.delete(model, id)
-    await this.runAfter(context, model, 'afterDelete', { id })
+  /**
+   * Bring a marked record back.
+   *
+   * Authorized as `delete`, not as `update`, because that is the operation it
+   * undoes. A principal trusted to take a record out of every list is trusted
+   * to put it back; one who may only edit records should not be able to
+   * resurrect what somebody else decided to remove.
+   */
+  async restore(context: ExecutionContext, model: string, id: RecordId): Promise<RecordData> {
+    const metadata = await this.requireModel(model)
+    const scope = await this.assertAllowed(context, model, 'delete')
+
+    const field = this.softDeleteField(model)
+    if (field === undefined) {
+      throw new InvalidQueryError(
+        `"${model}" does not use soft delete, so its deleted records are gone rather than ` +
+          `marked. There is nothing to restore.`,
+      )
+    }
+
+    if (scope.length > 0) await this.readInScope(metadata, id, scope)
+
+    return this.project(metadata, await this.adapter.update(model, id, { [field]: null }))
   }
 
   /**
@@ -551,7 +605,15 @@ export class AdminService implements OnModuleInit {
         model,
         id,
         relationField,
-        this.withScope(this.scopeToFields(target, parseListQuery(rawQuery, target)), targetScope),
+        // Live records only, with no way to ask otherwise. A deleted child
+        // showing under its parent would undo the delete everywhere it
+        // mattered; restoring one is done from the target model's own list,
+        // which is where the toggle lives.
+        this.forView(
+          target.name,
+          this.withScope(this.scopeToFields(target, parseListQuery(rawQuery, target)), targetScope),
+          'live',
+        ),
       ),
     )
   }
@@ -972,6 +1034,68 @@ export class AdminService implements OnModuleInit {
   private withScope(query: ListQuery, scope: readonly FilterRule[]): ListQuery {
     if (scope.length === 0) return query
     return { ...query, filters: [...(query.filters ?? []), ...scope] }
+  }
+
+  /** The column that marks a record deleted on this model, if it has one. */
+  private softDeleteField(model: string): string | undefined {
+    return softDeleteFieldOf(this.overrides, model)
+  }
+
+  /**
+   * Narrow a list to live records, to marked ones, or to neither.
+   *
+   * An ordinary filter on an ordinary column, appended the same way a scope is.
+   * The adapters are told nothing about soft delete and never need to be: from
+   * their side this is `deletedAt eq null`, which is a question they already
+   * knew how to ask.
+   *
+   * A model with no `softDelete` refuses the parameter rather than ignoring it.
+   * Ignoring it would answer a request for the deleted records with the live
+   * ones - the wrong rows, reported as success.
+   */
+  private forView(model: string, query: ListQuery, view: DeletedView): ListQuery {
+    const field = this.softDeleteField(model)
+
+    if (field === undefined) {
+      if (view === 'live') return query
+      throw new InvalidQueryError(
+        `"${model}" does not use soft delete, so it has no deleted records. ` +
+          `Configure models: { ${model}: { softDelete: '<column>' } } to keep them.`,
+      )
+    }
+
+    if (view === 'all') return query
+
+    const rule: FilterRule = { field, operator: view === 'live' ? 'eq' : 'ne', value: null }
+    return { ...query, filters: [...(query.filters ?? []), rule] }
+  }
+
+  /**
+   * Remove one record, or mark it.
+   *
+   * Shared by `delete` and `deleteMany` so the two cannot disagree about what
+   * Delete means - which they would, eventually, if each decided for itself.
+   *
+   * The hooks run either way. From everywhere except the database this *is* a
+   * delete: the record leaves every list, and a `beforeDelete` that refuses to
+   * let go of a record with unpaid invoices has exactly the same reason to
+   * refuse when the row is only being marked.
+   */
+  private async removeOne(
+    context: ExecutionContext,
+    model: string,
+    id: RecordId,
+    permanent: boolean,
+  ): Promise<void> {
+    const field = permanent ? undefined : this.softDeleteField(model)
+
+    const before = this.hooks?.[model]?.beforeDelete
+    if (before) await before({ context, model, id })
+
+    if (field === undefined) await this.adapter.delete(model, id)
+    else await this.adapter.update(model, id, { [field]: new Date() })
+
+    await this.runAfter(context, model, 'afterDelete', { id })
   }
 
   /**

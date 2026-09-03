@@ -24,6 +24,7 @@ import {
   isReadOnly,
   inverseRelationField,
   relationShape,
+  softDeleteFieldOf,
   type FieldMetadata,
   type ModelMetadata,
   type ModelOverrides,
@@ -215,6 +216,20 @@ export interface ModelDto {
    * stops guarding.
    */
   readonly versionField?: string
+
+  /**
+   * The column that marks a record deleted, when this model keeps its rows.
+   *
+   * Present only where `softDelete` is configured, and it is what tells the
+   * interface that deleting can be undone: the list offers a view of the marked
+   * records, a marked record offers Restore, and the confirmation says "this
+   * can be undone" instead of the opposite. Without it every screen behaves
+   * exactly as it did before soft delete existed.
+   *
+   * The value of the column travels in the record like any other field, so
+   * nothing extra is needed to tell one row from another.
+   */
+  readonly softDeleteField?: string
 
   /**
    * Application-defined actions this principal may run.
@@ -415,6 +430,9 @@ export function toMetadataDto(
       displayField: displayFieldFor(model),
       can: permissions?.get(model.name) ?? ALL_PERMITTED,
       ...(versionFieldOf(model) !== undefined ? { versionField: versionFieldOf(model) } : {}),
+      ...(softDeleteFieldOf(overrides, model.name) !== undefined
+        ? { softDeleteField: softDeleteFieldOf(overrides, model.name) }
+        : {}),
       actions: actions?.get(model.name) ?? [],
       ...(overrides?.[model.name]?.label !== undefined
         ? { label: overrides[model.name]?.label }

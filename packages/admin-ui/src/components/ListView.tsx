@@ -5,14 +5,21 @@
  * link all come from the model descriptor the server sent - there is no branch
  * anywhere on a model or field name.
  */
-import { Eye, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Eye, MoreHorizontal, Pencil, Plus, Trash2, Undo2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { deleteRecord, deleteRecords, listRecords, runAction } from '../api/client.js'
+import {
+  deleteRecord,
+  deleteRecords,
+  listRecords,
+  restoreRecord,
+  runAction,
+} from '../api/client.js'
 import type {
   ActionDescriptor,
   AdminRecord,
   BulkDeleteResult,
+  DeletedView,
   FieldDescriptor,
   FilterRule,
   ModelDescriptor,
@@ -33,6 +40,7 @@ import {
 import { formatCell } from '../metadata/format.js'
 import { relationForForeignKey, relationLink } from '../metadata/relations.js'
 import { Actions } from './Actions.jsx'
+import { Badge } from './ui/badge.jsx'
 import { Empty, ErrorState, TableSkeleton } from './States.jsx'
 import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Button } from './ui/button.jsx'
@@ -103,6 +111,16 @@ export function ListView({
    */
   const [filterKey, setFilterKey] = useState(0)
 
+  /**
+   * Which records this list is showing, on a model that keeps its deleted rows.
+   *
+   * Only ever moved off `live` deliberately: a list that remembered it was
+   * showing deleted records would eventually have somebody delete from it,
+   * wonder why the row stayed, and delete it again - permanently.
+   */
+  const [deleted, setDeleted] = useState<DeletedView>('live')
+  const softDeleteField = model.softDeleteField
+
   // Reset view state when the model changes; a page number or sort field from
   // the previous model is meaningless here and would produce a 400.
   useEffect(() => {
@@ -117,6 +135,7 @@ export function ListView({
     setFilter(parseFilter(initialFilter))
     setSelected(new Set())
     setOutcome(undefined)
+    setDeleted('live')
   }, [model.name, initialFilter])
 
   // Debounce the search box so typing does not fire a request per keystroke.
@@ -160,12 +179,18 @@ export function ListView({
         ...(search ? { search } : {}),
         ...(sort ? { sort: [sort] } : {}),
         ...(filter ? { filters: [filter] } : {}),
+        // Only where the server offered it. A model without soft delete
+        // refuses the parameter rather than ignoring it, which is what keeps a
+        // request for deleted records from being answered with live ones.
+        ...(softDeleteField !== undefined ? { deleted } : {}),
       }),
     [
       model.name,
       page,
       perPage,
       search,
+      deleted,
+      softDeleteField,
       sort?.field,
       sort?.direction,
       filter?.field,
@@ -190,14 +215,28 @@ export function ListView({
       return next
     })
 
+  /**
+   * What Delete means for a selection depends on which view it was made in.
+   *
+   * In the Deleted view every selected record is already marked, so the only
+   * delete left is the permanent one - emptying the bin, which is what a person
+   * looking at that list is there to do. Everywhere else it marks, as a single
+   * row does.
+   */
+  const bulkPermanent = softDeleteField !== undefined && deleted === 'deleted'
+
   const removeSelected = async (): Promise<void> => {
     const chosen = ids.filter((id) => selected.has(id))
     if (chosen.length === 0) return
 
+    const count = `${chosen.length} ${chosen.length === 1 ? 'record' : 'records'}`
     const agreed = await confirm({
-      title: `Delete ${chosen.length} ${chosen.length === 1 ? 'record' : 'records'}?`,
-      description: 'This cannot be undone.',
-      confirmLabel: 'Delete',
+      title: bulkPermanent ? `Delete ${count} forever?` : `Delete ${count}?`,
+      description:
+        bulkPermanent || softDeleteField === undefined
+          ? 'This cannot be undone.'
+          : 'They will be hidden from this list and can be restored later.',
+      confirmLabel: bulkPermanent ? 'Delete forever' : 'Delete',
       destructive: true,
     })
     if (!agreed) return
@@ -205,7 +244,7 @@ export function ListView({
     setDeleting(true)
     setOutcome(undefined)
     try {
-      const result = await deleteRecords(model.name, chosen)
+      const result = await deleteRecords(model.name, chosen, bulkPermanent)
       setOutcome(result)
       setSelected(new Set())
       state.reload()
@@ -289,6 +328,25 @@ export function ListView({
           }}
         />
 
+        {softDeleteField === undefined ? null : (
+          <SimpleSelect
+            className="w-36"
+            aria-label={`Which ${modelLabel(model)} to show`}
+            placeholder="Live"
+            value={deleted}
+            options={[
+              { value: 'live', label: 'Live' },
+              { value: 'deleted', label: 'Deleted' },
+              { value: 'all', label: 'All' },
+            ]}
+            onValueChange={(next) => {
+              setDeleted(next as DeletedView)
+              setPage(1)
+              setSelected(new Set())
+            }}
+          />
+        )}
+
         {narrowed ? (
           <Button variant="ghost" size="sm" onClick={clearView}>
             <X />
@@ -312,7 +370,7 @@ export function ListView({
             onClick={() => void removeSelected()}
           >
             <Trash2 />
-            {deleting ? 'Deleting…' : 'Delete selected'}
+            {deleting ? 'Deleting…' : bulkPermanent ? 'Delete forever' : 'Delete selected'}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
             Clear selection
@@ -395,8 +453,18 @@ export function ListView({
                   {state.data.records.map((record, index) => {
                     const id = recordId(model, record)
                     const ticked = id !== undefined && selected.has(id)
+                    // The column travels in the record like any other, so
+                    // whether a row is marked needs no extra request.
+                    const gone =
+                      softDeleteField !== undefined &&
+                      record[softDeleteField] !== null &&
+                      record[softDeleteField] !== undefined
                     return (
-                      <TableRow key={id ?? index} data-selected={ticked || undefined}>
+                      <TableRow
+                        key={id ?? index}
+                        data-selected={ticked || undefined}
+                        className={gone ? 'opacity-55' : undefined}
+                      >
                         {selectable ? (
                           <TableCell className="w-px whitespace-nowrap">
                             {id === undefined ? null : (
@@ -417,12 +485,21 @@ export function ListView({
                         ))}
                         <TableCell className="w-px whitespace-nowrap">
                           {id === undefined ? null : (
-                            <RowActions
-                              model={model}
-                              id={id}
-                              label={rowLabel(model, record, id)}
-                              onDone={state.reload}
-                            />
+                            <div className="flex items-center justify-end gap-2">
+                              {/* Only in the mixed view. In the Deleted view
+                                  the control above already says it, once,
+                                  instead of on every row. */}
+                              {gone && deleted === 'all' ? (
+                                <Badge variant="outline">Deleted</Badge>
+                              ) : null}
+                              <RowActions
+                                model={model}
+                                id={id}
+                                label={rowLabel(model, record, id)}
+                                deleted={gone}
+                                onDone={state.reload}
+                              />
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
@@ -476,12 +553,15 @@ function RowActions({
   model,
   id,
   label,
+  deleted = false,
   onDone,
 }: {
   readonly model: ModelDescriptor
   readonly id: string
   /** The record's name, so a confirmation can say which one. */
   readonly label: string
+  /** Already marked deleted, so Delete becomes Restore and Delete forever. */
+  readonly deleted?: boolean
   readonly onDone: () => void
 }) {
   const confirm = useConfirm()
@@ -491,12 +571,19 @@ function RowActions({
   const recordActions = (model.actions ?? []).filter((action) => action.scope === 'record')
   const canEdit = model.can?.update !== false
   const canDelete = model.can?.delete !== false
+  const reversible = model.softDeleteField !== undefined
 
-  const remove = async (): Promise<void> => {
+  const remove = async (permanent = false): Promise<void> => {
     const agreed = await confirm({
-      title: `Delete ${label}?`,
-      description: 'This cannot be undone.',
-      confirmLabel: 'Delete',
+      title: permanent ? `Delete ${label} forever?` : `Delete ${label}?`,
+      // The one sentence people actually read before clicking, so it has to be
+      // true: on a model that keeps its rows, "this cannot be undone" would be
+      // a lie, and a lie in that direction makes every real warning weaker.
+      description:
+        permanent || !reversible
+          ? 'This cannot be undone.'
+          : 'It will be hidden from this list and can be restored later.',
+      confirmLabel: permanent ? 'Delete forever' : 'Delete',
       destructive: true,
     })
     if (!agreed) return
@@ -504,7 +591,20 @@ function RowActions({
     setBusy(true)
     setError(undefined)
     try {
-      await deleteRecord(model.name, id)
+      await deleteRecord(model.name, id, permanent)
+      onDone()
+    } catch (cause) {
+      setError(cause)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const restore = async (): Promise<void> => {
+    setBusy(true)
+    setError(undefined)
+    try {
+      await restoreRecord(model.name, id)
       onDone()
     } catch (cause) {
       setError(cause)
@@ -561,14 +661,26 @@ function RowActions({
           </Button>
         ) : null}
 
+        {canDelete && deleted ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={busy}
+            aria-label={`Restore ${label}`}
+            onClick={() => void restore()}
+          >
+            <Undo2 />
+          </Button>
+        ) : null}
+
         {canDelete ? (
           <Button
             variant="ghost"
             size="icon-sm"
             className="hover:text-destructive"
             disabled={busy}
-            aria-label={`Delete ${label}`}
-            onClick={() => void remove()}
+            aria-label={deleted ? `Delete ${label} forever` : `Delete ${label}`}
+            onClick={() => void remove(deleted)}
           >
             <Trash2 />
           </Button>
@@ -610,10 +722,16 @@ function RowActions({
                   </a>
                 </DropdownMenuItem>
               ) : null}
+              {canDelete && deleted ? (
+                <DropdownMenuItem onSelect={() => void restore()}>
+                  <Undo2 />
+                  Restore
+                </DropdownMenuItem>
+              ) : null}
               {canDelete ? (
-                <DropdownMenuItem variant="destructive" onSelect={() => void remove()}>
+                <DropdownMenuItem variant="destructive" onSelect={() => void remove(deleted)}>
                   <Trash2 />
-                  Delete
+                  {deleted ? 'Delete forever' : 'Delete'}
                 </DropdownMenuItem>
               ) : null}
               {recordActions.length > 0 ? <DropdownMenuSeparator /> : null}

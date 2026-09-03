@@ -162,6 +162,18 @@ export const TEST_MODELS: readonly ModelMetadata[] = [
         isGenerated: false,
       },
       {
+        // Optional, a date, and not generated - the three things soft delete
+        // needs of a column. On Post rather than User so the child of a
+        // relation can be marked, which is where hiding it is least obvious.
+        name: 'deletedAt',
+        kind: 'datetime',
+        isId: false,
+        isRequired: false,
+        isUnique: false,
+        isList: false,
+        isGenerated: false,
+      },
+      {
         // The column the relation is stored in. A real adapter reports both, and
         // the write path needs the scalar: relations are not directly writable.
         name: 'authorId',
@@ -321,7 +333,16 @@ export class InMemoryAdapter implements OrmAdapter {
     )
     const key = inverse?.relation?.from ?? 'id'
 
-    const matched = this.#require(target).filter((row) => String(row[key]) === String(id))
+    // Both real adapters AND the query's own filters onto the relation
+    // condition - Prisma with `AND`, Drizzle with `and()`. The double did not,
+    // which made it silently unable to reproduce anything that narrows a
+    // related list: a row-level scope, or soft delete hiding a marked child.
+    const matched = this.#require(target)
+      .filter((row) => String(row[key]) === String(id))
+      .filter((row) =>
+        (query.filters ?? []).every((rule) => matches(row[rule.field], rule.operator, rule.value)),
+      )
+
     const page = query.page ?? 1
     const perPage = query.perPage ?? 25
     return {
@@ -395,11 +416,17 @@ export class InMemoryAdapter implements OrmAdapter {
 }
 
 function matches(actual: unknown, operator: string, expected: unknown): boolean {
+  // A column a row never set reads as `null` from every real database, not as
+  // absent. Without this the double disagrees with both adapters about the one
+  // question soft delete asks of every list - "is deletedAt null" - and would
+  // have reported the whole feature broken while it worked.
+  const value = actual === undefined ? null : actual
+
   switch (operator) {
     case 'eq':
-      return actual === expected
+      return value === expected
     case 'ne':
-      return actual !== expected
+      return value !== expected
     case 'contains':
       return typeof actual === 'string' && actual.includes(String(expected))
     case 'startsWith':

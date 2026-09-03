@@ -1,6 +1,6 @@
 {
   "name": "@nest-admin/admin-ui",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "private": true,
   "description": "The Nest Admin single-page application. Built to static assets and served by the NestJS integration under /admin.",
   "license": "MIT",

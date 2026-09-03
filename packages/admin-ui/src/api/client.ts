@@ -269,10 +269,25 @@ export async function updateRecord(
 }
 
 /** `DELETE /admin/:model/:id` - the server answers `{ success: true, data: null }`. */
-export async function deleteRecord(model: string, id: string): Promise<void> {
-  await request<null>(`/${encodeURIComponent(model)}/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
+export async function deleteRecord(model: string, id: string, permanent = false): Promise<void> {
+  await request<null>(
+    `/${encodeURIComponent(model)}/${encodeURIComponent(id)}${permanent ? '?permanent=true' : ''}`,
+    { method: 'DELETE' },
+  )
+}
+
+/**
+ * `POST /admin/restore/:model/:id` - undo a soft delete.
+ *
+ * Under a reserved first segment, like actions, because `/:model/:id/restore`
+ * would be indistinguishable from a relation of that name.
+ */
+export async function restoreRecord(model: string, id: string): Promise<AdminRecord> {
+  const { data } = await request<AdminRecord>(
+    `/restore/${encodeURIComponent(model)}/${encodeURIComponent(id)}`,
+    { method: 'POST' },
+  )
+  return data
 }
 
 /**
@@ -286,11 +301,12 @@ export async function deleteRecord(model: string, id: string): Promise<void> {
 export async function deleteRecords(
   model: string,
   ids: readonly string[],
+  permanent = false,
 ): Promise<BulkDeleteResult> {
-  const { data } = await request<BulkDeleteResult>(`/${encodeURIComponent(model)}`, {
-    method: 'DELETE',
-    body: JSON.stringify({ ids }),
-  })
+  const { data } = await request<BulkDeleteResult>(
+    `/${encodeURIComponent(model)}${permanent ? '?permanent=true' : ''}`,
+    { method: 'DELETE', body: JSON.stringify({ ids }) },
+  )
   return data
 }
 

@@ -106,6 +106,20 @@ const models = {
       views: { readOnly: true },
     },
   },
+
+  /* configuration.md - files, and deleting by marking */
+  Post: {
+    softDelete: 'deletedAt',
+    fields: {
+      avatarUrl: {
+        widget: 'image',
+        accept: ['image/*'],
+        maxSize: '2mb',
+        placeholder: '/img/default-avatar.png',
+      },
+      contract: { widget: 'file', accept: ['application/pdf'] },
+    },
+  },
 } as const satisfies ModelOverrides
 
 /* getting-started.md - "Add rules the schema cannot express" */

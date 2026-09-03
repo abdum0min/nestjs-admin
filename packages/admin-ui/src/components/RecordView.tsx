@@ -6,10 +6,10 @@
  * sends that record's label alongside the key. A to-many gets its own
  * paginated section below the fields.
  */
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 
-import { deleteRecord, fetchRecord } from '../api/client.js'
+import { deleteRecord, fetchRecord, restoreRecord } from '../api/client.js'
 import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
@@ -19,6 +19,7 @@ import { relationLink } from '../metadata/relations.js'
 import { Actions } from './Actions.jsx'
 import { RelatedList } from './RelatedList.jsx'
 import { ErrorState, FormSkeleton } from './States.jsx'
+import { Alert, AlertDescription, AlertTitle } from './ui/alert.jsx'
 import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Button } from './ui/button.jsx'
 import { Card, CardContent } from './ui/card.jsx'
@@ -38,17 +39,22 @@ export function RecordView({
   const state = useAsync(() => fetchRecord(model.name, id), [model.name, id])
   const [failure, setFailure] = useState<unknown>(undefined)
 
-  const onDelete = async (): Promise<void> => {
+  const onDelete = async (permanent: boolean, reversible: boolean): Promise<void> => {
     const agreed = await confirm({
-      title: `Delete this ${modelLabel(model)}?`,
-      description: 'This cannot be undone.',
-      confirmLabel: 'Delete',
+      title: permanent
+        ? `Delete this ${modelLabel(model)} forever?`
+        : `Delete this ${modelLabel(model)}?`,
+      description:
+        permanent || !reversible
+          ? 'This cannot be undone.'
+          : 'It will be hidden from the list and can be restored later.',
+      confirmLabel: permanent ? 'Delete forever' : 'Delete',
       destructive: true,
     })
     if (!agreed) return
 
     try {
-      await deleteRecord(model.name, id)
+      await deleteRecord(model.name, id, permanent)
       navigate({ kind: 'list', model: model.name })
     } catch (cause) {
       // Shown on the page rather than in a `window.alert`. A refusal here is
@@ -73,6 +79,23 @@ export function RecordView({
   const record = state.data
   const title = record[model.displayField]
   const named = title === null || title === undefined || title === '' ? id : String(title)
+
+  // A marked record is still readable at its own URL - that is how anybody
+  // restores one - so this page has to say what it is looking at. Without the
+  // banner it is an ordinary record that has silently left every list.
+  const reversible = model.softDeleteField !== undefined
+  const markedField = model.fields.find((field) => field.name === model.softDeleteField)
+  const markedAt = markedField === undefined ? undefined : record[markedField.name]
+  const gone = markedAt !== null && markedAt !== undefined
+
+  const onRestore = async (): Promise<void> => {
+    try {
+      await restoreRecord(model.name, id)
+      state.reload()
+    } catch (cause) {
+      setFailure(cause)
+    }
+  }
 
   return (
     <section className="flex flex-col gap-4">
@@ -101,14 +124,33 @@ export function RecordView({
               Edit
             </Button>
           )}
+          {model.can?.delete === false || !gone ? null : (
+            <Button variant="outline" onClick={() => void onRestore()}>
+              <Undo2 />
+              Restore
+            </Button>
+          )}
           {model.can?.delete === false ? null : (
-            <Button variant="destructive" onClick={() => void onDelete()}>
+            <Button variant="destructive" onClick={() => void onDelete(gone, reversible)}>
               <Trash2 />
-              Delete
+              {gone ? 'Delete forever' : 'Delete'}
             </Button>
           )}
         </div>
       </header>
+
+      {gone ? (
+        <Alert>
+          <Trash2 />
+          <AlertTitle>This record is deleted</AlertTitle>
+          <AlertDescription>
+            {markedField === undefined
+              ? 'It is hidden'
+              : `Deleted ${formatDetail(markedField, markedAt)}. It is hidden`}{' '}
+            from the {modelLabel(model)} list until it is restored.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {failure === undefined ? null : <ErrorState error={failure} />}
 

@@ -24,6 +24,13 @@ export function buildQueryString(query: ListQuery): string {
   const search = query.search?.trim()
   if (search) params.set('search', search)
 
+  // Only when it is not the default. A server older than soft delete rejects
+  // every parameter it does not know, so sending `deleted=live` on every list
+  // would break this build against one.
+  if (query.deleted !== undefined && query.deleted !== 'live') {
+    params.set('deleted', query.deleted)
+  }
+
   for (const rule of query.sort ?? []) {
     params.append('sort', `${rule.field}:${rule.direction}`)
   }

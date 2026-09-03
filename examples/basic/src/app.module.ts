@@ -162,6 +162,11 @@ const models = {
     displayField: 'title',
     order: 8,
     icon: 'file-text',
+    // Delete marks the row instead of removing it. The list gains a
+    // Live/Deleted/All chooser, a marked record gains Restore, and the column
+    // itself becomes read-only - a date picker that deletes the record when it
+    // is filled in would be the same two operations without the confirmation.
+    softDelete: 'deletedAt',
     fields: {
       title: { order: 1 },
       slug: { order: 2 },

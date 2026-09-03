@@ -149,6 +149,15 @@ export interface ModelDescriptor {
    * interface never works it out for itself.
    */
   readonly versionField?: string
+  /**
+   * The column that marks a record deleted, when this model keeps its rows.
+   *
+   * Present only where the application configured soft delete. It is what
+   * turns Delete into something that can be undone: the list gains a view of
+   * the marked records, a marked record gains Restore, and the confirmation
+   * stops saying "this cannot be undone" - because it can.
+   */
+  readonly softDeleteField?: string
   /** Buttons the application added, already filtered by the policy. */
   readonly actions?: readonly ActionDescriptor[]
 }
@@ -225,7 +234,19 @@ export interface ListQuery {
   readonly search?: string
   readonly sort?: readonly SortRule[]
   readonly filters?: readonly FilterRule[]
+  /**
+   * Which records to show on a model that keeps its deleted rows.
+   *
+   * Omitted means live records only, which is what every list showed before
+   * soft delete existed. Sent only for a model whose metadata carries a
+   * `softDeleteField`: anywhere else the server refuses it, deliberately, so a
+   * request for deleted records is never answered with the live ones.
+   */
+  readonly deleted?: DeletedView
 }
+
+/** The three views of a list on a model that marks records deleted. */
+export type DeletedView = 'live' | 'deleted' | 'all'
 
 /** What happened to each record a bulk delete named. */
 export interface BulkDeleteResult {

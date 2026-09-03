@@ -91,6 +91,23 @@ export class AdminController {
     return success(await this.service.runAction(context, model, action, id))
   }
 
+  /**
+   * `POST /admin/restore/:model/:id` - bring a marked record back.
+   *
+   * Literal segment first, like `actions`, rather than `/:model/:id/restore` -
+   * which would be indistinguishable from attaching to a relation called
+   * `restore`, and would be resolved in favour of whichever route was declared
+   * first rather than by what the caller meant.
+   */
+  @Post('restore/:model/:id')
+  async restore(
+    @AdminContext() context: ExecutionContext,
+    @Param('model') model: string,
+    @Param('id') id: string,
+  ): Promise<SuccessResponse<RecordData>> {
+    return success(await this.service.restore(context, model, id))
+  }
+
   @Get('meta')
   async meta(@AdminContext() context: ExecutionContext): Promise<SuccessResponse<MetadataDto>> {
     return success(await this.service.getMetadata(context))
@@ -168,8 +185,9 @@ export class AdminController {
     @AdminContext() context: ExecutionContext,
     @Param('model') model: string,
     @Param('id') id: string,
+    @Query('permanent') permanent?: string,
   ): Promise<SuccessResponse<null>> {
-    await this.service.delete(context, model, id)
+    await this.service.delete(context, model, id, isTrue(permanent))
     return success(null)
   }
 
@@ -189,6 +207,7 @@ export class AdminController {
     @AdminContext() context: ExecutionContext,
     @Param('model') model: string,
     @Body() body: { ids?: unknown },
+    @Query('permanent') permanent?: string,
   ): Promise<SuccessResponse<BulkDeleteResult>> {
     const ids: unknown = body?.ids
     if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' && typeof id !== 'number')) {
@@ -197,7 +216,9 @@ export class AdminController {
       )
     }
 
-    return success(await this.service.deleteMany(context, model, ids as RecordId[]))
+    return success(
+      await this.service.deleteMany(context, model, ids as RecordId[], isTrue(permanent)),
+    )
   }
 
   /**
@@ -257,4 +278,16 @@ export class AdminController {
     await this.service.detachRelated(context, model, id, relation, targetId)
     return success(null)
   }
+}
+
+/**
+ * A query-string flag, read the way a person would write it.
+ *
+ * `?permanent` with no value, `?permanent=true` and `?permanent=1` all mean the
+ * same thing to whoever typed them, and anything else - including the string
+ * `"false"`, which is truthy in JavaScript and has ended more than one
+ * afternoon - means no.
+ */
+function isTrue(value: string | undefined): boolean {
+  return value === '' || value === 'true' || value === '1'
 }

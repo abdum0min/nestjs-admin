@@ -13,6 +13,57 @@ since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
 
 ---
 
+## 0.13.2
+
+Deleting a record by marking it.
+
+### Added
+
+- **`softDelete`** on a model, naming the column that marks a record deleted:
+
+  ```ts
+  models: {
+    Post: {
+      softDelete: 'deletedAt'
+    }
+  }
+  ```
+
+  Closer to a defect being fixed than to a feature. A schema with a `deletedAt`
+  column has already decided its rows are kept; until now the admin listed
+  marked rows as live and its Delete button destroyed what the schema had
+  arranged to preserve.
+
+  With it, Delete writes the current time into the column, every list hides
+  marked records - including a related list under its parent, which is the
+  least obvious place for one to survive - the toolbar gains Live / Deleted /
+  All, and a marked record offers Restore and a Delete forever that means it.
+  The confirmation stops promising that deleting cannot be undone, because on
+  such a model it can, and a warning that is not true is one people learn to
+  skip.
+
+  `beforeDelete` and `afterDelete` still run: from everywhere except the
+  database this is a delete, and a hook that refuses to release a record with
+  unpaid invoices has the same reason to refuse when the row is only marked.
+  Restoring is authorized as `delete` rather than `update` - it undoes a
+  delete, and somebody who may only edit records should not be able to
+  resurrect what somebody else removed.
+
+  The column is refused in writes, so no form can delete a record with a date
+  picker. It must be an optional `DateTime` the database does not generate;
+  anything else fails at startup, naming the column and what is wrong with it.
+
+### Fixed
+
+- **The Drizzle adapter answered `field eq null` with no rows at all.** SQL has
+  no equality with null - `col = NULL` is unknown rather than false - so the
+  condition matched nothing, while Prisma's `equals: null` meant IS NULL and
+  matched correctly. Two adapters, one filter, opposite answers. Soft delete
+  asks exactly this question of every list, which is how it surfaced; it is
+  fixed for every filter, and proved against a real SQLite database.
+
+---
+
 ## 0.13.1
 
 A picture where a picture belongs.

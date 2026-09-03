@@ -418,6 +418,7 @@ models: {
 | `displayField` | Which field names a record when it is referenced elsewhere. **Server-enforced** |
 | `icon`         | One of the closed list below                                                    |
 | `order`        | Position in the navigation; unset models follow, alphabetically                 |
+| `softDelete`   | Column to mark instead of removing the row. **Server-enforced**                 |
 | `fields`       | Per-field options                                                               |
 
 `icon` accepts: `users` `user` `building` `box` `package` `tag`
@@ -430,6 +431,40 @@ Closed because the interface has to be able to draw each one; an unknown value
 would silently render nothing. A model with no icon gets its initial, which
 distinguishes one row from the next on the collapsed rail — the same icon on
 every entry would be decoration rather than information.
+
+### `softDelete`
+
+Many schemas already carry a `deletedAt` column. Name it, and Delete stops
+destroying rows:
+
+```ts
+models: {
+  Post: { softDelete: 'deletedAt' },
+}
+```
+
+What changes, all of it enforced on the server:
+
+|                      |                                                                     |
+| -------------------- | ------------------------------------------------------------------- |
+| Delete               | writes the current time into the column instead of removing the row |
+| Every list           | hides marked records, including a related list under its parent     |
+| The list toolbar     | gains **Live / Deleted / All**                                      |
+| A marked record      | offers **Restore**, and a **Delete forever** that means it          |
+| The confirmation     | stops saying "this cannot be undone", because it can                |
+| The column itself    | becomes read-only, so no form can delete a record by accident       |
+| `beforeDelete` hooks | still run - from everywhere but the database, this is a delete      |
+
+Restoring is authorized as `delete`, not as `update`: it undoes a delete, and
+somebody who may only edit records should not be able to resurrect what
+somebody else removed.
+
+The column must be an **optional `DateTime` the database does not generate**.
+Anything else is refused at startup, including a boolean - a date records
+_when_, which a flag cannot, and a nullable boolean has two ways of saying "not
+deleted" that no reader keeps straight.
+
+A model without `softDelete` behaves exactly as it always has.
 
 ### Field options
 

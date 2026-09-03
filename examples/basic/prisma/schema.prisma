@@ -207,6 +207,8 @@ model Post {
   publishedAt DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+  /// Marked rather than removed: see `softDelete` in the admin configuration.
+  deletedAt   DateTime?
 
   authorId String
   author   User   @relation(fields: [authorId], references: [id])
