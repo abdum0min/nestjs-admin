@@ -103,6 +103,26 @@ export interface FieldOverride {
   /** How to edit it. See {@link FieldWidget}. */
   readonly widget?: FieldWidget
 
+  /**
+   * The picture to show when a file field has none of its own.
+   *
+   * A `file` or `image` column is drawn wherever it is read - in the table, on
+   * the detail page, in the form - and two of its states are not a picture: the
+   * column is empty, or it points at something that is no longer there. Both
+   * fall back to this.
+   *
+   * Without one the admin draws its own icon, which is deliberately plain. A
+   * house avatar or a product silhouette reads better, and only the application
+   * has one.
+   *
+   * Must be an absolute URL, a root-relative path, or a `data:image/` URI.
+   * A relative path like `img/avatar.png` is rejected at startup rather than
+   * resolved: the admin is a hash-routed single page, so what it resolves
+   * against changes as you navigate, and the same value would work on one
+   * screen and 404 on the next.
+   */
+  readonly placeholder?: string
+
   /** Where it sits among the others. Lower comes first; unset comes last. */
   readonly order?: number
 }
@@ -328,4 +348,50 @@ export function unwritableHiddenFields(
   }
 
   return blocked
+}
+
+/**
+ * Placeholders that would not resolve to the picture they name.
+ *
+ * The admin is one hash-routed page, so a relative path is resolved against
+ * whatever route is open: `img/avatar.png` finds a file from the list screen
+ * and 404s from a detail page two segments deeper. The symptom is a default
+ * avatar that appears on some screens and not others, which reads as a caching
+ * problem and is not one.
+ *
+ * Reported at startup for the same reason a mistyped field name is: the value
+ * is written once, months before anybody notices what it does.
+ */
+export function unusablePlaceholders(overrides: ModelOverrides | undefined): readonly string[] {
+  if (!overrides) return []
+
+  const bad: string[] = []
+
+  for (const [modelName, override] of Object.entries(overrides)) {
+    for (const [fieldName, field] of Object.entries(override.fields ?? {})) {
+      const placeholder = field.placeholder
+      if (placeholder === undefined) continue
+
+      if (!isUsablePlaceholder(placeholder)) bad.push(`${modelName}.${fieldName}`)
+    }
+  }
+
+  return bad
+}
+
+/**
+ * The three forms that mean the same thing from every route.
+ *
+ * `data:` is narrowed to images: the value ends up in an `<img src>`, and while
+ * a browser will not execute anything from there, a `data:text/html` in a
+ * configuration field is a mistake worth naming rather than rendering as
+ * nothing.
+ */
+function isUsablePlaceholder(value: string): boolean {
+  return (
+    /^https?:\/\//i.test(value) ||
+    /^\/\//.test(value) ||
+    value.startsWith('/') ||
+    /^data:image\//i.test(value)
+  )
 }

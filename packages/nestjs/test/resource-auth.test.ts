@@ -181,7 +181,17 @@ describe('metadata filtering', () => {
 
     // `posts` pointed at the hidden model and is gone; everything else stays.
     expect(names).not.toContain('posts')
-    expect(names).toEqual(['id', 'email', 'name', 'bio', 'age', 'active', 'role', 'createdAt'])
+    expect(names).toEqual([
+      'id',
+      'email',
+      'name',
+      'bio',
+      'avatarUrl',
+      'age',
+      'active',
+      'role',
+      'createdAt',
+    ])
     expect(user.primaryKey).toEqual(['id'])
   })
 

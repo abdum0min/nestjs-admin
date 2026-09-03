@@ -13,6 +13,7 @@ import {
   fieldOverride,
   isReadOnly,
   unknownOverrideNames,
+  unusablePlaceholders,
   type FieldMetadata,
   type ModelMetadata,
 } from '../src/index.js'
@@ -146,5 +147,46 @@ describe('names that match nothing', () => {
       [],
     )
     expect(unknownOverrideNames(MODELS, undefined)).toEqual([])
+  })
+})
+
+describe('unusablePlaceholders', () => {
+  it('accepts the three forms that mean the same thing from every route', () => {
+    const fine = (placeholder: string) =>
+      unusablePlaceholders({ User: { fields: { avatarUrl: { placeholder } } } })
+
+    expect(fine('https://cdn.example.com/a.png')).toEqual([])
+    expect(fine('http://localhost:3000/a.png')).toEqual([])
+    expect(fine('//cdn.example.com/a.png')).toEqual([])
+    expect(fine('/img/avatar.png')).toEqual([])
+    expect(fine('data:image/svg+xml,%3Csvg%3E%3C/svg%3E')).toEqual([])
+  })
+
+  it('names a relative path, which resolves differently on every screen', () => {
+    expect(
+      unusablePlaceholders({ User: { fields: { avatarUrl: { placeholder: 'img/a.png' } } } }),
+    ).toEqual(['User.avatarUrl'])
+
+    expect(
+      unusablePlaceholders({ User: { fields: { avatarUrl: { placeholder: './a.png' } } } }),
+    ).toEqual(['User.avatarUrl'])
+  })
+
+  it('names a data URI that is not an image', () => {
+    // It cannot execute from an `img` src, so this is not a hole - it is a
+    // value that would draw nothing, which is worth saying out loud rather
+    // than rendering as a blank square.
+    expect(
+      unusablePlaceholders({
+        User: { fields: { avatarUrl: { placeholder: 'data:text/html,<b>x</b>' } } },
+      }),
+    ).toEqual(['User.avatarUrl'])
+  })
+
+  it('says nothing about fields that declared none', () => {
+    expect(unusablePlaceholders(undefined)).toEqual([])
+    expect(unusablePlaceholders({ User: { fields: { avatarUrl: { widget: 'image' } } } })).toEqual(
+      [],
+    )
   })
 })

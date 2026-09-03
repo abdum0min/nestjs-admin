@@ -35,6 +35,7 @@ import {
   selectModels,
   unknownOverrideNames,
   unknownSelectionNames,
+  unusablePlaceholders,
   unwritableHiddenFields,
 } from '@nest-admin/core'
 import {
@@ -179,6 +180,20 @@ export class AdminService implements OnModuleInit {
     const exposed = selectModels(schema, this.resources)
     await this.checkBuiltInAuth(exposed)
     this.warnAboutUnversionedModels(exposed)
+
+    // A relative placeholder resolves against whatever hash route is open, so
+    // the same value works on one screen and 404s on the next - a default
+    // avatar that comes and goes as you navigate.
+    const unusable = unusablePlaceholders(this.overrides)
+    if (unusable.length > 0) {
+      const one = unusable.length === 1
+      throw new Error(
+        `AdminModule \`models\` gives ${unusable.join(', ')} a \`placeholder\` ` +
+          `that ${one ? 'is' : 'are'} neither an absolute URL, a path starting with "/", ` +
+          `nor a data:image/ URI. The admin is one hash-routed page, so a relative path ` +
+          `resolves differently on every screen. Use "/img/avatar.png" or a full URL.`,
+      )
+    }
 
     const unwritable = unwritableHiddenFields(selectModels(schema, this.resources), this.overrides)
     if (unwritable.length > 0) {

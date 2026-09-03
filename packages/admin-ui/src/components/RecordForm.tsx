@@ -376,6 +376,7 @@ function FieldInput({
         {...described}
         value={String(value)}
         image={field.widget === 'image'}
+        {...(field.placeholder === undefined ? {} : { placeholder: field.placeholder })}
         {...(field.accept ? { accept: field.accept } : {})}
         {...(field.maxSize === undefined ? {} : { maxSize: field.maxSize })}
         onChange={onChange}

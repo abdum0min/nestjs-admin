@@ -68,6 +68,18 @@ export const TEST_MODELS: readonly ModelMetadata[] = [
         isGenerated: false,
       },
       {
+        // A file column, which is a plain string holding a storage key. Here
+        // because the schema had no way to describe one, so nothing could ask
+        // what the metadata says about a field configured as a picture.
+        name: 'avatarUrl',
+        kind: 'string',
+        isId: false,
+        isRequired: false,
+        isUnique: false,
+        isList: false,
+        isGenerated: false,
+      },
+      {
         name: 'age',
         kind: 'number',
         isId: false,

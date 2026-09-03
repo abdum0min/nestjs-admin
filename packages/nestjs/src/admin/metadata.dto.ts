@@ -128,6 +128,14 @@ export interface FieldDto {
   readonly maxSize?: number
 
   /**
+   * What to draw when a file field is empty, or its value will not load.
+   *
+   * Purely presentational, and absent unless the application declared one - a
+   * client without it draws its own icon rather than nothing.
+   */
+  readonly placeholder?: string
+
+  /**
    * The admin will refuse to write this field.
    *
    * True for generated columns, and for anything the application marked
@@ -341,6 +349,7 @@ function toFieldDto(
     ...(maxSizeFor(override, uploadCeiling) !== undefined
       ? { maxSize: maxSizeFor(override, uploadCeiling) }
       : {}),
+    ...(override?.placeholder !== undefined ? { placeholder: override.placeholder } : {}),
     ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
     ...(field.enumValues ? { enumValues: [...field.enumValues] } : {}),
     ...(field.relation

@@ -46,6 +46,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu.jsx'
 import { Input } from './ui/input.jsx'
+import { MediaCell } from './ui/media.jsx'
 import { Pagination } from './ui/pagination.jsx'
 import { NONE, SimpleSelect } from './ui/select.jsx'
 import {
@@ -885,6 +886,13 @@ function Cell({
 }) {
   const relationField = relationForForeignKey(model, column.name)
   const link = relationField ? relationLink(relationField, models, record) : undefined
+
+  // Before the relation check would be wrong - a foreign key is a key whatever
+  // widget it was given - but after it, a file column is drawn rather than
+  // printed. A column of `2026/09/abc123-ada.png` is the bug this closes.
+  if (column.widget === 'image' || column.widget === 'file') {
+    return <MediaCell field={column} value={record[column.name]} />
+  }
 
   if (link) {
     return (

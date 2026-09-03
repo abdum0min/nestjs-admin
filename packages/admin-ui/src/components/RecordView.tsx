@@ -22,6 +22,7 @@ import { ErrorState, FormSkeleton } from './States.jsx'
 import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Button } from './ui/button.jsx'
 import { Card, CardContent } from './ui/card.jsx'
+import { MediaCell } from './ui/media.jsx'
 import { useConfirm } from './ui/confirm.jsx'
 
 export function RecordView({
@@ -136,6 +137,11 @@ export function RecordView({
                     <span className="text-muted-foreground italic">Not shown</span>
                   ) : field.kind === 'relation' ? (
                     <RelationValue field={field} models={models} record={record} />
+                  ) : field.widget === 'image' || field.widget === 'file' ? (
+                    // The key is still available - it is what the edit form
+                    // shows - but this page is for looking at the record, and
+                    // a person cannot look at `2026/09/abc123-ada.png`.
+                    <MediaCell field={field} value={record[field.name]} size="detail" />
                   ) : (
                     <span className="wrap-break-word whitespace-pre-wrap">
                       {formatDetail(field, record[field.name])}

@@ -78,6 +78,11 @@ const models = {
         widget: 'image',
         accept: ['image/*'],
         maxSize: '2mb',
+        // What the table draws for a user with no avatar, or one whose file
+        // has since gone. A data URI so the example needs no asset served
+        // from anywhere; a real application would point at its own file.
+        placeholder:
+          'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"%3E%3Crect width="40" height="40" fill="%23e2e8f0"/%3E%3Ccircle cx="20" cy="15" r="7" fill="%2394a3b8"/%3E%3Cpath d="M6 40c0-8 6-13 14-13s14 5 14 13z" fill="%2394a3b8"/%3E%3C/svg%3E',
         order: 5,
       } as const,
       managerId: { label: 'Manager', order: 6 },

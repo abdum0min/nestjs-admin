@@ -71,6 +71,7 @@ export {
   fieldOverride,
   isReadOnly,
   unknownOverrideNames,
+  unusablePlaceholders,
   unwritableHiddenFields,
 } from './config/overrides.js'
 

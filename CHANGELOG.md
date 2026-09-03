@@ -8,8 +8,48 @@ this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While the major version is `0`, the public API may change in any release. Every
 breaking change is listed below with what to do about it.
 
-Nothing has been published to npm yet. Versions here are development milestones;
-the first publish is planned for `1.0.0`. See [docs/roadmap.md](docs/roadmap.md).
+Published to npm as [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs)
+since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
+
+---
+
+## 0.13.1
+
+A picture where a picture belongs.
+
+### Fixed
+
+- **A file column is now drawn wherever it is read**, not only in the form. A
+  `widget: 'image'` field printed its storage key in the table, on the detail
+  page and in every related table - `2026/09/abc123-ada.png`, which is true,
+  unreadable, and the opposite of the one job an avatar column has. It shows
+  the picture. A `widget: 'file'` field shows what the file is called and links
+  to it, and shows the picture anyway when the name says it is one.
+
+  Reported against 0.13.0 by the first application to use an image field.
+
+### Added
+
+- **`placeholder`** on a file field: the picture to draw when the column is
+  empty, or when its value will not load.
+
+  ```ts
+  avatarUrl: { widget: 'image', placeholder: '/img/default-avatar.png' }
+  ```
+
+  Those two are different facts about a record and are no longer drawn the
+  same: with no `placeholder` an empty column gets a plain outline and a value
+  that failed to load gets a struck-through one that says so on hover. Never
+  the browser's own broken-image glyph, which is unstyled, differs per browser,
+  and reports a missing file as a fault in the page. A `placeholder` that is
+  itself wrong falls through to the same icons rather than turning every row
+  into a broken glyph.
+
+  It must be an absolute URL, a path starting with `/`, or a `data:image/` URI.
+  A relative path is **refused at startup**: the admin is one hash-routed page,
+  so `img/avatar.png` resolves against whichever screen is open and would load
+  on the list and 404 on a detail page - a default avatar that appears and
+  disappears as you navigate, which reads as a caching fault and is not one.
 
 ---
 

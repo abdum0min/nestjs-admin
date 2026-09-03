@@ -17,27 +17,11 @@
 import { File as FileIcon, Loader2, Upload, X } from 'lucide-react'
 import { useCallback, useId, useRef, useState } from 'react'
 
-import { fileUrl, uploadFile } from '../../api/client.js'
+import { uploadFile } from '../../api/client.js'
 import { cn } from '../../lib/utils.js'
+import { fileHref, fileNameOf, looksLikeImage } from '../../metadata/files.js'
 import { Button } from './button.jsx'
-
-/** Whatever a stored key looks like, this is what the person sees. */
-function nameOf(key: string): string {
-  const last = key.split('/').at(-1) ?? key
-  const dash = last.indexOf('-')
-  return dash === -1 ? last : last.slice(dash + 1)
-}
-
-/**
- * Where a stored key can be read from.
- *
- * A key that already looks like a location is one: a store with its own URLs -
- * S3, R2 - writes an absolute one onto the column, and rewriting that would
- * break every record saved before the store changed.
- */
-function urlOf(key: string): string {
-  return /^https?:\/\//.test(key) || key.startsWith('/') ? key : fileUrl(key)
-}
+import { Thumbnail } from './media.jsx'
 
 /**
  * A byte count in the unit a person would say it in.
@@ -54,12 +38,11 @@ function readableSize(bytes: number): string {
   return `${bytes} bytes`
 }
 
-const IMAGE = /\.(png|jpe?g|gif|webp)$/i
-
 export function FileField({
   value,
   onChange,
   image = false,
+  placeholder,
   accept,
   maxSize,
   disabled,
@@ -70,6 +53,8 @@ export function FileField({
   readonly onChange: (value: string) => void
   /** Draw a preview and default to accepting pictures. */
   readonly image?: boolean
+  /** The application's own default picture, shown when this one will not load. */
+  readonly placeholder?: string
   readonly accept?: readonly string[]
   readonly maxSize?: number
   readonly disabled?: boolean
@@ -113,17 +98,20 @@ export function FileField({
     [maxSize, onChange, patterns],
   )
 
-  const isImage = image || IMAGE.test(value)
+  const isImage = image || looksLikeImage(value)
 
   if (value !== '' && !busy) {
     return (
       <div className="flex items-center gap-3" id={id}>
         {isImage ? (
-          <a href={urlOf(value)} target="_blank" rel="noreferrer" className="shrink-0">
-            <img
-              src={urlOf(value)}
-              alt=""
-              className="bg-muted size-16 rounded-md border object-cover"
+          <a href={fileHref(value)} target="_blank" rel="noreferrer" className="shrink-0">
+            {/* The same three states the table draws. A key whose file is gone
+                shows that it is gone, rather than the browser's broken-image
+                glyph beside a Replace button that looks like it failed. */}
+            <Thumbnail
+              value={value}
+              {...(placeholder === undefined ? {} : { placeholder })}
+              className="size-16"
             />
           </a>
         ) : (
@@ -134,12 +122,12 @@ export function FileField({
 
         <div className="flex min-w-0 flex-col gap-1">
           <a
-            href={urlOf(value)}
+            href={fileHref(value)}
             target="_blank"
             rel="noreferrer"
             className="hover:text-link truncate text-sm transition-colors"
           >
-            {nameOf(value)}
+            {fileNameOf(value)}
           </a>
 
           <div className="flex gap-1">

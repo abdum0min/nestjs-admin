@@ -29,6 +29,7 @@ import { RelationPicker } from './RelationPicker.jsx'
 import { ErrorState, TableSkeleton } from './States.jsx'
 import { Badge } from './ui/badge.jsx'
 import { Button } from './ui/button.jsx'
+import { MediaCell } from './ui/media.jsx'
 import { Pagination } from './ui/pagination.jsx'
 import {
   Table,
@@ -141,7 +142,11 @@ export function RelatedList({
                   <TableRow key={id ?? index}>
                     {columns.map((column) => (
                       <TableCell key={column.name}>
-                        {formatCell(column, record[column.name])}
+                        {column.widget === 'image' || column.widget === 'file' ? (
+                          <MediaCell field={column} value={record[column.name]} />
+                        ) : (
+                          formatCell(column, record[column.name])
+                        )}
                       </TableCell>
                     ))}
                     <TableCell className="w-px text-right whitespace-nowrap">

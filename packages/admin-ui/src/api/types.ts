@@ -77,6 +77,8 @@ export interface FieldDescriptor {
   /** What a file field accepts, and how large. Enforced again on the server. */
   readonly accept?: readonly string[]
   readonly maxSize?: number
+  /** A picture to draw when a file field is empty or its value will not load. */
+  readonly placeholder?: string
   /** Literal default to pre-fill on create, when the schema declares one. */
   readonly defaultValue?: unknown
   readonly enumValues?: readonly string[]

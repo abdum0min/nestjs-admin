@@ -433,22 +433,25 @@ every entry would be decoration rather than information.
 
 ### Field options
 
-| Option      | Enforced by | Effect                                                           |
-| ----------- | ----------- | ---------------------------------------------------------------- |
-| `hidden`    | server      | Absent from metadata, from every response, and refused in writes |
-| `readOnly`  | server      | Shown, never written. Refused if submitted                       |
-| `writeOnly` | server      | Accepted on writes, never returned. What a password needs        |
-| `label`     | client      | The name on the column and the form                              |
-| `widget`    | client      | How to render it                                                 |
-| `order`     | client      | Position in forms and tables                                     |
+| Option        | Enforced by | Effect                                                           |
+| ------------- | ----------- | ---------------------------------------------------------------- |
+| `hidden`      | server      | Absent from metadata, from every response, and refused in writes |
+| `readOnly`    | server      | Shown, never written. Refused if submitted                       |
+| `writeOnly`   | server      | Accepted on writes, never returned. What a password needs        |
+| `accept`      | server      | Which content types a file field takes, checked from the bytes   |
+| `maxSize`     | server      | How large, checked while it uploads                              |
+| `label`       | client      | The name on the column and the form                              |
+| `widget`      | client      | How to render it                                                 |
+| `placeholder` | client      | The picture to draw when a file field has none of its own        |
+| `order`       | client      | Position in forms and tables                                     |
 
-That division is the thing to remember: the first three are security, the last
-three are presentation. Treating one of the first as one of the last would be a
-hole with a reassuring name.
+That division is the thing to remember: the first five are security, the rest
+are presentation. Treating one of the first as one of the last would be a hole
+with a reassuring name.
 
-`widget` accepts `textarea`, `password`, `email`, `url`, `color`, `json`.
-Anything else is inferred from the field's kind — a date gets a date picker, an
-enum a select, a boolean a checkbox, a relation a picker.
+`widget` accepts `textarea`, `password`, `email`, `url`, `color`, `json`,
+`file`, `image`. Anything else is inferred from the field's kind — a date gets
+a date picker, an enum a select, a boolean a checkbox, a relation a picker.
 
 ---
 
@@ -482,6 +485,36 @@ guard as every other route.
 | Progress           | a percentage while it uploads                                                            |
 | Replace and remove | in place, no dialog                                                                      |
 | The original name  | read back out of the key, so downloads keep it                                           |
+
+### Where it is shown
+
+A file field is drawn wherever it is read, not only in the form: the table, the
+related tables on a detail page, and the detail page itself. An `image` column
+shows the picture; a `file` column shows what it is called and links to it, and
+shows the picture anyway if the name says it is one.
+
+Two of a file column's states are not a picture — it is empty, or it points at
+something that is no longer there — and they are worth telling apart. Give the
+field a `placeholder` and both fall back to it:
+
+```ts
+avatarUrl: {
+  widget: 'image',
+  accept: ['image/*'],
+  maxSize: '2mb',
+  placeholder: '/img/default-avatar.png',
+}
+```
+
+Without one the admin draws its own icon: a plain outline for an empty column,
+a struck-through one that says why on hover for a value that would not load.
+Never the browser's broken-image glyph, which is unstyled, different in every
+browser, and reports a missing file as a fault in the page.
+
+A `placeholder` must be an absolute URL, a path starting with `/`, or a
+`data:image/` URI. A relative path is **refused at startup**: the admin is one
+hash-routed page, so `img/avatar.png` resolves against whichever screen is open
+and would load on the list and 404 on a detail page.
 
 ### The key
 

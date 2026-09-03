@@ -289,3 +289,66 @@ describe('hiding a field that must be supplied', () => {
     await expect(bootWith({ User: { fields: { id: { hidden: true } } } })).resolves.toBeUndefined()
   })
 })
+
+describe('a placeholder picture', () => {
+  const bootWith = async (models: Record<string, unknown>) => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        AdminModule.forRoot({
+          adapter: new InMemoryAdapter(seed()),
+          auth: unsafeAllowAllRequests(),
+          models: models as never,
+        }),
+      ],
+    }).compile()
+    app = moduleRef.createNestApplication()
+    await app.init()
+  }
+
+  it('reaches the interface, which is the only layer that draws it', async () => {
+    const model = await userMeta(
+      await boot({
+        User: { fields: { avatarUrl: { widget: 'image', placeholder: '/img/avatar.png' } } },
+      } as never),
+    )
+
+    const field = model.fields.find((candidate: { name: string }) => candidate.name === 'avatarUrl')
+    expect(field.placeholder).toBe('/img/avatar.png')
+  })
+
+  it('is absent unless it was configured', async () => {
+    const model = await userMeta(await boot())
+    for (const field of model.fields) expect(field.placeholder).toBeUndefined()
+  })
+
+  it('refuses a relative path at startup', async () => {
+    // The admin is one hash-routed page: `img/avatar.png` resolves against
+    // whatever route is open, so the same value loads on the list screen and
+    // 404s on a detail page. The symptom is a default avatar that appears and
+    // disappears as you navigate, which reads as a caching fault.
+    await expect(
+      bootWith({ User: { fields: { avatarUrl: { placeholder: 'img/avatar.png' } } } }),
+    ).rejects.toThrow(/placeholder/)
+  })
+
+  it('says what a usable one looks like', async () => {
+    await expect(
+      bootWith({ User: { fields: { avatarUrl: { placeholder: 'img/avatar.png' } } } }),
+    ).rejects.toThrow(/"\/img\/avatar\.png" or a full URL/)
+  })
+
+  it('accepts a URL, a rooted path and a data URI', async () => {
+    for (const placeholder of [
+      'https://cdn.example.com/avatar.png',
+      '//cdn.example.com/avatar.png',
+      '/img/avatar.png',
+      'data:image/svg+xml,%3Csvg%3E%3C/svg%3E',
+    ]) {
+      await expect(
+        bootWith({ User: { fields: { avatarUrl: { placeholder } } } }),
+      ).resolves.toBeUndefined()
+      await app?.close()
+      app = undefined
+    }
+  })
+})
