@@ -36,9 +36,33 @@ interface GenerateBody {
 }
 
 interface FillBody {
+  readonly models?: unknown
   readonly perModel?: unknown
   readonly seed?: unknown
   readonly images?: unknown
+}
+
+/**
+ * The per-model list the screen sends: one row per model, with its own number.
+ *
+ * Anything malformed is dropped rather than refused. The alternative is a
+ * request that fails because one entry of twelve had a string where a number
+ * belonged, which helps nobody.
+ */
+function modelCounts(
+  value: unknown,
+): readonly { readonly name: string; readonly count: number }[] | undefined {
+  if (!Array.isArray(value)) return undefined
+
+  const entries = value
+    .map((entry) => {
+      const name = text((entry as { name?: unknown })?.name)
+      const amount = count((entry as { count?: unknown })?.count)
+      return name === undefined || amount === undefined ? undefined : { name, count: amount }
+    })
+    .filter((entry): entry is { name: string; count: number } => entry !== undefined)
+
+  return entries.length === 0 ? undefined : entries
 }
 
 /** A body value the caller may have typed. Anything unusable becomes absent. */
@@ -110,6 +134,9 @@ export class DevToolsController {
   ): Promise<SuccessResponse<readonly RunResult[]>> {
     return success(
       await this.service.fill(context, {
+        ...(modelCounts(body?.models) === undefined
+          ? {}
+          : { models: modelCounts(body?.models) as { name: string; count: number }[] }),
         ...(count(body?.perModel) === undefined
           ? {}
           : { perModel: count(body?.perModel) as number }),
@@ -125,6 +152,21 @@ export class DevToolsController {
     @AdminContext() context: ExecutionContext,
   ): Promise<SuccessResponse<readonly RunResult[]>> {
     return success(await this.service.undo(context))
+  }
+
+  /**
+   * Empty every model, children first.
+   *
+   * Needs `{ "confirm": true }` in the body. The typed confirmation in the
+   * interface is the real guard; this one exists so a POST that arrives by
+   * accident cannot empty a database.
+   */
+  @Post('reset')
+  async reset(
+    @AdminContext() context: ExecutionContext,
+    @Body() body: { confirm?: unknown },
+  ): Promise<SuccessResponse<unknown>> {
+    return success(await this.service.reset(context, body?.confirm === true))
   }
 
   @Post('truncate')

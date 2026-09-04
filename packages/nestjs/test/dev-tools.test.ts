@@ -326,3 +326,126 @@ describe('route order', () => {
     await request(server).get('/admin/dev').expect(200)
   })
 })
+
+describe('what the screen is told', () => {
+  it('answers everything the page needs in one request', async () => {
+    // One request, deliberately: a page that asks five questions to render its
+    // header spends its first second half-drawn, and this one is opened dozens
+    // of times a day.
+    const server = await boot()
+    const { body } = await request(server).get('/admin/dev').expect(200)
+
+    expect(body.data.adapter).toBe('in-memory')
+    expect(body.data.environment).toMatchObject({ deployed: false, because: [] })
+    expect(body.data.models.map((entry: { name: string }) => entry.name)).toEqual(['User', 'Post'])
+    expect(body.data.totalRecords).toBe(0)
+    expect(body.data.history).toEqual([])
+  })
+
+  it('says how many relations each model will wire up', async () => {
+    const server = await boot()
+    const { body } = await request(server).get('/admin/dev').expect(200)
+
+    const post = body.data.models.find((entry: { name: string }) => entry.name === 'Post')
+    expect(post.relations).toBe(1)
+  })
+
+  it('counts what is already there', async () => {
+    const server = await boot()
+    await post(server, '/generate', { model: 'User', count: 4 }).expect(201)
+
+    const { body } = await request(server).get('/admin/dev').expect(200)
+    const user = body.data.models.find((entry: { name: string }) => entry.name === 'User')
+    expect(user.records).toBe(4)
+    expect(body.data.totalRecords).toBe(4)
+  })
+
+  it('keeps a history of runs, newest first', async () => {
+    const server = await boot()
+    await post(server, '/generate', { model: 'User', count: 2 }).expect(201)
+    await post(server, '/generate', { model: 'User', count: 3 }).expect(201)
+
+    const { body } = await request(server).get('/admin/dev').expect(200)
+    expect(body.data.history).toHaveLength(2)
+    expect(body.data.history[0].runs[0].created).toBe(3)
+  })
+})
+
+describe('generating several models at once', () => {
+  it('gives each model the number it was asked for', async () => {
+    // Not one model at a time, and not one number for all of them.
+    const server = await boot()
+
+    const { body } = await post(server, '/fill', {
+      models: [
+        { name: 'User', count: 6 },
+        { name: 'Post', count: 2 },
+      ],
+    }).expect(201)
+
+    expect(
+      body.data.map((run: { model: string; created: number }) => [run.model, run.created]),
+    ).toEqual([
+      ['User', 6],
+      ['Post', 2],
+    ])
+  })
+
+  it('orders them by the relations, whatever order they were listed in', async () => {
+    // A request that names Post before User is not a request to create orphans.
+    const server = await boot()
+
+    const { body } = await post(server, '/fill', {
+      models: [
+        { name: 'Post', count: 2 },
+        { name: 'User', count: 2 },
+      ],
+    }).expect(201)
+
+    expect(body.data.map((run: { model: string }) => run.model)).toEqual(['User', 'Post'])
+    const posts = await request(server).get('/admin/Post').expect(200)
+    for (const row of posts.body.data) expect(row.authorId).toBeTruthy()
+  })
+
+  it('leaves out a model the caller did not name', async () => {
+    const server = await boot()
+    await post(server, '/fill', { models: [{ name: 'User', count: 3 }] }).expect(201)
+
+    expect((await request(server).get('/admin/Post')).body.meta.total).toBe(0)
+  })
+})
+
+describe('emptying everything', () => {
+  it('refuses without the acknowledgement, and deletes nothing', async () => {
+    const server = await boot()
+    await post(server, '/fill', { perModel: 3 }).expect(201)
+
+    await post(server, '/reset', {}).expect(400)
+    expect((await request(server).get('/admin/User')).body.meta.total).toBe(3)
+  })
+
+  it('empties every model, children first', async () => {
+    // Reverse dependency order: a parent cannot go while its children still
+    // point at it.
+    const server = await boot()
+    await post(server, '/fill', { perModel: 3 }).expect(201)
+
+    const { body } = await post(server, '/reset', { confirm: true }).expect(201)
+    expect(body.data.map((entry: { model: string }) => entry.model)).toEqual(['Post', 'User'])
+
+    expect((await request(server).get('/admin/User')).body.meta.total).toBe(0)
+    expect((await request(server).get('/admin/Post')).body.meta.total).toBe(0)
+  })
+
+  it('needs the capability like everything else here', async () => {
+    const server = await boot(
+      {},
+      {
+        roles: { viewer: { models: { User: ['metadata', 'list', 'read', 'create'] } } },
+        roleOf: () => 'viewer',
+      },
+    )
+
+    await post(server, '/reset', { confirm: true }).expect(403)
+  })
+})

@@ -658,14 +658,26 @@ a table.
 
 ### What it does
 
-|                     |                                                                                   |
-| ------------------- | --------------------------------------------------------------------------------- |
-| **Fill this admin** | every model, in an order the relations allow, so a post always has an author      |
-| Generate one model  | with a preview first, which writes nothing                                        |
-| Seeds               | the same seed gives the same records, so a demo can be rebuilt or screenshotted   |
-| Pictures            | identicons and gradients drawn from the record, written through your file storage |
-| **Undo**            | deletes what the last run created — records you made by hand are left alone       |
-| Empty a model       | one model, named, with a confirmation                                             |
+One screen. Every model is a row with its own count, so "twenty users, fifty
+products, no order lines" is one press rather than three visits.
+
+|                   |                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------- |
+| **Generate**      | the models you tick, each with its own number, in an order the relations allow    |
+| Preview           | per model, and it writes nothing                                                  |
+| Seeds             | the same seed gives the same records, so a demo can be rebuilt or screenshotted   |
+| Pictures          | identicons and gradients drawn from the record, written through your file storage |
+| **Undo**          | deletes what the last run created — records you made by hand are left alone       |
+| Recent runs       | the last ten, so "did that do anything" has an answer                             |
+| Empty a model     | one model, named, with a confirmation                                             |
+| Empty every model | children first, and refused without an explicit acknowledgement                   |
+
+The header says which adapter is in use, how many records exist, and **what the
+deployment check actually saw** — not `NODE_ENV` alone, because the gate reads a
+dozen things and a screen that named one would teach the wrong rule.
+
+Each row shows how many relations the generator will wire up on its own.
+Trusting a generator starts with knowing what it will touch.
 
 Values come from the field's **name** first (`email`, `slug`, `price`, `city`)
 and its **kind** second. Nothing branches on a model name: the admin renders

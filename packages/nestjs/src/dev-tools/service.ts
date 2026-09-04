@@ -43,6 +43,7 @@ import {
   ADMIN_SERVICE,
 } from '../tokens.js'
 import type { DevToolsOptions } from './contract.js'
+import { deploymentSignal } from './deployed.js'
 import {
   draft,
   exclusiveLimit,
@@ -71,10 +72,34 @@ export interface RunResult {
   readonly note?: string
 }
 
+export interface Batch {
+  readonly at: string
+  readonly runs: readonly RunResult[]
+}
+
+/** Everything the developer tools screen draws, in one answer. */
+export interface DevStatus {
+  readonly models: readonly {
+    readonly name: string
+    readonly relations: number
+    readonly records: number
+  }[]
+  readonly totalRecords: number
+  /** Which adapter this admin is running on, as it names itself. */
+  readonly adapter: string
+  readonly environment: { readonly deployed: boolean; readonly because: readonly string[] }
+  readonly faker: boolean
+  readonly images: boolean
+  readonly history: readonly Batch[]
+}
+
 export interface Draft {
   readonly model: string
   readonly records: readonly Record<string, unknown>[]
 }
+
+/** How many batches of history to keep. Enough to answer "what did I just do". */
+const HISTORY_LENGTH = 10
 
 const DEFAULT_MAX_PER_RUN = 500
 /** How many rows one truncate removes before answering. */
@@ -116,30 +141,66 @@ export class DevToolsService {
   ) {}
 
   /**
-   * What the last run created, so it can be taken back.
+   * What has been generated since this server started, newest first.
    *
    * Held in memory, per process, and gone on restart. That is the right
-   * lifetime: it exists so somebody can experiment on a database that also has
-   * their own hand-made rows in it, and the moment they are willing to restart
-   * the server they are past the point of wanting an undo.
+   * lifetime for the thing it exists for: somebody experimenting on a database
+   * that also holds rows they typed themselves. By the time they are willing to
+   * restart the server they are past wanting an undo.
+   *
+   * Only the newest batch can be undone. The rest are history - what happened,
+   * and when - because "did that run actually do anything?" is asked far more
+   * often than it is answered.
    */
-  #lastRun: { readonly at: string; readonly runs: readonly RunResult[] } | undefined
+  #history: Batch[] = []
 
-  async status(context: ExecutionContext): Promise<{
-    readonly models: readonly string[]
-    readonly faker: boolean
-    readonly images: boolean
-    readonly lastRun: { readonly at: string; readonly runs: readonly RunResult[] } | undefined
-  }> {
+  private remember(runs: readonly RunResult[]): void {
+    this.#history.unshift({ at: new Date().toISOString(), runs })
+    this.#history = this.#history.slice(0, HISTORY_LENGTH)
+  }
+
+  /**
+   * Everything the screen needs to draw itself, in one request.
+   *
+   * Deliberately one: a page that asks five questions to render its header
+   * spends its first second half-drawn, and this one is opened dozens of times
+   * a day.
+   */
+  async status(context: ExecutionContext): Promise<DevStatus> {
     this.assertAllowed(context)
 
     const models = await this.writableModels(context)
+    const counted = await Promise.all(
+      models.map(async (model) => ({
+        name: model.name,
+        // How many relations the generator will wire up on its own. Shown
+        // because trusting a generator starts with knowing what it will touch.
+        relations: foreignKeys(model).length,
+        records: await this.countOf(model.name),
+      })),
+    )
 
     return {
-      models: models.map((model) => model.name),
+      models: counted,
+      totalRecords: counted.reduce((total, entry) => total + entry.records, 0),
+      adapter: this.adapter.name,
+      // What the deployment check actually saw, not `NODE_ENV` alone - a card
+      // that named one variable would teach the wrong rule about a gate that
+      // reads a dozen.
+      environment: deploymentSignal(),
       faker: (await loadFaker()) !== undefined,
       images: this.picturesEnabled(),
-      lastRun: this.#lastRun,
+      history: this.#history,
+    }
+  }
+
+  /** How many rows a model has. One query, and only for this screen. */
+  private async countOf(model: string): Promise<number> {
+    try {
+      return (await this.adapter.list(model, { page: 1, perPage: 1 })).total
+    } catch {
+      // A model the adapter cannot count is not worth failing the page over.
+      return 0
     }
   }
 
@@ -190,7 +251,7 @@ export class DevToolsService {
       images: request.images ?? this.picturesEnabled(),
     })
 
-    this.#lastRun = { at: new Date().toISOString(), runs: [run] }
+    this.remember([run])
     return run
   }
 
@@ -204,26 +265,97 @@ export class DevToolsService {
    */
   async fill(
     context: ExecutionContext,
-    request: { perModel?: number; seed?: string; images?: boolean } = {},
+    request: {
+      /**
+       * How many of each, per model. The screen sends one row per model with
+       * its own number, because "twenty users and fifty products, no order
+       * lines" is what people actually want and one number for everything is
+       * not.
+       */
+      models?: readonly { readonly name: string; readonly count: number }[]
+      /** The same number for every model, when no per-model list is given. */
+      perModel?: number
+      seed?: string
+      images?: boolean
+    } = {},
   ): Promise<readonly RunResult[]> {
     this.assertAllowed(context)
 
     const models = await this.writableModels(context)
-    const order = fillOrder(models)
     const seed = request.seed ?? String(Date.now())
     const images = request.images ?? this.picturesEnabled()
-    const count = this.countFor(request.perModel ?? 12)
 
+    const wanted = new Map(
+      (request.models ?? []).map((entry) => [entry.name, this.countFor(entry.count)]),
+    )
+    const chosen = wanted.size > 0 ? models.filter((model) => wanted.has(model.name)) : models
+    const fallback = this.countFor(request.perModel ?? 12)
+
+    // Ordered by the relations even when the caller listed the models
+    // themselves - a request that names Post before User is not a request to
+    // create orphans.
+    const order = fillOrder(chosen)
     const runs: RunResult[] = []
 
     for (const name of order) {
-      const model = models.find((candidate) => candidate.name === name)
+      const model = chosen.find((candidate) => candidate.name === name)
       if (!model) continue
-      runs.push(await this.fillModel(context, model, { count, seed, images }))
+      runs.push(
+        await this.fillModel(context, model, {
+          count: wanted.get(name) ?? fallback,
+          seed,
+          images,
+        }),
+      )
     }
 
-    this.#lastRun = { at: new Date().toISOString(), runs }
+    this.remember(runs)
     return runs
+  }
+
+  /**
+   * Empty every model this principal may write, children first.
+   *
+   * The most destructive thing in the package, and the reason it is here at all
+   * is that the alternative - pressing Empty ten times in the right order - is
+   * both slower and easier to get wrong. Reverse dependency order, because a
+   * parent cannot go while its children still point at it.
+   *
+   * Requires `delete` on every model it touches, and refuses without an
+   * explicit acknowledgement in the body: a POST somebody triggers by accident
+   * must not empty a database.
+   */
+  async reset(
+    context: ExecutionContext,
+    confirmed: boolean,
+  ): Promise<
+    readonly { readonly model: string; readonly deleted: number; readonly remaining: number }[]
+  > {
+    this.assertAllowed(context)
+
+    if (!confirmed) {
+      throw new InvalidQueryError(
+        'Emptying every model needs { "confirm": true }. Nothing was deleted.',
+      )
+    }
+
+    const models = await this.writableModels(context)
+    const order = [...fillOrder(models)].reverse()
+    const results: { model: string; deleted: number; remaining: number }[] = []
+
+    for (const name of order) {
+      try {
+        const outcome = await this.truncate(context, name)
+        results.push({ model: name, ...outcome })
+      } catch (cause) {
+        // A model this principal may create but not delete. Reported as
+        // untouched rather than stopping the rest.
+        void cause
+        results.push({ model: name, deleted: 0, remaining: await this.countOf(name) })
+      }
+    }
+
+    return results
   }
 
   /**
@@ -236,7 +368,7 @@ export class DevToolsService {
   async undo(context: ExecutionContext): Promise<readonly RunResult[]> {
     this.assertAllowed(context)
 
-    const last = this.#lastRun
+    const last = this.#history[0]
     if (!last) throw new InvalidQueryError('Nothing has been generated since this server started.')
 
     const results: RunResult[] = []
@@ -266,7 +398,8 @@ export class DevToolsService {
       })
     }
 
-    this.#lastRun = undefined
+    // Only the newest batch is undoable, so only it leaves the history.
+    this.#history = this.#history.slice(1)
     return results
   }
 
@@ -304,8 +437,8 @@ export class DevToolsService {
       }
     }
 
-    // Anything the last run created is gone or unaccounted for either way.
-    this.#lastRun = undefined
+    // Whatever the history described is now gone or unaccounted for.
+    this.#history = []
 
     return { deleted, remaining: Math.max(0, page.total - deleted) }
   }

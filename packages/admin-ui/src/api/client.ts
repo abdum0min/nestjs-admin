@@ -478,12 +478,30 @@ export function fileUrl(key: string): string {
  * which the metadata says once - every function here 404s or 403s otherwise,
  * and the screen is not reachable in the first place.
  */
+export interface DevModel {
+  readonly name: string
+  /** How many relations the generator will wire up on its own. */
+  readonly relations: number
+  readonly records: number
+}
+
+export interface DevBatch {
+  readonly at: string
+  readonly runs: readonly DevRun[]
+}
+
 export interface DevStatus {
-  readonly models: readonly string[]
+  readonly models: readonly DevModel[]
+  readonly totalRecords: number
+  /** The adapter this admin runs on, as it names itself. */
+  readonly adapter: string
+  /** What the deployment check saw - not `NODE_ENV` alone. */
+  readonly environment: { readonly deployed: boolean; readonly because: readonly string[] }
   /** Whether `@faker-js/faker` is installed. It works either way. */
   readonly faker: boolean
   readonly images: boolean
-  readonly lastRun: { readonly at: string; readonly runs: readonly DevRun[] } | undefined
+  /** Newest first. Only the newest can be undone. */
+  readonly history: readonly DevBatch[]
 }
 
 export interface DevRun {
@@ -526,6 +544,7 @@ export async function devGenerate(body: {
 }
 
 export async function devFill(body: {
+  models?: readonly { name: string; count: number }[]
   perModel?: number
   seed?: string
   images?: boolean
@@ -539,6 +558,17 @@ export async function devFill(body: {
 
 export async function devUndo(): Promise<readonly DevRun[]> {
   const { data } = await request<readonly DevRun[]>('/dev/undo', { method: 'POST' })
+  return data
+}
+
+/** Empty every model, children first. Needs the acknowledgement. */
+export async function devReset(): Promise<
+  readonly { model: string; deleted: number; remaining: number }[]
+> {
+  const { data } = await request<readonly { model: string; deleted: number; remaining: number }[]>(
+    '/dev/reset',
+    { method: 'POST', body: JSON.stringify({ confirm: true }) },
+  )
   return data
 }
 

@@ -31,10 +31,29 @@ Developer tools: an empty admin becomes something you can click through.
   and separated from the resources - a tool that can empty a table must not
   look like a table.
 
-- **Fill this admin.** Every model, in an order the relations allow, so a post
+- **One screen, one press.** Every model is a row with its own count, so
+  "twenty users, fifty products, no order lines" is a single generate rather
+  than three visits. They are written in an order the relations allow, so a post
   always has an author. The problem this release exists for is the first thirty
   seconds of using the package: empty tables, a flat dashboard chart, and
   relation pickers with nothing in them.
+
+  Deliberately not a four-step wizard. That reads well the first time and costs
+  four clicks on every one after it, which is the wrong trade for a tool
+  somebody opens twenty times in an afternoon.
+
+- **A header that says where you are**: which adapter is in use, how many
+  records exist, how many relations each model will wire up, and **what the
+  deployment check actually saw** - not `NODE_ENV` alone, because the gate reads
+  a dozen signals and a screen naming one would teach the wrong rule.
+
+- **The last ten runs**, so "did that actually do anything" has an answer.
+  Only the newest can be undone, which is what the Undo card offers.
+
+- **Empty every model**, children first, refused without an explicit
+  acknowledgement in the body. The typed confirmation in the interface is the
+  real guard; the server's is so a request that arrives by accident cannot
+  empty a database.
 
 - **A mock data engine that reads only metadata.** Values come from a column's
   name first (`email`, `slug`, `price`, `city`) and its kind second. Nothing
