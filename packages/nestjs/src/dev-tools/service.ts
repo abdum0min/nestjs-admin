@@ -93,6 +93,17 @@ export interface DevStatus {
   readonly history: readonly Batch[]
 }
 
+/** What emptying everything actually did - and what it left alone. */
+export interface ResetResult {
+  readonly emptied: readonly {
+    readonly model: string
+    readonly deleted: number
+    readonly remaining: number
+  }[]
+  /** Models this could not or would not touch, each with a reason. */
+  readonly skipped: readonly { readonly model: string; readonly reason: string }[]
+}
+
 export interface Draft {
   readonly model: string
   readonly records: readonly Record<string, unknown>[]
@@ -325,12 +336,7 @@ export class DevToolsService {
    * explicit acknowledgement in the body: a POST somebody triggers by accident
    * must not empty a database.
    */
-  async reset(
-    context: ExecutionContext,
-    confirmed: boolean,
-  ): Promise<
-    readonly { readonly model: string; readonly deleted: number; readonly remaining: number }[]
-  > {
+  async reset(context: ExecutionContext, confirmed: boolean): Promise<ResetResult> {
     this.assertAllowed(context)
 
     if (!confirmed) {
@@ -341,21 +347,65 @@ export class DevToolsService {
 
     const models = await this.writableModels(context)
     const order = [...fillOrder(models)].reverse()
-    const results: { model: string; deleted: number; remaining: number }[] = []
+    const emptied: { model: string; deleted: number; remaining: number }[] = []
 
     for (const name of order) {
       try {
         const outcome = await this.truncate(context, name)
-        results.push({ model: name, ...outcome })
+        emptied.push({ model: name, ...outcome })
       } catch (cause) {
         // A model this principal may create but not delete. Reported as
         // untouched rather than stopping the rest.
         void cause
-        results.push({ model: name, deleted: 0, remaining: await this.countOf(name) })
+        emptied.push({ model: name, deleted: 0, remaining: await this.countOf(name) })
       }
     }
 
-    return results
+    return { emptied, skipped: await this.untouchable(context, models) }
+  }
+
+  /**
+   * What "empty everything" did not empty, and why.
+   *
+   * Said out loud because the button does not mean what it says, and a person
+   * who believes it does will eventually be wrong about their own database. The
+   * two reasons are different in kind:
+   *
+   *   - **Outside this admin.** `resources` decided the model is not part of it,
+   *     and these tools do not cross that line. That boundary is the whole of
+   *     this package's security model - crossing it here would make every
+   *     `exclude` in every application a suggestion. It is also, in practice,
+   *     the account table: emptying it would delete the login of the person
+   *     pressing the button, permanently and with no way back through the
+   *     admin.
+   *   - **Not yours to delete.** The policy allows creating but not deleting,
+   *     which is a real configuration and not a mistake.
+   */
+  private async untouchable(
+    context: ExecutionContext,
+    emptied: readonly ModelMetadata[],
+  ): Promise<readonly { readonly model: string; readonly reason: string }[]> {
+    const handled = new Set(emptied.map((model) => model.name))
+    const exposed = new Set((await this.admin.schema()).map((model) => model.name))
+    const declared = this.options.models
+
+    const skipped: { model: string; reason: string }[] = []
+
+    for (const model of await this.adapter.getModels()) {
+      if (handled.has(model.name)) continue
+
+      if (!exposed.has(model.name)) {
+        skipped.push({ model: model.name, reason: 'outside this admin' })
+        continue
+      }
+      if (declared && !declared.includes(model.name)) {
+        skipped.push({ model: model.name, reason: 'not in the developer tools configuration' })
+        continue
+      }
+      skipped.push({ model: model.name, reason: 'you may not write it' })
+    }
+
+    return skipped
   }
 
   /**

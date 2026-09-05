@@ -670,7 +670,7 @@ products, no order lines" is one press rather than three visits.
 | **Undo**          | deletes what the last run created — records you made by hand are left alone       |
 | Recent runs       | the last ten, so "did that do anything" has an answer                             |
 | Empty a model     | one model, named, with a confirmation                                             |
-| Empty every model | children first, and refused without an explicit acknowledgement                   |
+| Empty every model | children first, refused without an acknowledgement, and it says what it skipped   |
 
 The header says which adapter is in use, how many records exist, and **what the
 deployment check actually saw** — not `NODE_ENV` alone, because the gate reads a
@@ -678,6 +678,25 @@ dozen things and a screen that named one would teach the wrong rule.
 
 Each row shows how many relations the generator will wire up on its own.
 Trusting a generator starts with knowing what it will touch.
+
+### What "empty every model" does not empty
+
+Every model **this admin manages**, which is not the same as every table.
+
+A model `resources` excluded is out of reach here as it is everywhere else, and
+that is deliberate twice over. `resources` is the whole of this package's
+security model, so a developer tool that ignored it would make every `exclude`
+in every application a suggestion. And the excluded table is usually the account
+table — emptying it would delete the login of the person pressing the button,
+permanently, with no way back through the admin.
+
+So the result names what it left alone and why: `outside this admin`, `not in
+the developer tools configuration`, or `you may not write it`.
+
+It also deletes **rows**, not tables. Autoincrement counters keep counting and
+migration state is untouched. The command that truly resets a database belongs
+to your ORM — under Prisma, `npx prisma db push --force-reset` — and the screen
+says so where somebody would otherwise find out the slow way.
 
 Values come from the field's **name** first (`email`, `slug`, `price`, `city`)
 and its **kind** second. Nothing branches on a model name: the admin renders

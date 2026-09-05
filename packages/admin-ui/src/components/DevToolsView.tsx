@@ -90,6 +90,7 @@ export function DevToolsView() {
   const [failure, setFailure] = useState<unknown>(undefined)
   const [runs, setRuns] = useState<readonly DevRun[] | undefined>(undefined)
   const [preview, setPreview] = useState<{ model: string; records: readonly AdminRecord[] }>()
+  const [skipped, setSkipped] = useState<readonly { model: string; reason: string }[]>([])
 
   const models = state.data?.models ?? []
 
@@ -322,6 +323,7 @@ export function DevToolsView() {
 
               {preview === undefined ? null : <Preview preview={preview} />}
               {runs === undefined ? null : <Outcome runs={runs} />}
+              {skipped.length === 0 ? null : <Skipped skipped={skipped} />}
             </CardContent>
           </Card>
 
@@ -359,6 +361,7 @@ export function DevToolsView() {
 
           <DangerZone
             models={models.map((model) => model.name)}
+            adapter={status.adapter}
             busy={busy}
             onTruncate={(model) =>
               void run('truncate', async () => {
@@ -388,7 +391,7 @@ export function DevToolsView() {
 
                 const result = await devReset()
                 setRuns(
-                  result.map((entry) => ({
+                  result.emptied.map((entry) => ({
                     model: entry.model,
                     created: entry.deleted,
                     ids: [],
@@ -398,6 +401,7 @@ export function DevToolsView() {
                         : [],
                   })),
                 )
+                setSkipped(result.skipped)
                 state.reload()
               })
             }
@@ -550,13 +554,31 @@ function History({ history }: { readonly history: DevStatus['history'] }) {
 }
 
 /** The two destructive things, together and below everything else. */
+/**
+ * What actually wipes a database, which is not this button.
+ *
+ * Emptying every model deletes rows. It does not drop a table, reset an
+ * autoincrement counter, or touch migration state - so somebody who wanted a
+ * clean database and pressed this would get most of the way there and be
+ * puzzled by the rest. The command that does the whole job belongs to the ORM,
+ * and naming it here is cheaper than the afternoon spent finding that out.
+ */
+function resetCommand(adapter: string): string | undefined {
+  if (adapter === 'prisma') return 'npx prisma db push --force-reset'
+  // Deliberately nothing for anyone else. A wrong command here is worse than
+  // no command, and only Prisma's is one line the same way for every project.
+  return undefined
+}
+
 function DangerZone({
   models,
+  adapter,
   busy,
   onTruncate,
   onReset,
 }: {
   readonly models: readonly string[]
+  readonly adapter: string
   readonly busy: string | undefined
   readonly onTruncate: (model: string) => void
   readonly onReset: () => void
@@ -601,8 +623,53 @@ function DangerZone({
           {busy === 'reset' ? <Loader2 className="animate-spin" /> : <Trash2 />}
           Empty every model
         </Button>
+
+        <p className="text-muted-foreground basis-full text-xs">
+          This deletes rows. It does not drop tables, reset autoincrement counters or touch
+          migration state
+          {resetCommand(adapter) === undefined ? (
+            <>, which is your ORM&rsquo;s own command to run.</>
+          ) : (
+            <>
+              . For that:{' '}
+              <code className="bg-muted rounded px-1 py-0.5 font-mono">
+                {resetCommand(adapter)}
+              </code>
+            </>
+          )}
+        </p>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * What emptying everything left alone.
+ *
+ * "Empty every model" means every model *this admin manages*, and the shorter
+ * reading is the one somebody will act on unless the difference is on the
+ * screen. Usually the account table is in here - the login of the person who
+ * just pressed the button.
+ */
+function Skipped({ skipped }: { readonly skipped: readonly { model: string; reason: string }[] }) {
+  return (
+    <Alert>
+      <Layers />
+      <AlertTitle>
+        {skipped.length} {skipped.length === 1 ? 'model was' : 'models were'} left alone
+      </AlertTitle>
+      <AlertDescription className="flex flex-col gap-0.5">
+        {skipped.map((entry) => (
+          <span key={entry.model} className="text-muted-foreground">
+            {entry.model} — {entry.reason}
+          </span>
+        ))}
+        <span className="text-muted-foreground">
+          Models outside this admin are out of reach on purpose: `resources` decides what it can
+          see, and these tools do not cross that line.
+        </span>
+      </AlertDescription>
+    </Alert>
   )
 }
 

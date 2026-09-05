@@ -55,6 +55,16 @@ Developer tools: an empty admin becomes something you can click through.
   real guard; the server's is so a request that arrives by accident cannot
   empty a database.
 
+  It empties every model **this admin manages**, which is not every table, and
+  it says so: the result names what it skipped and why. A model `resources`
+  excluded stays out of reach here as everywhere else - that boundary is the
+  whole of this package's security model, and the excluded table is usually the
+  one holding the login of the person pressing the button.
+
+  It deletes rows, not tables. The screen names the command that truly resets a
+  database - `npx prisma db push --force-reset` under Prisma - rather than
+  leaving somebody to find out that counters kept counting.
+
 - **A mock data engine that reads only metadata.** Values come from a column's
   name first (`email`, `slug`, `price`, `city`) and its kind second. Nothing
   branches on a model name - the admin renders schemas it has never seen, and a

@@ -431,7 +431,10 @@ describe('emptying everything', () => {
     await post(server, '/fill', { perModel: 3 }).expect(201)
 
     const { body } = await post(server, '/reset', { confirm: true }).expect(201)
-    expect(body.data.map((entry: { model: string }) => entry.model)).toEqual(['Post', 'User'])
+    expect(body.data.emptied.map((entry: { model: string }) => entry.model)).toEqual([
+      'Post',
+      'User',
+    ])
 
     expect((await request(server).get('/admin/User')).body.meta.total).toBe(0)
     expect((await request(server).get('/admin/Post')).body.meta.total).toBe(0)
@@ -447,5 +450,50 @@ describe('emptying everything', () => {
     )
 
     await post(server, '/reset', { confirm: true }).expect(403)
+  })
+})
+
+describe('what emptying everything leaves alone', () => {
+  it('names the models outside this admin, and why', async () => {
+    // The button says "every model" and means every model this admin manages.
+    // Somebody who believes the shorter version will eventually be wrong about
+    // their own database, so the difference is on the screen rather than in a
+    // paragraph of documentation.
+    const server = await boot({}, { resources: { exclude: ['Post'] } })
+
+    const { body } = await post(server, '/reset', { confirm: true }).expect(201)
+
+    expect(body.data.emptied.map((entry: { model: string }) => entry.model)).toEqual(['User'])
+    expect(body.data.skipped).toEqual([{ model: 'Post', reason: 'outside this admin' }])
+  })
+
+  it('names the models the configuration told it not to touch', async () => {
+    const server = await boot({ models: ['User'] })
+
+    const { body } = await post(server, '/reset', { confirm: true }).expect(201)
+    expect(body.data.skipped).toEqual([
+      { model: 'Post', reason: 'not in the developer tools configuration' },
+    ])
+  })
+
+  it('does not cross the resources boundary, however the request is made', async () => {
+    // `resources` is the whole of this package's security model. A developer
+    // tool that ignored it would make every `exclude` in every application a
+    // suggestion - and the excluded table is usually the one holding the login
+    // of the person pressing the button.
+    const server = await boot({}, { resources: { exclude: ['Post'] } })
+
+    await post(server, '/generate', { model: 'Post', count: 1 }).expect(404)
+    await post(server, '/truncate', { model: 'Post' }).expect(404)
+    await post(server, '/reset', { confirm: true }).expect(201)
+
+    // Still reachable through nothing at all: it is not part of this admin.
+    await request(server).get('/admin/Post').expect(404)
+  })
+
+  it('says nothing when there was nothing to leave alone', async () => {
+    const server = await boot()
+    const { body } = await post(server, '/reset', { confirm: true }).expect(201)
+    expect(body.data.skipped).toEqual([])
   })
 })

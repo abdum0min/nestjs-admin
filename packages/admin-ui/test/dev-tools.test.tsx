@@ -104,10 +104,13 @@ function server(
               : path === '/dev/reset'
                 ? {
                     success: true,
-                    data: [
-                      { model: 'Post', deleted: 2, remaining: 0 },
-                      { model: 'User', deleted: 3, remaining: 0 },
-                    ],
+                    data: {
+                      emptied: [
+                        { model: 'Post', deleted: 2, remaining: 0 },
+                        { model: 'User', deleted: 3, remaining: 0 },
+                      ],
+                      skipped: [{ model: 'AdminAccount', reason: 'outside this admin' }],
+                    },
                   }
                 : { success: true, data: [], meta: { total: 0, page: 1, perPage: 25 } }
 
@@ -321,6 +324,21 @@ describe('the danger zone', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Empty everything' }))
     await waitFor(() => expect(calls).toContain('POST /dev/reset'))
   })
+
+  it('says which models it left alone, and why', async () => {
+    // "Empty every model" means every model this admin manages. The shorter
+    // reading is the one somebody acts on unless the difference is on screen -
+    // and the excluded table is usually the one holding their own login.
+    server()
+    await openTools()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Empty every model' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Empty everything' }))
+
+    expect(await screen.findByText(/1 model was left alone/)).toBeTruthy()
+    expect(screen.getByText(/AdminAccount — outside this admin/)).toBeTruthy()
+  })
 })
 
 describe('what it says about faker', () => {
@@ -332,5 +350,28 @@ describe('what it says about faker', () => {
     await openTools()
 
     expect(screen.getByText('Built-in words')).toBeTruthy()
+  })
+})
+
+describe('what the danger zone admits it does not do', () => {
+  it('names the command that actually wipes a database', async () => {
+    // Emptying every model deletes rows. It does not drop a table, reset an
+    // autoincrement counter or touch migration state - and somebody who wanted
+    // a clean database would get most of the way there and be puzzled by the
+    // rest.
+    server()
+    await openTools()
+
+    expect(screen.getByText('npx prisma db push --force-reset')).toBeTruthy()
+    expect(screen.getByText(/does not drop tables/)).toBeTruthy()
+  })
+
+  it('says nothing specific for an adapter whose command it does not know', async () => {
+    // A wrong command is worse than no command.
+    server({ useDevTools: true }, { adapter: 'drizzle' })
+    await openTools()
+
+    expect(screen.queryByText(/prisma/)).toBeNull()
+    expect(screen.getByText(/your ORM/)).toBeTruthy()
   })
 })

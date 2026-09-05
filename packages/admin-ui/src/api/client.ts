@@ -561,14 +561,25 @@ export async function devUndo(): Promise<readonly DevRun[]> {
   return data
 }
 
+/** What emptying everything did, and what it left alone. */
+export interface DevResetResult {
+  readonly emptied: readonly { model: string; deleted: number; remaining: number }[]
+  /**
+   * Models it did not touch, each with a reason.
+   *
+   * Shown rather than swallowed: the button says "every model" and means every
+   * model *this admin manages*, and somebody who believes the shorter version
+   * will eventually be wrong about their own database.
+   */
+  readonly skipped: readonly { model: string; reason: string }[]
+}
+
 /** Empty every model, children first. Needs the acknowledgement. */
-export async function devReset(): Promise<
-  readonly { model: string; deleted: number; remaining: number }[]
-> {
-  const { data } = await request<readonly { model: string; deleted: number; remaining: number }[]>(
-    '/dev/reset',
-    { method: 'POST', body: JSON.stringify({ confirm: true }) },
-  )
+export async function devReset(): Promise<DevResetResult> {
+  const { data } = await request<DevResetResult>('/dev/reset', {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true }),
+  })
   return data
 }
 
