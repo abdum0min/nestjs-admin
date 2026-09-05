@@ -563,6 +563,30 @@ export async function devUndo(): Promise<readonly DevRun[]> {
   return data
 }
 
+/**
+ * One thing the admin had to guess, or cannot do.
+ *
+ * `broken` does not work; `guessed` works with less than it could. Two levels
+ * rather than three: a middle one invites an argument about which findings
+ * belong in it.
+ */
+export interface DevFinding {
+  readonly code: string
+  readonly severity: 'broken' | 'guessed'
+  readonly model: string
+  readonly field?: string
+  readonly title: string
+  readonly detail: string
+  /** Configuration that fixes it, ready to copy. Absent where none can. */
+  readonly fix?: string
+}
+
+/** `GET /admin/dev/doctor`. No database queries; safe to ask for on load. */
+export async function devDoctor(): Promise<readonly DevFinding[]> {
+  const { data } = await request<readonly DevFinding[]>('/dev/doctor')
+  return data
+}
+
 /** What emptying everything did, and what it left alone. */
 export interface DevResetResult {
   readonly emptied: readonly { model: string; deleted: number; remaining: number }[]

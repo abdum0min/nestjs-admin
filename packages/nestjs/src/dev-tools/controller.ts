@@ -96,6 +96,18 @@ export class DevToolsController {
     return success(await this.service.status(context))
   }
 
+  /**
+   * `GET /admin/dev/doctor` - what the admin had to guess.
+   *
+   * Separate from `GET /admin/dev` because the navigation asks for it on every
+   * load to decide whether to show a count, and the status endpoint counts rows.
+   * Ten queries to draw a badge would be a poor trade.
+   */
+  @Get('doctor')
+  async doctor(@AdminContext() context: ExecutionContext): Promise<SuccessResponse<unknown>> {
+    return success(await this.service.doctor(context))
+  }
+
   /** What would be written. Writes nothing. */
   @Post('preview')
   async preview(

@@ -13,6 +13,53 @@ since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
 
 ---
 
+## 0.14.1
+
+Diagnosis: what the admin had to guess about your schema.
+
+### Added
+
+- **The schema report**, at the top of the developer tools. This package
+  renders schemas it has never seen, which means guessing - which column names
+  a record, how the halves of a relation pair up, whether a date is a creation
+  date - and every wrong guess degrades **silently**. Seven checks, each one
+  something that happens today with nothing to say why:
+
+  | Finding                       | What it costs                                                  |
+  | ----------------------------- | -------------------------------------------------------------- |
+  | Display field fell back to id | Every relation picker and link shows a cuid                    |
+  | Composite or missing key      | The list works; opening, editing and deleting all fail         |
+  | Unpaired relation             | Attach and Detach are not offered, and no link to the children |
+  | No creation date              | The dashboard offers a count and no chart                      |
+  | No version column             | `concurrency: 'optimistic'` is silently not running on it      |
+  | Decimal, BigInt or Bytes      | A required one makes every create fail                         |
+  | File field, no storage        | The widget is drawn and every upload fails                     |
+
+  Every finding a configuration option can fix **carries that option, ready to
+  copy**, because the reason these problems persist is that nobody knows the
+  option exists. Where no option can fix one - a composite key needs a schema
+  change - it says so rather than inventing one.
+
+  Two severities. `broken` does not work; `guessed` works with less than it
+  could. A third level would only start an argument about which findings belong
+  in the middle.
+
+  It **never touches the database**: no data quality, no missing rows, and
+  deliberately no index advice, because indexes are invisible from here and
+  guessing would be advice that is confidently wrong. Its inputs are the schema
+  and the configuration, which are the same on a laptop as in production -
+  which is why living behind the developer tools costs nothing.
+
+  The navigation carries a count for the broken ones only. Most schemas leave
+  the admin guessing something, and a badge that never goes out is a warning
+  people stop seeing.
+
+  Run against the example application's ten-model schema it reports twelve
+  findings, all of them true: eight models with no `updatedAt` while optimistic
+  concurrency is switched on, and four with no creation date.
+
+---
+
 ## 0.14.0
 
 Developer tools: an empty admin becomes something you can click through.

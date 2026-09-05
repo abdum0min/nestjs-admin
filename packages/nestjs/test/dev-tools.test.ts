@@ -532,3 +532,47 @@ describe('which database it is pointed at', () => {
     expect(body.data.database).toBe('postgresql')
   })
 })
+
+describe('the schema report', () => {
+  it('answers without touching the database', async () => {
+    // Its own route because the navigation asks for it on every load to decide
+    // whether to show a count, and the status endpoint counts rows.
+    const server = await boot()
+    const { body } = await request(server).get('/admin/dev/doctor').expect(200)
+
+    expect(Array.isArray(body.data)).toBe(true)
+  })
+
+  it('reports what this fixture actually leaves the admin guessing', async () => {
+    const server = await boot()
+    const { body } = await request(server).get('/admin/dev/doctor').expect(200)
+
+    const codes = body.data.map((finding: { code: string }) => finding.code)
+    // The fixture has no creation timestamp on Post, which is what stops the
+    // dashboard offering a chart for it.
+    expect(codes).toContain('no-created-at')
+  })
+
+  it('is behind the same capability as everything else here', async () => {
+    const server = await boot(
+      {},
+      {
+        roles: { viewer: { models: { User: ['metadata', 'list', 'read'] } } },
+        roleOf: () => 'viewer',
+      },
+    )
+
+    await request(server).get('/admin/dev/doctor').expect(403)
+  })
+
+  it('does not exist in a build without the developer tools', async () => {
+    const server = await boot('off')
+    await request(server).get('/admin/dev/doctor').expect(404)
+  })
+
+  it('is not read as a model named `dev`', async () => {
+    // The same rule every literal segment relies on.
+    const server = await boot()
+    await request(server).get('/admin/dev/doctor').expect(200)
+  })
+})

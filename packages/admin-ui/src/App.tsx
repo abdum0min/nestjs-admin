@@ -9,7 +9,7 @@
 import { FlaskConical, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
 
-import { fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
+import { devDoctor, fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
 import type { AdminAccountSummary, ModelDescriptor } from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
 import { DashboardView } from './components/DashboardView.jsx'
@@ -104,6 +104,18 @@ function Admin({
 }) {
   const metadata = useAsync(() => fetchMetadata(), [])
 
+  /*
+   * The schema report, for the count beside the developer tools.
+   *
+   * Asked for only where the tools exist, and cheap when they do: the route
+   * makes no database queries. A failure is not surfaced - the badge is a
+   * convenience, and a broken banner about a diagnosis nobody asked for would
+   * be worse than a missing number.
+   */
+  const canUseDevTools = metadata.data?.capabilities?.useDevTools === true
+  const report = useAsync(async () => (canUseDevTools ? devDoctor() : []), [canUseDevTools])
+  const broken = (report.data ?? []).filter((finding) => finding.severity === 'broken').length
+
   const shellProps = { account, onSignedOut }
 
   if (metadata.loading) {
@@ -143,7 +155,8 @@ function Admin({
       models={models}
       activeModel={active?.name}
       canManageTeam={metadata.data?.capabilities?.manageTeam === true}
-      canUseDevTools={metadata.data?.capabilities?.useDevTools === true}
+      canUseDevTools={canUseDevTools}
+      brokenCount={broken}
       activeDev={route.kind === 'dev'}
       {...shellProps}
     >
@@ -211,6 +224,7 @@ function Shell({
   onSignedOut,
   canManageTeam = false,
   canUseDevTools = false,
+  brokenCount = 0,
   activeDev = false,
   children,
 }: {
@@ -225,6 +239,13 @@ function Shell({
    * both halves at once: the build has them, and this role may use them.
    */
   readonly canUseDevTools?: boolean
+  /**
+   * How many things about this schema do not work.
+   *
+   * Only the broken ones. Counting the guesses too would put a permanent badge
+   * on most schemas - a warning that never goes out is one people stop seeing.
+   */
+  readonly brokenCount?: number
   /** Whether the developer tools are the page being shown. */
   readonly activeDev?: boolean
   readonly onSignedOut?: () => void
@@ -356,6 +377,7 @@ function Shell({
               activeModel={activeModel}
               collapsed={collapsed}
               canUseDevTools={canUseDevTools}
+              brokenCount={brokenCount}
               activeDev={activeDev}
             />
           </nav>
@@ -384,6 +406,7 @@ function Shell({
                 activeModel={activeModel}
                 collapsed={false}
                 canUseDevTools={canUseDevTools}
+                brokenCount={brokenCount}
                 activeDev={activeDev}
               />
             </nav>
@@ -411,12 +434,14 @@ function ResourceNav({
   activeModel,
   collapsed,
   canUseDevTools = false,
+  brokenCount = 0,
   activeDev = false,
 }: {
   readonly models: readonly ModelDescriptor[]
   readonly activeModel?: string
   readonly collapsed: boolean
   readonly canUseDevTools?: boolean
+  readonly brokenCount?: number
   readonly activeDev?: boolean
 }) {
   return (
@@ -471,7 +496,8 @@ function ResourceNav({
             icon={FlaskConical}
             current={activeDev}
             collapsed={collapsed}
-            marker="Dev"
+            marker={brokenCount > 0 ? String(brokenCount) : 'Dev'}
+            alarming={brokenCount > 0}
           />
         </li>
       ) : null}
@@ -493,6 +519,7 @@ function NavLink({
   current,
   collapsed,
   marker,
+  alarming = false,
 }: {
   readonly href: string
   readonly label: string
@@ -507,6 +534,8 @@ function NavLink({
    * the day somebody demonstrates the admin to a room.
    */
   readonly marker?: string
+  /** Draw the marker as a problem rather than as a label. */
+  readonly alarming?: boolean
 }) {
   return (
     <a
@@ -536,7 +565,14 @@ function NavLink({
       )}
       {collapsed ? null : <span className="truncate">{label}</span>}
       {collapsed || marker === undefined ? null : (
-        <span className="ml-auto rounded border border-amber-500/40 px-1 text-[10px] font-medium tracking-wide text-amber-600 uppercase dark:text-amber-400">
+        <span
+          className={cn(
+            'ml-auto rounded border px-1 text-[10px] font-medium tracking-wide uppercase',
+            alarming
+              ? 'border-destructive/50 text-destructive'
+              : 'border-amber-500/40 text-amber-600 dark:text-amber-400',
+          )}
+        >
           {marker}
         </span>
       )}

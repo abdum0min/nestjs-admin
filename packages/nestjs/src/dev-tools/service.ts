@@ -25,6 +25,7 @@ import {
   ForbiddenError,
   InvalidQueryError,
   type AdminStorage,
+  type ModelOverrides,
   type ModelMetadata,
   type OrmAdapter,
   type RecordData,
@@ -38,12 +39,15 @@ import { clientMessage } from '../http/exception.filter.js'
 import {
   ADMIN_ADAPTER,
   ADMIN_CAPABILITIES,
+  ADMIN_CONCURRENCY,
   ADMIN_DEV_TOOLS,
   ADMIN_FILES,
+  ADMIN_MODELS,
   ADMIN_SERVICE,
 } from '../tokens.js'
 import type { DevToolsOptions } from './contract.js'
 import { deploymentSignal } from './deployed.js'
+import { diagnose, type Finding } from './doctor.js'
 import {
   draft,
   exclusiveLimit,
@@ -157,7 +161,28 @@ export class DevToolsService {
     @Inject(ADMIN_FILES) private readonly files: { storage?: AdminStorage } | undefined,
     @Inject(ADMIN_CAPABILITIES)
     private readonly can: (context: ExecutionContext, capability: AdminCapability) => boolean,
+    @Inject(ADMIN_MODELS) private readonly overrides: ModelOverrides | undefined,
+    @Inject(ADMIN_CONCURRENCY) private readonly concurrency: 'last-write-wins' | 'optimistic',
   ) {}
+
+  /**
+   * What the admin had to guess, and what it cannot do.
+   *
+   * Its own route rather than part of `status`, and cheaper than one: no
+   * database queries at all. The navigation asks for it on load to decide
+   * whether to show a count, and counting rows for that would be ten queries
+   * to draw a badge.
+   */
+  async doctor(context: ExecutionContext): Promise<readonly Finding[]> {
+    this.assertAllowed(context)
+
+    return diagnose({
+      models: await this.admin.schema(),
+      overrides: this.overrides,
+      concurrency: this.concurrency,
+      storage: this.storage() !== undefined,
+    })
+  }
 
   /**
    * What has been generated since this server started, newest first.

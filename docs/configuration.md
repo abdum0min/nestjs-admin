@@ -680,6 +680,41 @@ dozen things and a screen that named one would teach the wrong rule.
 Each row shows how many relations the generator will wire up on its own.
 Trusting a generator starts with knowing what it will touch.
 
+### The schema report
+
+At the top of the page, above everything that writes: **what the admin had to
+guess about your schema, and what it cannot do.**
+
+This package renders schemas it has never seen, so it guesses - which column
+names a record, how the halves of a relation pair up, whether a date is a
+creation date. Every wrong guess degrades **silently**. The report is the list
+of them:
+
+| Finding                       | What it costs today                                            |
+| ----------------------------- | -------------------------------------------------------------- |
+| Display field fell back to id | Every relation picker and link shows a cuid                    |
+| Composite or missing key      | The list works; opening, editing and deleting all fail         |
+| Unpaired relation             | Attach and Detach are not offered, and no link to the children |
+| No creation date              | The dashboard offers a count and no chart                      |
+| No version column             | `concurrency: 'optimistic'` is silently not running on it      |
+| Decimal, BigInt or Bytes      | A required one makes every create fail                         |
+| File field, no storage        | The widget is drawn and every upload fails                     |
+
+Two severities: **broken** does not work, **guessed** works with less than it
+could. A third level would only start an argument about the middle.
+
+Every finding a configuration option can fix carries that option, ready to
+copy - the reason these problems persist is that nobody knows the option
+exists. Where none can, it says so rather than inventing one.
+
+**It never touches the database.** No data quality, no missing rows, and
+deliberately no index advice: indexes are invisible from here, and guessing
+would be advice that is confidently wrong.
+
+The navigation shows a count beside **Developer tools** for the broken ones
+only. Most schemas leave the admin guessing something, and a badge that never
+goes out is a warning people stop seeing.
+
 ### What "empty every model" does not empty
 
 Every model **this admin manages**, which is not the same as every table.
