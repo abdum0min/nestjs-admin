@@ -5,7 +5,7 @@
  * link all come from the model descriptor the server sent - there is no branch
  * anywhere on a model or field name.
  */
-import { Eye, MoreHorizontal, Pencil, Plus, Trash2, Undo2, X } from 'lucide-react'
+import { Copy, Eye, MoreHorizontal, Pencil, Plus, Trash2, Undo2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -722,6 +722,14 @@ function RowActions({
                   </a>
                 </DropdownMenuItem>
               ) : null}
+              {model.can?.create === false ? null : (
+                <DropdownMenuItem asChild>
+                  <a href={href({ kind: 'create', model: model.name, from: id })}>
+                    <Copy />
+                    Duplicate
+                  </a>
+                </DropdownMenuItem>
+              )}
               {canDelete && deleted ? (
                 <DropdownMenuItem onSelect={() => void restore()}>
                   <Undo2 />

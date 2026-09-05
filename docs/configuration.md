@@ -715,6 +715,28 @@ The navigation shows a count beside **Developer tools** for the broken ones
 only. Most schemas leave the admin guessing something, and a badge that never
 goes out is a warning people stop seeing.
 
+### The metadata viewer
+
+Below the generator, folded away: **the document every screen is drawn from.**
+One row per field with the attributes that decide how it is rendered - kind,
+required, unique, generated, read-only, its widget, what it points at - plus
+the columns the server chose for this model, and the raw JSON one button away
+for a bug report.
+
+"Why does this column look like that" is always answered in `/admin/meta`, and
+until this existed the only way to look was the browser's network tab. It is
+fetched when it is opened, not before.
+
+### Fill this form
+
+With the developer tools mounted, a **create** form gains one button that fills
+every box with believable values - the generator's dry run, which writes
+nothing. Testing a form by hand means typing twelve fields, and doing it forty
+times is how a form stops being tested.
+
+Only on create. A button that discards somebody's record should not sit beside
+the one that saves it.
+
 ### What "empty every model" does not empty
 
 Every model **this admin manages**, which is not the same as every table.

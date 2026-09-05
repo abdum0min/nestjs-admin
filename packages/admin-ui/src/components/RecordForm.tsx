@@ -25,9 +25,16 @@
  * gets the banner. It has to: the alternative is a submission that appears to
  * do nothing.
  */
+import { Wand2 } from 'lucide-react'
 import { useState } from 'react'
 
-import { AdminApiError, createRecord, fetchRecord, updateRecord } from '../api/client.js'
+import {
+  AdminApiError,
+  createRecord,
+  devPreview,
+  fetchRecord,
+  updateRecord,
+} from '../api/client.js'
 import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href, navigate } from '../hooks/use-route.js'
@@ -60,17 +67,31 @@ export function RecordForm({
   model,
   models,
   id,
+  from,
+  canFill = false,
 }: {
   readonly model: ModelDescriptor
   readonly models: readonly ModelDescriptor[]
   /** Absent when creating. */
   readonly id?: string
+  /**
+   * A record to copy the starting values from, when creating.
+   *
+   * "Duplicate this" is a create that begins somewhere other than empty.
+   */
+  readonly from?: string
+  /** Whether to offer the developer tools' one-click example values. */
+  readonly canFill?: boolean
 }) {
   const editable = model.fields.filter(isEditable)
 
+  // One request for two purposes: the record being edited, or the record being
+  // copied. They differ in what is done with the result, not in how it arrives.
+  const source = id ?? from
+
   const existing = useAsync(
-    async () => (id === undefined ? undefined : await fetchRecord(model.name, id)),
-    [model.name, id],
+    async () => (source === undefined ? undefined : await fetchRecord(model.name, source)),
+    [model.name, source],
   )
 
   if (existing.loading) {
@@ -94,10 +115,36 @@ export function RecordForm({
       id={id}
       // Remounts when the loaded record arrives, so inputs start populated
       // rather than needing an effect to sync them.
-      key={id === undefined ? 'create' : `edit:${id}:${existing.data ? 'ready' : 'empty'}`}
-      initial={existing.data}
+      key={source === undefined ? 'create' : `${id ?? from}:${existing.data ? 'ready' : 'empty'}`}
+      initial={id === undefined ? withoutIdentity(editable, existing.data) : existing.data}
+      canFill={canFill && id === undefined}
     />
   )
+}
+
+/**
+ * A copied record, with the parts that must not be copied removed.
+ *
+ * Unique columns are the whole of it: a duplicate that carried the original's
+ * email or slug is a create the database refuses, and the person is left
+ * clearing a field they did not know was the problem. The id and everything
+ * generated are absent already - they are not editable, so they were never in
+ * the form.
+ *
+ * Relations are kept on purpose. A copy of a post belongs to the same author;
+ * that is what makes the copy useful.
+ */
+function withoutIdentity(
+  editable: readonly FieldDescriptor[],
+  record: AdminRecord | undefined,
+): AdminRecord | undefined {
+  if (record === undefined) return undefined
+
+  const copy: AdminRecord = { ...record }
+  for (const field of editable) {
+    if (field.isUnique) delete copy[field.name]
+  }
+  return copy
 }
 
 /**
@@ -121,12 +168,14 @@ function Form({
   editable,
   id,
   initial,
+  canFill = false,
 }: {
   readonly model: ModelDescriptor
   readonly models: readonly ModelDescriptor[]
   readonly editable: readonly FieldDescriptor[]
   readonly id?: string
   readonly initial?: AdminRecord
+  readonly canFill?: boolean
 }) {
   const [values, setValues] = useState<FormValues>(() => {
     const seed: FormValues = {}
@@ -141,7 +190,44 @@ function Form({
   })
 
   const [submitting, setSubmitting] = useState(false)
+  const [filling, setFilling] = useState(false)
   const [error, setError] = useState<unknown>(undefined)
+
+  /**
+   * Fill every box with believable values.
+   *
+   * The generator's dry run - the same code path that writes records, asked for
+   * one and stopped before the write. Testing a form by hand means typing
+   * twelve fields, and doing it forty times is how a form stops being tested.
+   *
+   * Only on create. Offering it while editing would put a button that discards
+   * somebody's record beside the button that saves it.
+   */
+  const fill = async (): Promise<void> => {
+    setFilling(true)
+    setError(undefined)
+    try {
+      const { records } = await devPreview({ model: model.name, count: 1 })
+      const drafted = records[0]
+      if (drafted === undefined) return
+
+      setValues((current) => {
+        const next = { ...current }
+        for (const field of editable) {
+          // Only the fields it produced a value for. A relation the generator
+          // had nothing to point at stays as the person left it.
+          if (drafted[field.name] !== undefined) {
+            next[field.name] = toFormValue(field, drafted[field.name])
+          }
+        }
+        return next
+      })
+    } catch (cause) {
+      setError(cause)
+    } finally {
+      setFilling(false)
+    }
+  }
 
   /**
    * Fields edited since the failure.
@@ -270,6 +356,21 @@ function Form({
               <Button variant="ghost" asChild>
                 <a href={href({ kind: 'list', model: model.name })}>Cancel</a>
               </Button>
+
+              {/* Last, and quiet. It is a convenience for whoever is building
+                  the thing, not a step in filling the form in. */}
+              {canFill ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="ml-auto"
+                  disabled={filling || submitting}
+                  onClick={() => void fill()}
+                >
+                  <Wand2 />
+                  {filling ? 'Filling…' : 'Fill with example data'}
+                </Button>
+              ) : null}
             </div>
           </form>
         </CardContent>

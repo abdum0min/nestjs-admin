@@ -48,6 +48,7 @@ import {
 } from '../api/client.js'
 import type { AdminRecord } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
+import { MetadataViewer } from './MetadataViewer.jsx'
 import { SchemaDoctor } from './SchemaDoctor.jsx'
 import { ErrorState, FormSkeleton } from './States.jsx'
 import { Alert, AlertDescription, AlertTitle } from './ui/alert.jsx'
@@ -395,6 +396,8 @@ export function DevToolsView() {
               </CardContent>
             </Card>
           )}
+
+          <MetadataViewer />
 
           <DangerZone
             models={models.map((model) => model.name)}

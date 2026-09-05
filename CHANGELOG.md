@@ -15,7 +15,7 @@ since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
 
 ## 0.14.1
 
-Diagnosis: what the admin had to guess about your schema.
+Diagnosis, and two ways to start a form somewhere other than empty.
 
 ### Added
 
@@ -57,6 +57,37 @@ Diagnosis: what the admin had to guess about your schema.
   Run against the example application's ten-model schema it reports twelve
   findings, all of them true: eight models with no `updatedAt` while optimistic
   concurrency is switched on, and four with no creation date.
+
+- **The metadata viewer**, folded away below the generator: the document every
+  screen is drawn from, as a table rather than a blob. One row per field with
+  what decides how it is rendered - kind, required, unique, generated,
+  read-only, its widget, what it points at - the columns the server chose for
+  each model, a filter, and the raw JSON one button away for a bug report.
+
+  "Why does this column look like that" is always answered in `/admin/meta`,
+  and until now the only way to look was the browser's network tab. Fetched
+  when it is opened and not before, since it is a second copy of a document the
+  shell already holds.
+
+- **Fill this form.** With the developer tools mounted, a create form gains one
+  button that fills every box with believable values - the generator's dry run,
+  the same code path that writes records, stopped short of writing. Testing a
+  form by hand means typing twelve fields, and doing that forty times is how a
+  form stops being tested.
+
+  Only on create: a button that discards somebody's record has no business
+  sitting beside the one that saves it.
+
+- **Duplicate a record**, on the record itself and in the row menu. A create
+  that starts somewhere other than empty, carried in the address
+  (`#/Post/new?from=abc`) so a half-filled copy survives a reload and can be
+  sent to somebody.
+
+  **Unique columns are not copied.** A duplicate carrying the original's slug
+  or email is a create the database refuses, and the person is left clearing a
+  field nobody told them about. Relations are copied on purpose - a copy of a
+  post belongs to the same author, which is what makes the copy useful. Offered
+  only where the policy allows creating.
 
 ---
 

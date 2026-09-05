@@ -6,7 +6,7 @@
  * sends that record's label alongside the key. A to-many gets its own
  * paginated section below the fields.
  */
-import { Pencil, Trash2, Undo2 } from 'lucide-react'
+import { Copy, Pencil, Trash2, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { deleteRecord, fetchRecord, restoreRecord } from '../api/client.js'
@@ -122,6 +122,18 @@ export function RecordView({
             >
               <Pencil />
               Edit
+            </Button>
+          )}
+          {/* A create that starts somewhere other than empty. Offered where
+              somebody is standing when they decide the next record is like
+              this one, and only where they may create at all. */}
+          {model.can?.create === false ? null : (
+            <Button
+              variant="outline"
+              onClick={() => navigate({ kind: 'create', model: model.name, from: id })}
+            >
+              <Copy />
+              Duplicate
             </Button>
           )}
           {model.can?.delete === false || !gone ? null : (

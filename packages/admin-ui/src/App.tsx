@@ -178,7 +178,7 @@ function Admin({
           <p>“{route.model}” is not one of the resources you can access.</p>
         </Empty>
       ) : (
-        <Content route={route} model={active} models={models} />
+        <Content route={route} model={active} models={models} canFill={canUseDevTools} />
       )}
     </Shell>
   )
@@ -188,9 +188,12 @@ function Content({
   route,
   model,
   models,
+  canFill = false,
 }: {
   readonly route: ReturnType<typeof useRoute>
   readonly model: ModelDescriptor
+  /** Whether the developer tools are available to fill a form in one press. */
+  readonly canFill?: boolean
   // Every model, not just the active one: a relation names its target by name,
   // and rendering it needs that target's primary key and display field.
   readonly models: readonly ModelDescriptor[]
@@ -205,7 +208,14 @@ function Content({
         />
       )
     case 'create':
-      return <RecordForm model={model} models={models} />
+      return (
+        <RecordForm
+          model={model}
+          models={models}
+          canFill={canFill}
+          {...(route.from ? { from: route.from } : {})}
+        />
+      )
     case 'edit':
       return <RecordForm model={model} models={models} id={route.id} />
     case 'detail':

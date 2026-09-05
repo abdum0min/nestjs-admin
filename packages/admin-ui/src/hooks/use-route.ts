@@ -43,13 +43,26 @@ export type Route =
        */
       readonly filter?: string
     }
-  | { readonly kind: 'create'; readonly model: string }
+  | {
+      readonly kind: 'create'
+      readonly model: string
+      /**
+       * A record to copy the form's starting values from.
+       *
+       * How "duplicate this" is expressed: a create, opened from an existing
+       * row. In the hash rather than in memory so the half-filled form
+       * survives a reload and can be sent to somebody else.
+       */
+      readonly from?: string
+    }
   | { readonly kind: 'detail'; readonly model: string; readonly id: string }
   | { readonly kind: 'edit'; readonly model: string; readonly id: string }
 
 export function parseHash(hash: string): Route {
   const [path = '', query = ''] = hash.replace(/^#\/?/, '').split('?')
-  const filter = new URLSearchParams(query).get('filter') ?? undefined
+  const parameters = new URLSearchParams(query)
+  const filter = parameters.get('filter') ?? undefined
+  const from = parameters.get('from') ?? undefined
 
   const segments = path
     .split('/')
@@ -62,7 +75,7 @@ export function parseHash(hash: string): Route {
   if (model === '~team') return { kind: 'team' }
   if (model === '~dev') return { kind: 'dev' }
   if (second === undefined) return { kind: 'list', model, ...(filter ? { filter } : {}) }
-  if (second === 'new') return { kind: 'create', model }
+  if (second === 'new') return { kind: 'create', model, ...(from ? { from } : {}) }
   if (third === 'edit') return { kind: 'edit', model, id: second }
   return { kind: 'detail', model, id: second }
 }
@@ -81,7 +94,10 @@ export function href(route: Route): string {
         (route.filter ? `?filter=${encodeURIComponent(route.filter)}` : '')
       )
     case 'create':
-      return `#/${encodeURIComponent(route.model)}/new`
+      return (
+        `#/${encodeURIComponent(route.model)}/new` +
+        (route.from ? `?from=${encodeURIComponent(route.from)}` : '')
+      )
     case 'detail':
       return `#/${encodeURIComponent(route.model)}/${encodeURIComponent(route.id)}`
     case 'edit':
