@@ -93,6 +93,8 @@ far side of it is no longer the consumer's problem to solve from scratch.
 | 0.12.0  | Permissions, roles and scoping     | Scoping touches every read path, so it is cheapest before more read paths exist                |
 | 0.13.0  | Files                              | The most-asked-for gap, and mock images and import both sit on top of it                       |
 | 0.14.0  | Developer tools                    | Mock data, and the empty-admin problem. Needs 0.13 for avatars and covers                      |
+| 0.14.1  | Diagnosis, and filling a form      | Reads the same metadata the tools do; no generation of its own                                 |
+| 0.14.2  | Rich text                          | A widget with a bundle cost, so it ships where that cost is visible                            |
 | 0.15.0  | Import and export                  | Needs 0.13 for the upload half                                                                 |
 | 0.16.0  | Customisation                      | Deliberately after the functional set: you cannot design it before knowing what needs bending  |
 | 0.17.0  | Docs site, demo, publishing polish | Once there is something worth showing                                                          |
@@ -376,10 +378,6 @@ most likely to be the reason someone chooses this admin over another.
   tarball, no network call, deterministic, and they look deliberate. When
   storage is configured they are written as real files - so mock data exercises
   the upload path from 0.13 rather than working around it.
-- **Rich text.** TipTap, **loaded as its own chunk**, so only a form with a
-  rich-text field pays for it. The generator produces real HTML - headings,
-  paragraphs, lists, links - because a "description" of one flat sentence tests
-  nothing.
 - **Reset, truncate, seed snapshot.**
 - **Schema doctor**: what the admin had to guess or could not resolve - models
   with no display field, relations whose other half could not be paired,
@@ -399,6 +397,59 @@ not set it at all. Four layers:
 
 **Acceptance:** a fresh database becomes a convincing demo in one click; the
 same build refuses to do it in production.
+
+**Delivered**, with two things that were planned here moved out. The schema
+doctor is 0.14.1, because it is diagnosis rather than generation and shares no
+code with it. Rich text is 0.14.2, for the reason below.
+
+---
+
+### 0.14.1 — Diagnosis, and filling a form
+
+- **Schema doctor**: what the admin had to guess or could not resolve - models
+  with no display field, relations whose other half could not be paired,
+  composite keys it cannot address, models with no creation timestamp. All of it
+  degrades silently today. Each finding carries the configuration that fixes it,
+  ready to copy: a diagnosis nobody can act on is a list of complaints.
+- **Metadata viewer**: `/admin/meta`, searchable. It sounds trivial and it is
+  the product's own debugger - every screen is drawn from that document, so
+  "why does this column look like that" is always answered there.
+- **Fill this form**: one button on a create form, filled with believable
+  values. The generator already exists; this is a dry run of one record.
+- **Duplicate a record**: pre-fill a create form from an existing row, minus its
+  id and unique columns. Shares the pre-fill machinery with the button above,
+  which is why the two travel together.
+
+---
+
+### 0.14.2 — Rich text
+
+`widget: 'richtext'` on a string column. **TipTap, loaded as its own chunk**, so
+only a form with such a field pays the two hundred kilobytes.
+
+Its own release rather than part of 0.14.1, because it shares no code with a
+diagnosis screen, carries a bundle cost worth seeing on its own, and brings a
+class of defect - paste, undo, selection - that is easier to find when nothing
+else shipped beside it.
+
+**Not CKEditor**, though that is the name people use for this. CKEditor 5 is
+GPL-2.0-or-later or a commercial licence; bundling it into an MIT package would
+push GPL onto every application that installs this one. TipTap's core is MIT and
+gives the same editing experience.
+
+**The stored value is HTML**, which is portable and is what an application wants
+to render on its own site. Displaying it back is the security question: HTML
+from the database rendered on the admin's own origin is a session-stealing XSS
+if anything less trusted than an administrator can write that column. So the
+detail page renders it **through TipTap in read-only mode** - the editor parses
+HTML into its own schema and drops everything the schema does not contain,
+`<script>` included, which makes the editor its own sanitiser and adds no
+dependency. List cells show the text with the tags stripped, and link `href`s
+that are not http, https or mailto are refused.
+
+**Acceptance:** a paragraph with a heading, a list and a link round-trips
+through the form; `<script>` in a stored value renders as nothing on every
+screen that shows it.
 
 ---
 
