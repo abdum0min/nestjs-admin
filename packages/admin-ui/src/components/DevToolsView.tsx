@@ -79,6 +79,31 @@ function cell(value: unknown): string {
 /** How many rows a model starts with. */
 const DEFAULT_COUNT = 20
 
+/**
+ * A database engine, spelled the way its own documentation spells it.
+ *
+ * The adapters report the ORM's word for it - Prisma says `postgresql`,
+ * Drizzle says `pg` - and neither is what a person calls it. Anything not on
+ * this list is shown as it arrived rather than mangled: a new engine should
+ * appear under a name somebody recognises, not under a guess.
+ */
+const ENGINES: Readonly<Record<string, string>> = {
+  postgresql: 'PostgreSQL',
+  postgres: 'PostgreSQL',
+  pg: 'PostgreSQL',
+  mysql: 'MySQL',
+  mariadb: 'MariaDB',
+  sqlite: 'SQLite',
+  sqlserver: 'SQL Server',
+  mongodb: 'MongoDB',
+  cockroachdb: 'CockroachDB',
+}
+
+function engineName(database: string | undefined): string | undefined {
+  if (database === undefined || database === '') return undefined
+  return ENGINES[database.toLowerCase()] ?? database
+}
+
 export function DevToolsView() {
   const confirm = useConfirm()
   const state = useAsync(() => devStatus(), [])
@@ -431,7 +456,15 @@ function StatusCards({ status }: { readonly status: DevStatus }) {
 
   const cards = [
     { icon: Layers, label: 'Models', value: String(status.models.length), hint: 'you may write' },
-    { icon: Database, label: 'Adapter', value: status.adapter, hint: 'in use' },
+    {
+      icon: Database,
+      label: 'Database',
+      // The engine is the answer to the question people actually have; the ORM
+      // is the smaller print underneath it. An adapter that cannot say which
+      // engine it is falls back to naming itself, which is still true.
+      value: engineName(status.database) ?? status.adapter,
+      hint: engineName(status.database) === undefined ? 'adapter' : `via ${status.adapter}`,
+    },
     {
       icon: Server,
       label: 'Environment',

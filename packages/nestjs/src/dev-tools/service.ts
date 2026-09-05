@@ -87,6 +87,14 @@ export interface DevStatus {
   readonly totalRecords: number
   /** Which adapter this admin is running on, as it names itself. */
   readonly adapter: string
+  /**
+   * The database engine underneath, when the adapter can say.
+   *
+   * Asked because "which database am I pointed at" is the question somebody
+   * has right before pressing something destructive, and a screen that only
+   * named the ORM answers a different one.
+   */
+  readonly database?: string
   readonly environment: { readonly deployed: boolean; readonly because: readonly string[] }
   readonly faker: boolean
   readonly images: boolean
@@ -195,6 +203,7 @@ export class DevToolsService {
       models: counted,
       totalRecords: counted.reduce((total, entry) => total + entry.records, 0),
       adapter: this.adapter.name,
+      ...(this.adapter.database === undefined ? {} : { database: this.adapter.database }),
       // What the deployment check actually saw, not `NODE_ENV` alone - a card
       // that named one variable would teach the wrong rule about a gate that
       // reads a dozen.

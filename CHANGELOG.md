@@ -42,7 +42,7 @@ Developer tools: an empty admin becomes something you can click through.
   four clicks on every one after it, which is the wrong trade for a tool
   somebody opens twenty times in an afternoon.
 
-- **A header that says where you are**: which adapter is in use, how many
+- **A header that says where you are**: which **database engine** it is pointed at - PostgreSQL, SQLite, MySQL - with the adapter underneath it, how many
   records exist, how many relations each model will wire up, and **what the
   deployment check actually saw** - not `NODE_ENV` alone, because the gate reads
   a dozen signals and a screen naming one would teach the wrong rule.
@@ -134,7 +134,21 @@ every model goes through the same `resourceAuth` boundary the HTTP routes use.
   - could not see the types for the Drizzle adapter shipped in 0.11.0. Runtime
     resolution was never affected.
 
-### Three defects found by running it, not by reading it
+- **`mode: 'insensitive'` never reached PostgreSQL.** The Prisma adapter reads
+  its datasource provider with a regular expression whose backslashes had gone
+  missing - `datasources+w+s*{…providers*=s*"…"`, literal letters where
+  character classes were meant - so it matched no schema ever written and
+  always answered `undefined`. Silently, because the provider is optional
+  everywhere it is used. What it cost is the option that makes `contains` and
+  `search` ignore capitalisation on PostgreSQL, which is decided from exactly
+  that value: every case-insensitive search there had quietly been
+  case-sensitive since the option was added.
+
+  Found by putting the provider on a screen, where `undefined` was visible for
+  the first time. Four tests now call it with real schemas, single-file and
+  multi-file, which the broken pattern could not have survived.
+
+### Four defects found by running it, not by reading it
 
 - **Dependency injection across entrypoints.** The example application would
   not start: the dev-tools controller asked for an `AdminService` class object
@@ -148,6 +162,8 @@ every model goes through the same `resourceAuth` boundary the HTTP routes use.
   second press still failed: the parents already taken by rows _in the table_
   were not excluded. Both are read now, and filling the example's ten-model
   schema twice in a row creates 50 records each time with nothing refused.
+- **The provider regex above**, which had been wrong for three releases and was
+  only visible once something displayed its answer.
 
 ---
 

@@ -672,7 +672,8 @@ products, no order lines" is one press rather than three visits.
 | Empty a model     | one model, named, with a confirmation                                             |
 | Empty every model | children first, refused without an acknowledgement, and it says what it skipped   |
 
-The header says which adapter is in use, how many records exist, and **what the
+The header says which **database engine** it is pointed at - PostgreSQL, SQLite,
+MySQL - with the adapter underneath it, how many records exist, and **what the
 deployment check actually saw** — not `NODE_ENV` alone, because the gate reads a
 dozen things and a screen that named one would teach the wrong rule.
 

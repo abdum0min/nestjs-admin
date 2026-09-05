@@ -25,6 +25,24 @@ export interface OrmAdapter {
   readonly name: string
 
   /**
+   * Which database engine is underneath, when the adapter can tell.
+   *
+   * `'postgresql'`, `'sqlite'`, `'mysql'` and so on - in the ORM's own
+   * spelling rather than a normalised one, because normalising here would mean
+   * this contract carrying a list of every engine every ORM will ever support.
+   *
+   * **Optional, and diagnostic only.** Nothing branches on it: an adapter that
+   * needed the layers above to know its engine would be an adapter that had not
+   * finished hiding one. It exists because "which database am I pointed at" is
+   * a question people ask right before pressing something destructive, and the
+   * adapter is the only thing that can answer it.
+   *
+   * May be absent until the adapter has read its schema, and absent forever for
+   * one that cannot say.
+   */
+  readonly database?: string | undefined
+
+  /**
    * Discover the models the adapter can serve. Asynchronous because an adapter
    * may need to read a schema file or import a generated client.
    */

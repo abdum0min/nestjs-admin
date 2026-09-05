@@ -72,6 +72,18 @@ export class PrismaAdapter implements OrmAdapter {
    */
   #provider: string | undefined
 
+  /**
+   * The datasource provider, for anything that wants to *say* which database
+   * this is rather than query it.
+   *
+   * The same value `#provider` carries, published under the contract's name.
+   * Undefined until the schema has been read, which is why it is a getter and
+   * not a field: the adapter is constructed long before `getModels` runs.
+   */
+  get database(): string | undefined {
+    return this.#provider
+  }
+
   constructor(options: PrismaAdapterOptions) {
     if (options.client === null || options.client === undefined) {
       throw new AdapterError(

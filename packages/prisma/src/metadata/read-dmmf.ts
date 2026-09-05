@@ -154,7 +154,22 @@ export function readDatasourceProvider(options: ReadDmmfOptions = {}): string | 
   try {
     const files = readSchemaFiles(locateSchema(options.schemaPath, options.cwd ?? process.cwd()))
     for (const [, content] of files) {
-      const declared = /datasources+w+s*{[^}]*?providers*=s*"([a-z]+)"/i.exec(content)
+      /*
+       * Every backslash here is load-bearing, and they were once missing.
+       *
+       * The pattern read `datasources+w+s*{...providers*=s*"..."` - literal
+       * letters where character classes were meant - so it matched no schema
+       * ever written and this function always answered `undefined`. Silently:
+       * the provider is optional everywhere it is used, so nothing failed. What
+       * it cost was `mode: 'insensitive'` on PostgreSQL, which is decided from
+       * this value, so every case-insensitive search on Postgres had quietly
+       * been case-sensitive.
+       *
+       * Found by putting the provider on a screen, where "undefined" was
+       * visible for the first time. The test beside this file now calls it with
+       * a real schema, which the regex could not have survived.
+       */
+      const declared = /datasource\s+\w+\s*\{[^}]*?provider\s*=\s*"([a-z]+)"/i.exec(content)
       if (declared?.[1] !== undefined) return declared[1].toLowerCase()
     }
   } catch {

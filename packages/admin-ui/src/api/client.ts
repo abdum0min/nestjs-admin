@@ -495,6 +495,8 @@ export interface DevStatus {
   readonly totalRecords: number
   /** The adapter this admin runs on, as it names itself. */
   readonly adapter: string
+  /** The database engine underneath, when the adapter can say. */
+  readonly database?: string
   /** What the deployment check saw - not `NODE_ENV` alone. */
   readonly environment: { readonly deployed: boolean; readonly because: readonly string[] }
   /** Whether `@faker-js/faker` is installed. It works either way. */

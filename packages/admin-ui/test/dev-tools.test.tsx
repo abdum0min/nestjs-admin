@@ -375,3 +375,42 @@ describe('what the danger zone admits it does not do', () => {
     expect(screen.getByText(/your ORM/)).toBeTruthy()
   })
 })
+
+describe('which database it is pointed at', () => {
+  it('names the engine, with the ORM underneath it', async () => {
+    // The question somebody has right before pressing something destructive is
+    // "which database is this", and a card that only named the ORM answers a
+    // different one.
+    server({ useDevTools: true }, { adapter: 'prisma', database: 'postgresql' })
+    await openTools()
+
+    expect(screen.getByText('PostgreSQL')).toBeTruthy()
+    expect(screen.getByText('via prisma')).toBeTruthy()
+  })
+
+  it('spells it the way its own documentation does', async () => {
+    // Prisma says `postgresql`, Drizzle says `pg`, and neither is what a
+    // person calls it.
+    server({ useDevTools: true }, { adapter: 'drizzle', database: 'pg' })
+    await openTools()
+
+    expect(screen.getByText('PostgreSQL')).toBeTruthy()
+  })
+
+  it('shows an engine it has never heard of as it arrived', async () => {
+    // A new engine should appear under a name somebody recognises, not under
+    // a guess.
+    server({ useDevTools: true }, { database: 'duckdb' })
+    await openTools()
+
+    expect(screen.getByText('duckdb')).toBeTruthy()
+  })
+
+  it('falls back to the adapter when it cannot say', async () => {
+    server({ useDevTools: true }, { adapter: 'in-memory', database: undefined })
+    await openTools()
+
+    expect(screen.getByText('in-memory')).toBeTruthy()
+    expect(screen.getByText('adapter')).toBeTruthy()
+  })
+})

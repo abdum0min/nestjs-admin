@@ -497,3 +497,38 @@ describe('what emptying everything leaves alone', () => {
     expect(body.data.skipped).toEqual([])
   })
 })
+
+describe('which database it is pointed at', () => {
+  it('says nothing when the adapter cannot tell', async () => {
+    // Optional and diagnostic: an adapter that had to answer this would be one
+    // that had not finished hiding its engine.
+    const server = await boot()
+    const { body } = await request(server).get('/admin/dev').expect(200)
+
+    expect(body.data.adapter).toBe('in-memory')
+    expect(body.data.database).toBeUndefined()
+  })
+
+  it('passes on whatever the adapter says, unchanged', async () => {
+    // In the ORM's own spelling. Normalising here would mean this contract
+    // carrying a list of every engine every ORM will ever support.
+    const adapter = new InMemoryAdapter(seed()) as InMemoryAdapter & { database?: string }
+    adapter.database = 'postgresql'
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        AdminModule.forRoot({
+          adapter,
+          auth: unsafeAllowAllRequests(),
+          files: false,
+          devTools: devTools(),
+        }),
+      ],
+    }).compile()
+    app = moduleRef.createNestApplication()
+    await app.init()
+
+    const { body } = await request(app.getHttpServer()).get('/admin/dev').expect(200)
+    expect(body.data.database).toBe('postgresql')
+  })
+})

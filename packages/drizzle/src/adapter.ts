@@ -97,6 +97,16 @@ export class DrizzleAdapter implements OrmAdapter {
   #schema: DrizzleSchema | undefined
   #models: readonly ModelMetadata[] | undefined
 
+  /**
+   * Which SQL dialect the schema turned out to be, in Drizzle's own spelling.
+   *
+   * A getter because the dialect is detected from the tables, which happens the
+   * first time the schema is read - after construction.
+   */
+  get database(): string | undefined {
+    return this.#schema?.dialect
+  }
+
   constructor(options: DrizzleAdapterOptions) {
     if (options.db === null || options.db === undefined) {
       throw new AdapterError(

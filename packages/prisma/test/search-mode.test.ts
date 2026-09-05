@@ -7,10 +7,14 @@
  * where Prisma would throw on it - and that is the failure mode worth guarding,
  * because it takes out every search on the provider rather than degrading one.
  */
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, it } from 'vitest'
 
 import type { ModelMetadata } from '@nest-admin/core'
 
+import { readDatasourceProvider } from '../src/metadata/read-dmmf.js'
 import { buildWhere, insensitively } from '../src/query/to-prisma-args.js'
 
 const MODEL: ModelMetadata = {
@@ -89,5 +93,34 @@ describe('the query it produces', () => {
     // An exact match is not a text search, and `in` takes a list.
     expect(where('eq', 'a')).toEqual({ name: { equals: 'a' } })
     expect(where('in', ['a', 'b'])).toEqual({ name: { in: ['a', 'b'] } })
+  })
+})
+
+describe('reading the provider out of the schema', () => {
+  const fixtures = fileURLToPath(new URL('./fixtures', import.meta.url))
+
+  it('finds it in a single-file schema', async () => {
+    // The whole reason this matters: `insensitively` reads this value, and an
+    // undefined provider means PostgreSQL never gets `mode: 'insensitive'` -
+    // so every case-insensitive search there is silently case-sensitive.
+    expect(readDatasourceProvider({ schemaPath: join(fixtures, 'schema.prisma') })).toBe('sqlite')
+  })
+
+  it('finds it in a multi-file schema, wherever the datasource block is', async () => {
+    expect(readDatasourceProvider({ schemaPath: join(fixtures, 'multi-file') })).toBe('sqlite')
+  })
+
+  it('feeds the value the search mode is decided from', async () => {
+    // The two halves, joined: a schema that says `postgresql` must end up
+    // producing `mode: 'insensitive'`, and this asserts the pair rather than
+    // each side agreeing with itself.
+    expect(
+      insensitively(readDatasourceProvider({ schemaPath: join(fixtures, 'schema.prisma') })),
+    ).toEqual({})
+    expect(insensitively('postgresql')).toEqual({ mode: 'insensitive' })
+  })
+
+  it('says nothing about a schema it cannot read, rather than throwing', async () => {
+    expect(readDatasourceProvider({ schemaPath: join(fixtures, 'nowhere.prisma') })).toBeUndefined()
   })
 })
