@@ -19,6 +19,7 @@ the order you actually need it. This page is for looking things up.
 - [`hooks`](#hooks)
 - [`actions`](#actions)
 - [`dashboard`](#dashboard)
+- [Import and export](#import-and-export)
 - [`path`, `uiRoot`, `theme`](#path-uiroot-theme)
 - [The query string](#the-query-string)
 - [Errors](#errors)
@@ -982,6 +983,115 @@ Omit the option entirely and a dashboard is generated from the schema: a count
 per model, plus recent records and a month of activity for models that record
 when a row was created. Declaring widgets replaces that rather than adding to
 it.
+
+---
+
+## Import and export
+
+Nothing to configure. Both appear on every list, and follow the permissions
+already in force.
+
+### Export
+
+CSV or JSON, of **what the screen is showing** — the search, the filters, the
+sort and the deleted view all apply. Every readable column by default, not the
+six the table shows, with a column chooser; `writeOnly` columns are absent by
+the same rule that keeps them out of every other response.
+
+A to-one relation is exported **twice**: the foreign key, which is the truth and
+what an import can act on without ambiguity, and the label, which is the half a
+person reading the file can use.
+
+| Limit         | Value                                     |
+| ------------- | ----------------------------------------- |
+| Rows          | 50,000, refused before any bytes are sent |
+| Formats       | `csv`, `json`                             |
+| CSV separator | comma, semicolon or tab                   |
+
+**The CSV is written to be opened.** A byte-order mark, so Excel reads UTF-8
+rather than the local codepage. A choice of separator, because Excel splits on
+the list separator from the operating system's regional settings — a semicolon
+in much of Europe, where a comma-separated file opens as one column. RFC 4180
+quoting, so a comma or a newline inside a value survives.
+
+And a cell beginning `=`, `+`, `-` or `@` is prefixed with an apostrophe. Those
+are **formulas** to Excel and Google Sheets, so `=cmd|'/c calc'!A1` in a product
+name is an attack on whoever opens the file. The reader takes the apostrophe
+back off, so a value survives the round trip unchanged.
+
+No `.xlsx`. It needs a library or three hundred lines of ZIP and XML, and the
+file above opens in Excel.
+
+### `exportData`
+
+An [`AdminCapability`](#roles-and-roleof). Reading a list a page at a time and
+downloading the whole table are not the same act, even though the second is only
+the first repeated. Without `roles` every administrator has it; with `roles` it
+is granted:
+
+```ts
+roles: {
+  analyst: {
+    models: { Order: ['metadata', 'list', 'read'] },
+    capabilities: ['exportData'],
+  },
+  support: {
+    // Can read customers one at a time. Cannot take the table home.
+    models: { User: ['metadata', 'list', 'read'] },
+  },
+}
+```
+
+### Import
+
+Three steps, and the third cannot be skipped:
+
+1. **Choose a file** — CSV with a header row, or a JSON array of objects.
+2. **Map its columns onto fields.** Guessed first: exact name, then ignoring
+   case, underscores and spaces, so `Full Name` finds `fullName`.
+3. **See what would happen.** Every row is parsed, coerced, resolved and looked
+   up, and the result is reported — including which rows are refused, by the
+   line number a spreadsheet shows, and why. Nothing has been written.
+4. Confirm.
+
+**Why the dry run is mandatory.** There is no transaction across an import; the
+adapter contract has none. A failure halfway through leaves the rows before it
+written. Knowing the errors before the first write is what makes that
+acceptable rather than a hazard.
+
+**An import goes through the admin, not around it.** It calls the same
+`create` and `update` a form does, so your hooks run, read-only and generated
+columns are refused and the policy is checked. That is the opposite of the
+[mock-data generator](#devtools), which writes through the adapter on purpose:
+a seeder inventing two hundred users must not send two hundred welcome emails.
+An import is a person entering real records.
+
+**Creating and updating.** Choose a unique column — usually the primary key or
+an email — and rows whose value is already in the database update that record.
+Choose none and every row is a create. A value that matches two records refuses
+that row.
+
+**Relations by name.** A cell under `authorId` may hold the key, or hold
+`Ada Lovelace`. Keys are tried first. A name two records share **refuses the
+row**: guessing writes the record to the wrong person, and nothing about the
+result would look wrong afterwards.
+
+**Empty cells.** A mapped column left blank sets the field to `null`; a column
+that is not mapped is never touched. That is the difference between "no value"
+and "no opinion", and it is what lets an import update one column of a table.
+
+| Limit      | Value                                 |
+| ---------- | ------------------------------------- |
+| Rows       | 1,000                                 |
+| File size  | 8 MB                                  |
+| Formats    | CSV (comma, semicolon or tab), JSON   |
+| Permission | `create` and/or `update` on the model |
+
+The row limit is because an import runs inside the request that started it and
+every row goes through your hooks, which may hash a password or call something
+over the network. A timeout halfway through is the worst outcome available: the
+work is half done and the answer never arrives. A larger migration is a script's
+job, and a script has your ORM.
 
 ---
 

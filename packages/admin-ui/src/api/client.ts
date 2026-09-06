@@ -24,6 +24,10 @@ import type {
   ListResult,
   Metadata,
   SuccessEnvelope,
+  ImportOutcome,
+  ImportPlan,
+  ImportShape,
+  TransferFormat,
 } from './types.js'
 
 /**
@@ -628,5 +632,138 @@ export async function devTruncate(model: string): Promise<{ deleted: number; rem
     method: 'POST',
     body: JSON.stringify({ model }),
   })
+  return data
+}
+
+/* ------------------------------------------------------------ import/export */
+
+/**
+ * `GET /admin/export/:model` - the current view as a file.
+ *
+ * Fetched rather than linked to. A plain link would let the browser navigate to
+ * a failure, so a refused export - one over the row limit, or a role without
+ * the capability - would replace the admin with a page of JSON. This way the
+ * error arrives as an error and the screen stays where it was.
+ */
+export async function exportRecords(
+  model: string,
+  query: ListQuery,
+  options: {
+    readonly format: TransferFormat
+    readonly columns?: readonly string[]
+    readonly delimiter?: string
+  },
+): Promise<{ readonly blob: Blob; readonly filename: string }> {
+  const params = new URLSearchParams(
+    buildQueryString({ ...query, page: undefined, perPage: undefined }).slice(1),
+  )
+  params.set('format', options.format)
+  if (options.columns?.length) params.set('columns', options.columns.join(','))
+  if (options.delimiter !== undefined) params.set('delimiter', options.delimiter)
+
+  const response = await fetch(
+    `${API_BASE}/export/${encodeURIComponent(model)}?${params.toString()}`,
+    {
+      credentials: 'include',
+    },
+  )
+
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => undefined)
+    const envelope = payload as ErrorEnvelope | undefined
+    throw new AdminApiError(
+      envelope?.error?.code ?? 'INTERNAL_ERROR',
+      envelope?.error?.message ?? 'The export failed.',
+      response.status,
+    )
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameOf(response) ?? `${model}.${options.format}`,
+  }
+}
+
+/** What the server called the file, when it said. */
+function filenameOf(response: Response): string | undefined {
+  const found = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')
+  return found?.[1]
+}
+
+/**
+ * Hand a blob to the browser as a download.
+ *
+ * The object URL is revoked afterwards; without that every export somebody
+ * takes holds its own bytes until the tab is closed.
+ */
+export function saveFile(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+/** The file, sent as text so the host's JSON body parser leaves it alone. */
+function fileBody(body: string): RequestInit {
+  return {
+    method: 'POST',
+    body,
+    headers: { Accept: 'application/json', 'Content-Type': 'text/plain; charset=utf-8' },
+  }
+}
+
+function importParams(
+  mapping: Readonly<Record<string, string>>,
+  matchBy: string | undefined,
+): string {
+  const pairs = Object.entries(mapping)
+    .filter(([, column]) => column !== '')
+    .map(([field, column]) => `${encodeURIComponent(field)}:${encodeURIComponent(column)}`)
+
+  const params = new URLSearchParams()
+  params.set('mapping', pairs.join(','))
+  if (matchBy !== undefined && matchBy !== '') params.set('matchBy', matchBy)
+
+  return `?${params.toString()}`
+}
+
+/** `POST /admin/import/:model/columns` - what is in this file. */
+export async function importColumns(model: string, body: string): Promise<ImportShape> {
+  const { data } = await request<ImportShape>(
+    `/import/${encodeURIComponent(model)}/columns`,
+    fileBody(body),
+  )
+  return data
+}
+
+/** `POST /admin/import/:model/plan` - what an import would do, doing none of it. */
+export async function importPlan(
+  model: string,
+  body: string,
+  mapping: Readonly<Record<string, string>>,
+  matchBy?: string,
+): Promise<ImportPlan> {
+  const { data } = await request<ImportPlan>(
+    `/import/${encodeURIComponent(model)}/plan${importParams(mapping, matchBy)}`,
+    fileBody(body),
+  )
+  return data
+}
+
+/** `POST /admin/import/:model` - do it. */
+export async function runImport(
+  model: string,
+  body: string,
+  mapping: Readonly<Record<string, string>>,
+  matchBy?: string,
+): Promise<ImportOutcome> {
+  const { data } = await request<ImportOutcome>(
+    `/import/${encodeURIComponent(model)}${importParams(mapping, matchBy)}`,
+    fileBody(body),
+  )
   return data
 }

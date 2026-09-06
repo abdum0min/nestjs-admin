@@ -23,6 +23,16 @@
  */
 
 export type { AdminAction, AdminActionResult, AdminActionsByModel } from './actions/contract.js'
+export type {
+  ExportRequest,
+  ImportOutcome,
+  ImportPlan,
+  ImportRequest,
+  ImportShape,
+  PlannedRow,
+  TransferFormat,
+} from './transfer/contract.js'
+export type { ExportColumn, ImportTarget } from './transfer/columns.js'
 
 export type { AdminHookContext, AdminHooks, AdminHooksByModel } from './hooks/contract.js'
 

@@ -271,6 +271,16 @@ export interface CapabilitiesDto {
    * identical from a screen: in both cases they are not part of this admin.
    */
   readonly useDevTools?: boolean
+
+  /**
+   * True when this role may download a model as a file.
+   *
+   * Its own capability rather than part of `list`, because reading a page at a
+   * time and taking the whole table away are not the same act even though the
+   * second is only the first repeated. Without roles every administrator has
+   * it, which is what a single-superuser admin always meant.
+   */
+  readonly exportData?: boolean
 }
 
 export interface MetadataDto {

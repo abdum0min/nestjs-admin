@@ -41,7 +41,7 @@ import {
  * typo in an open string would silently grant nothing, and nothing is exactly
  * what a working configuration also looks like from the outside.
  */
-export type AdminCapability = 'manageTeam' | 'useDevTools'
+export type AdminCapability = 'manageTeam' | 'useDevTools' | 'exportData'
 
 export interface RolePermissions {
   /**

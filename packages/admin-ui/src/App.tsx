@@ -192,7 +192,13 @@ function Admin({
           <p>“{route.model}” is not one of the resources you can access.</p>
         </Empty>
       ) : (
-        <Content route={route} model={active} models={models} canFill={canUseDevTools} />
+        <Content
+          route={route}
+          model={active}
+          models={models}
+          canFill={canUseDevTools}
+          canExport={metadata.data?.capabilities?.exportData !== false}
+        />
       )}
     </Shell>
   )
@@ -203,11 +209,20 @@ function Content({
   model,
   models,
   canFill = false,
+  canExport = false,
 }: {
   readonly route: ReturnType<typeof useRoute>
   readonly model: ModelDescriptor
   /** Whether the developer tools are available to fill a form in one press. */
   readonly canFill?: boolean
+  /**
+   * Whether this role may export.
+   *
+   * Absent from a server older than this feature, and read as yes: that server
+   * has no capability to withhold, and hiding a working button because a field
+   * is missing would be the wrong way round.
+   */
+  readonly canExport?: boolean
   // Every model, not just the active one: a relation names its target by name,
   // and rendering it needs that target's primary key and display field.
   readonly models: readonly ModelDescriptor[]
@@ -218,6 +233,7 @@ function Content({
         <ListView
           model={model}
           models={models}
+          canExport={canExport}
           {...(route.filter ? { initialFilter: route.filter } : {})}
         />
       )

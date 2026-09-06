@@ -5,7 +5,18 @@
  * link all come from the model descriptor the server sent - there is no branch
  * anywhere on a model or field name.
  */
-import { Copy, Eye, MoreHorizontal, Pencil, Plus, Trash2, Undo2, X } from 'lucide-react'
+import {
+  Copy,
+  Download,
+  Eye,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+  Undo2,
+  Upload,
+  X,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
@@ -22,6 +33,7 @@ import type {
   DeletedView,
   FieldDescriptor,
   FilterRule,
+  ListQuery,
   ModelDescriptor,
   SortRule,
 } from '../api/types.js'
@@ -40,6 +52,8 @@ import {
 import { formatCell } from '../metadata/format.js'
 import { relationForForeignKey, relationLink } from '../metadata/relations.js'
 import { Actions } from './Actions.jsx'
+import { ExportDialog } from './ExportDialog.jsx'
+import { ImportDialog } from './ImportDialog.jsx'
 import { Badge } from './ui/badge.jsx'
 import { Empty, ErrorState, TableSkeleton } from './States.jsx'
 import { Breadcrumb } from './ui/breadcrumb.jsx'
@@ -71,6 +85,7 @@ export function ListView({
   model,
   models,
   initialFilter,
+  canExport = false,
 }: {
   readonly model: ModelDescriptor
   readonly models: readonly ModelDescriptor[]
@@ -81,6 +96,14 @@ export function ListView({
    * what it is showing, and reloading the page keeps showing it.
    */
   readonly initialFilter?: string
+  /**
+   * Whether this role may take the model away as a file.
+   *
+   * Its own capability, and separate from `list`: reading a page at a time and
+   * downloading the whole table are not the same act, even though the second is
+   * only the first repeated.
+   */
+  readonly canExport?: boolean
 }) {
   const confirm = useConfirm()
 
@@ -121,6 +144,15 @@ export function ListView({
   const [deleted, setDeleted] = useState<DeletedView>('live')
   const softDeleteField = model.softDeleteField
 
+  /**
+   * Which transfer dialog is open, if either.
+   *
+   * Both act on this list rather than on a selection: an export takes the view,
+   * and an import adds to the model. Neither has anything to do with the rows
+   * that happen to be ticked.
+   */
+  const [transfer, setTransfer] = useState<'export' | 'import' | undefined>(undefined)
+
   // Reset view state when the model changes; a page number or sort field from
   // the previous model is meaningless here and would produce a 400.
   useEffect(() => {
@@ -136,6 +168,7 @@ export function ListView({
     setSelected(new Set())
     setOutcome(undefined)
     setDeleted('live')
+    setTransfer(undefined)
   }, [model.name, initialFilter])
 
   // Debounce the search box so typing does not fire a request per keystroke.
@@ -263,6 +296,19 @@ export function ListView({
   const total = state.data?.meta.total
   const lastPage = Math.max(1, Math.ceil((total ?? 0) / perPage))
 
+  /**
+   * The query behind the screen, without its paging.
+   *
+   * What the export takes: an export of "page 3 of what I filtered" is not a
+   * thing anybody wants, and the filters are exactly what they do.
+   */
+  const view: ListQuery = {
+    ...(search ? { search } : {}),
+    ...(sort ? { sort: [sort] } : {}),
+    ...(filter ? { filters: [filter] } : {}),
+    ...(softDeleteField !== undefined ? { deleted } : {}),
+  }
+
   return (
     <section className="flex flex-col gap-4">
       <Breadcrumb trail={[{ label: 'Home', href: '#/' }, { label: modelLabel(model) }]} />
@@ -282,6 +328,23 @@ export function ListView({
               again when it arrives; this only stops the interface promising
               something it cannot deliver. */}
           <Actions model={model} scope="list" onDone={state.reload} />
+
+          {/* Both are checked again when the request arrives; withholding a
+              button has never been a permission. Export needs a capability of
+              its own - taking the whole table away is not the same act as
+              reading a page of it - and import needs somewhere to write. */}
+          <Button variant="outline" onClick={() => setTransfer('import')}>
+            <Upload />
+            <span className="hidden sm:inline">Import</span>
+          </Button>
+
+          {canExport ? (
+            <Button variant="outline" onClick={() => setTransfer('export')}>
+              <Download />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+          ) : null}
+
           {model.can?.create === false ? null : (
             <Button onClick={() => navigate({ kind: 'create', model: model.name })}>
               <Plus />
@@ -525,6 +588,22 @@ export function ListView({
             />
           </>
         )
+      ) : null}
+      {transfer === 'export' ? (
+        <ExportDialog
+          model={model}
+          query={view}
+          total={total}
+          onClose={() => setTransfer(undefined)}
+        />
+      ) : null}
+
+      {transfer === 'import' ? (
+        <ImportDialog
+          model={model}
+          onClose={() => setTransfer(undefined)}
+          onImported={state.reload}
+        />
       ) : null}
     </section>
   )

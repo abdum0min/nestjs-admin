@@ -39,6 +39,8 @@ import { adminAccountOf, builtInRuntimeOf } from './auth/built-in.js'
 import type { AdminStorage } from '@nest-admin/core'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
 import { AdminFilesController, type FilesRuntime } from './files/controller.js'
+import { AdminTransferController } from './transfer/controller.js'
+import { TransferService } from './transfer/service.js'
 import { isLocalStorage, localStorage } from './files/local.js'
 import { toBytes } from './files/sniff.js'
 
@@ -552,6 +554,7 @@ function defineModule(
       AdminAuthController,
       AdminTeamController,
       AdminFilesController,
+      AdminTransferController,
       // Before the controller that owns `:model`, like every other literal.
       ...(devTools?.controllers ?? []),
       AdminController,
@@ -563,6 +566,7 @@ function defineModule(
       { provide: ADMIN_MOUNT_PATH, useValue: mountPath },
       { provide: ADMIN_THEME, useValue: theme },
       AdminService,
+      TransferService,
       // The same instance, reachable by token. Anything in another
       // entrypoint holds a different copy of the class object and cannot ask
       // for it by name - see ADMIN_SERVICE in tokens.ts.

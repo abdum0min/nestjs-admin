@@ -314,6 +314,10 @@ const roles = {
       Category: ['metadata', 'list', 'read'],
       Tag: ['metadata', 'list', 'read', 'create', 'update'],
     },
+    // May take the publishing models away as a file. Support, below, may read
+    // customers one at a time and may not download the table - which is the
+    // whole reason exporting is a capability rather than part of `list`.
+    capabilities: ['exportData'],
   },
 
   support: {

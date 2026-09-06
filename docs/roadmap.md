@@ -41,6 +41,7 @@ interface had stopped changing shape, and a second adapter had proved the
 | 0.14.1  | Schema report, metadata viewer, fill this form, duplicate a record          |
 | 0.14.2  | Schema map, and a report grouped by problem rather than by model            |
 | 0.14.3  | Rich text on a string column, as its own chunk                              |
+| 0.15.0  | Import and export, with a dry run that cannot be skipped                    |
 
 **1300+ tests, 67/67 packed-consumer checks, published as
 [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs).**
@@ -102,7 +103,6 @@ far side of it is no longer the consumer's problem to solve from scratch.
 | 0.14.0  | Developer tools                    | Mock data, and the empty-admin problem. Needs 0.13 for avatars and covers                      |
 | 0.14.1  | Diagnosis, and filling a form      | Reads the same metadata the tools do; no generation of its own                                 |
 | 0.14.2  | Rich text                          | A widget with a bundle cost, so it ships where that cost is visible                            |
-| 0.15.0  | Import and export                  | Needs 0.13 for the upload half                                                                 |
 | 0.16.0  | Customisation                      | Deliberately after the functional set: you cannot design it before knowing what needs bending  |
 | 0.17.0  | Docs site, demo, publishing polish | Once there is something worth showing                                                          |
 | 1.0.0   | API freeze                         | Only after all of the above is stable                                                          |
@@ -460,21 +460,30 @@ screen that shows it.
 
 ---
 
-### 0.15.0 — Import and export
+### 0.15.0 — Import and export — **delivered**
 
-- **Export** is nearly free - the list query already does the work - and
-  respects `hidden` and `writeOnly`, or it becomes a hole in the permission
-  boundary.
-- **Import** is the hard half. **A dry run is mandatory**: show what would
-  happen, then ask. Partial failure is reported in both halves, the way bulk
-  delete already does. Relations resolve by key or by display field.
-- **CSV and JSON**, both written here with no dependency. Excel is deferred
-  rather than refused - it needs a library or three hundred lines of zip and
-  XML, and shipping the two formats that need neither is the faster way to find
-  out whether the third is actually wanted.
+Both directions reuse the admin rather than reaching past it. An export pages
+through the list service, so the caller's filters, the policy's row scope, the
+field projection and the deleted view are the ones already in force. An import
+calls create and update, so hooks run and every permission is checked.
 
-**Acceptance:** a thousand-row CSV imports with three bad rows reported by row
-number and reason, and nothing written until it is confirmed.
+- **Export**: CSV or JSON, streamed, from whatever the list is showing. Refused
+  above 50,000 rows, _before_ any bytes are sent - a stream cannot change its
+  mind about a status code.
+- **The CSV is written to be opened**: byte-order mark, a choice of separator,
+  RFC 4180 quoting, and cells beginning `=` `+` `-` `@` defused, because those
+  are formulas to Excel and the reader takes the apostrophe back off.
+- **Import**: map, dry-run, confirm. Up to 1,000 rows, because it runs inside
+  the request and every row goes through the application's hooks.
+- **Updates as well as creates**, by any unique column. Relations resolve by
+  key or by name, and an ambiguous name refuses the row rather than guessing.
+- **`exportData`**, a new capability: taking the whole table away is not the
+  same act as reading a page of it.
+- No `.xlsx`. It needs a library or three hundred lines of ZIP and XML, and the
+  CSV above opens in Excel. Deferred rather than refused.
+
+**Acceptance:** met - a thousand-row file reports its bad rows by line number
+and reason, and nothing is written until it is confirmed.
 
 ---
 

@@ -364,4 +364,62 @@ export interface Capabilities {
    * either way they are not part of this admin.
    */
   readonly useDevTools?: boolean
+
+  /** Whether this role may download a model as a CSV or JSON file. */
+  readonly exportData?: boolean
+}
+
+/* ------------------------------------------------------------ import/export */
+
+export type TransferFormat = 'csv' | 'json'
+
+/** A field an import can write, and what a value for it has to satisfy. */
+export interface ImportTargetInfo {
+  readonly field: string
+  readonly kind: FieldKind
+  readonly required: boolean
+  readonly unique: boolean
+  readonly enumValues?: readonly string[]
+  /** Set when the column is a relation's key: a cell may hold a key or a name. */
+  readonly relation?: {
+    readonly model: string
+    readonly to: string
+    readonly display: string
+  }
+}
+
+/** What a file turned out to contain, before anybody has decided anything. */
+export interface ImportShape {
+  readonly columns: readonly string[]
+  readonly rows: number
+  readonly truncated: boolean
+  readonly targets: readonly ImportTargetInfo[]
+  readonly matchable: readonly string[]
+  readonly mapping: Readonly<Record<string, string>>
+  readonly sample: readonly Readonly<Record<string, string>>[]
+}
+
+export interface PlannedRow {
+  readonly line: number
+  readonly action: 'create' | 'update' | 'refused'
+  readonly id?: string | number
+  readonly values: AdminRecord
+  readonly problems: readonly string[]
+}
+
+/** A dry run: everything an import would do, having done none of it. */
+export interface ImportPlan {
+  readonly matchBy: string | null
+  readonly mapping: Readonly<Record<string, string>>
+  readonly create: number
+  readonly update: number
+  readonly refused: number
+  /** A sample, plus every refused row. The counts are of the whole file. */
+  readonly rows: readonly PlannedRow[]
+}
+
+export interface ImportOutcome {
+  readonly created: number
+  readonly updated: number
+  readonly failed: readonly { readonly line: number; readonly message: string }[]
 }

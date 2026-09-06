@@ -16,7 +16,109 @@ finished and then folded into the patch that followed, because something worth
 fixing turned up before the release went out. They are documented as their own
 entries because that is where the work belongs; on npm their contents arrived in
 `0.12.1`, `0.13.1` and `0.14.2`. Released versions are
-`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2`.
+`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2 · 0.14.3`.
+
+---
+
+## 0.15.0
+
+Getting data in and out, without going round the admin to do it.
+
+### Added
+
+- **Export** from any list, as **CSV** or **JSON**. What comes out is what is on
+  the screen: the search, the filters, the sort and the deleted view all apply,
+  because a button that ignored the filter somebody had just set would be
+  answering a different question. Every readable column by default, not the six
+  the table shows, with a column chooser.
+
+  It streams and pages internally, so a large export never exists in memory as
+  one string. Above 50,000 rows it is **refused before any bytes are sent** -
+  once a stream has started the status code is decided, and a file that stops
+  early looks exactly like a file that finished.
+
+  `writeOnly` columns are absent, by the same rule that keeps a password hash
+  out of every other response.
+
+- **The CSV is written to be opened.** A byte-order mark, so Excel reads UTF-8
+  as UTF-8 rather than as the local codepage; a choice of comma, semicolon or
+  tab, because Excel splits on the list separator from the operating system's
+  regional settings, which is a semicolon in much of Europe; CRLF and RFC 4180
+  quoting, so a comma or a newline inside a value survives.
+
+  And cells beginning `=`, `+`, `-` or `@` are prefixed with an apostrophe.
+  Those are **formulas** to Excel and Google Sheets, so `=cmd|'/c calc'!A1` in a
+  product name is an attack on whoever opens the export. The reader takes the
+  apostrophe back off, so the value survives a round trip unchanged.
+
+- **Import**, in three steps that cannot be skipped: choose a file, map its
+  columns onto fields, **see what would happen**, then confirm.
+
+  The dry run is the point. There is no transaction across an import - the
+  adapter contract has none - so a failure halfway through leaves the rows
+  before it written. Knowing the errors before the first write is what makes
+  that acceptable, and each one names the line a spreadsheet would show.
+
+  Mapping is guessed and then corrected: exact name first, then ignoring case,
+  underscores and spaces, so `Full Name` finds `fullName` and `created_at`
+  finds `createdAt`.
+
+- **Import updates as well as creates.** Choose a unique column - the primary
+  key, or an email - and rows whose value is already in the database update that
+  record instead of adding a second one. One `in` query for the whole file, not
+  one per row. A value matching two records refuses that row rather than picking
+  one.
+
+- **Relations resolve by name.** A cell under `authorId` may hold the key or
+  hold `Ada Lovelace`, which is what a person editing a spreadsheet will write.
+  Keys are tried first; a name that two records share **refuses the row** rather
+  than attaching it to whichever came back first, because guessing there writes
+  the record to the wrong person and nothing about the result would look wrong
+  afterwards.
+
+- **An import goes through the admin, not around it.** `create` and `update`,
+  which means hooks run, read-only and generated columns are refused, and the
+  policy is checked - by the same code that checks a form.
+
+  That is deliberately the opposite of the mock-data generator, which writes
+  through the adapter so a seeder inventing two hundred users does not send two
+  hundred welcome emails. An import is a person entering real records, and their
+  `beforeCreate` is exactly what should decide what a record means.
+
+- **`exportData`**, a new `AdminCapability`. Reading a list a page at a time and
+  downloading the whole table are not the same act, even though the second is
+  only the first repeated: one is somebody working, the other is the entire
+  customer table on a laptop. Without `roles` every administrator has it, which
+  is what a single-superuser admin always meant; with `roles` it has to be
+  granted.
+
+  Import needs no capability of its own - it is governed by `create` and
+  `update` on the model, which is what it does.
+
+- **A CSV reader and writer with no dependency**, for the reason the PNG encoder
+  had none: a bounded, fully specified format, against a dependency that would
+  be permanent. It parses a character at a time rather than splitting, because a
+  field may legally contain the delimiter, a newline or a quote - and a reader
+  built on `split(',')` corrupts data silently, in a file somebody has already
+  imported.
+
+### Limits
+
+- **1,000 rows per import.** It runs inside the request that started it and
+  every row goes through the application's hooks, which may hash a password or
+  call something over the network. A timeout halfway through is the worst
+  outcome available: the work is half done and the answer never arrives. A
+  larger migration is a script's job, and a script has the adapter.
+- **No `.xlsx`.** Real Excel files need a library or three hundred lines of ZIP
+  and XML, and the CSV above opens in Excel. Deferred rather than refused.
+- Composite primary keys cannot be matched on, for the reason they cannot be
+  addressed anywhere else: `RecordId` is a single value.
+
+### Unreleased note
+
+The row limits are constants rather than options. They become options if
+somebody asks with a case; guessing at a configuration surface before then is
+how a package accumulates one.
 
 ---
 

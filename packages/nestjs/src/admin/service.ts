@@ -370,6 +370,9 @@ export class AdminService implements OnModuleInit {
         // what a screen should see: in both cases they are not part of this
         // admin.
         useDevTools: this.devTools !== undefined && this.can(context, 'useDevTools'),
+        // One half only: export is always mounted, so this is the role's answer
+        // and nothing else.
+        exportData: this.can(context, 'exportData'),
       },
       // Only when the guard is on: naming a field the server will ignore would
       // suggest a protection that is not running.
