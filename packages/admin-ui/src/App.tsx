@@ -124,7 +124,7 @@ function Admin({
   const report = useAsync(async () => (canUseDevTools ? devDoctor() : []), [canUseDevTools])
   const broken = (report.data ?? []).filter((finding) => finding.severity === 'broken').length
 
-  const shellProps = { account, onSignedOut }
+  const shellProps = { account, onSignedOut, activeHome: route.kind === 'home' }
 
   if (metadata.loading) {
     return <Shell {...shellProps}>{<Loading label="Loading resources…" />}</Shell>
@@ -249,6 +249,7 @@ function Shell({
   canManageTeam = false,
   canUseDevTools = false,
   brokenCount = 0,
+  activeHome = false,
   activeDev = false,
   activeSchema = false,
   children,
@@ -271,6 +272,15 @@ function Shell({
    * on most schemas - a warning that never goes out is one people stop seeing.
    */
   readonly brokenCount?: number
+  /**
+   * Whether the dashboard is the page being shown.
+   *
+   * Its own signal rather than "no model is selected", which was the bug this
+   * replaces: the developer pages, the team screen and the loading state all
+   * have no model, so all of them lit the dashboard up beside whatever was
+   * actually open.
+   */
+  readonly activeHome?: boolean
   /** Whether the developer tools are the page being shown. */
   readonly activeDev?: boolean
   /** Whether the schema screen is the page being shown. */
@@ -403,6 +413,7 @@ function Shell({
               models={models}
               activeModel={activeModel}
               collapsed={collapsed}
+              activeHome={activeHome}
               canUseDevTools={canUseDevTools}
               brokenCount={brokenCount}
               activeDev={activeDev}
@@ -433,6 +444,7 @@ function Shell({
                 models={models}
                 activeModel={activeModel}
                 collapsed={false}
+                activeHome={activeHome}
                 canUseDevTools={canUseDevTools}
                 brokenCount={brokenCount}
                 activeDev={activeDev}
@@ -464,6 +476,7 @@ function ResourceNav({
   collapsed,
   canUseDevTools = false,
   brokenCount = 0,
+  activeHome = false,
   activeDev = false,
   activeSchema = false,
 }: {
@@ -472,6 +485,7 @@ function ResourceNav({
   readonly collapsed: boolean
   readonly canUseDevTools?: boolean
   readonly brokenCount?: number
+  readonly activeHome?: boolean
   readonly activeDev?: boolean
   readonly activeSchema?: boolean
 }) {
@@ -491,7 +505,7 @@ function ResourceNav({
           href="#/"
           label="Dashboard"
           icon={LayoutDashboard}
-          current={activeModel === undefined}
+          current={activeHome}
           collapsed={collapsed}
         />
       </li>

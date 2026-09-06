@@ -165,7 +165,9 @@ function server() {
       ? { success: true, data: { models: [user, post], capabilities: { useDevTools: true } } }
       : path === '/dev/doctor'
         ? { success: true, data: [] }
-        : { success: true, data: [], meta: { total: 0, page: 1, perPage: 25 } }
+        : path.startsWith('/dashboard')
+          ? { success: true, data: { widgets: [] } }
+          : { success: true, data: [], meta: { total: 0, page: 1, perPage: 25 } }
 
     return { status: 200, json: async () => body } as unknown as Response
   })
@@ -211,5 +213,46 @@ describe('on the page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
     await waitFor(() => expect(map.getAttribute('width')).not.toBe(before))
+  })
+})
+
+describe('which entry the navigation calls current', () => {
+  /** The `aria-current="page"` links, which is what a reader is told is open. */
+  const current = (): readonly string[] =>
+    screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('aria-current') === 'page')
+      .map((link) => link.textContent ?? '')
+
+  it('marks exactly one entry on the schema page', async () => {
+    // Both Dashboard and the open page were marked, because the dashboard's
+    // rule was "no model is selected" - true of every page that is not a list.
+    server()
+    window.location.hash = '#/~schema'
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Schema' })
+    await waitFor(() => expect(current()).toHaveLength(1))
+    expect(current()[0]).toContain('Schema')
+  })
+
+  it('marks the dashboard on the dashboard', async () => {
+    server()
+    window.location.hash = '#/'
+    render(<App />)
+
+    await screen.findByRole('link', { name: 'Dashboard' })
+    await waitFor(() => expect(current()).toEqual(['Dashboard']))
+  })
+
+  it('marks the model on a list', async () => {
+    server()
+    window.location.hash = '#/User'
+    render(<App />)
+
+    // The initial is drawn beside the label for a model with no icon, so the
+    // text reads 'UUser' - the assertion is about which entry, not its glyphs.
+    await waitFor(() => expect(current()).toHaveLength(1))
+    expect(current()[0]).toContain('User')
   })
 })

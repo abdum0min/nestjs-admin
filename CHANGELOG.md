@@ -41,6 +41,14 @@ The schema, as a picture — and a report somebody would read.
   danger zone). The single page had become a drawer - a diagnosis, a generator,
   an undo, a metadata browser and a delete-everything button, in that order.
 
+### Fixed
+
+- **Two navigation entries were highlighted at once.** The dashboard was
+  marked current whenever no model was selected, which is true of the developer
+  pages, the team screen and the loading state - so opening Schema lit up
+  Schema and Dashboard together. It has its own signal now, and exactly one
+  entry is current on every page.
+
 ### Changed
 
 - **The schema report is one entry per problem, not per model.** Against the
