@@ -2,7 +2,7 @@
 
 An admin panel for NestJS applications, generated from your ORM schema.
 
-> **Status: 0.14.1, published.** Everything described below works and is
+> **Status: 0.14.2, published.** Everything described below works and is
 > tested against a real database, a real NestJS HTTP server and the built
 > interface. The API is not frozen — 0.x means it may still change, and 1.0.0
 > is planned once row-level authorization lands. See

@@ -94,9 +94,9 @@ function server() {
 }
 
 async function openTools(): Promise<void> {
-  window.location.hash = '#/~dev'
+  window.location.hash = '#/~schema'
   render(<App />)
-  await screen.findByRole('heading', { name: 'Developer tools' })
+  await screen.findByRole('heading', { name: 'Schema' })
 }
 
 const expand = async (): Promise<void> => {
@@ -111,8 +111,8 @@ describe('before it is opened', () => {
     await openTools()
 
     const metaCalls = calls.filter((path) => path.startsWith('/meta'))
-    // One: the shell's own. The viewer has not asked.
-    expect(metaCalls).toHaveLength(1)
+    // Two: the shell's own, and the Schema page's. The viewer has not asked.
+    expect(metaCalls).toHaveLength(2)
     expect(screen.queryByRole('table', { name: 'User fields' })).toBeNull()
   })
 })

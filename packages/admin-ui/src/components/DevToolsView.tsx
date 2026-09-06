@@ -36,7 +36,6 @@ import {
 import { useEffect, useState } from 'react'
 
 import {
-  devDoctor,
   devFill,
   devPreview,
   devReset,
@@ -48,8 +47,6 @@ import {
 } from '../api/client.js'
 import type { AdminRecord } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
-import { MetadataViewer } from './MetadataViewer.jsx'
-import { SchemaDoctor } from './SchemaDoctor.jsx'
 import { ErrorState, FormSkeleton } from './States.jsx'
 import { Alert, AlertDescription, AlertTitle } from './ui/alert.jsx'
 import { Badge } from './ui/badge.jsx'
@@ -110,9 +107,6 @@ function engineName(database: string | undefined): string | undefined {
 export function DevToolsView() {
   const confirm = useConfirm()
   const state = useAsync(() => devStatus(), [])
-  // Its own request: no database queries, so it answers while the status
-  // endpoint is still counting rows.
-  const report = useAsync(() => devDoctor(), [])
 
   const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set())
   const [counts, setCounts] = useState<Readonly<Record<string, string>>>({})
@@ -179,22 +173,19 @@ export function DevToolsView() {
           <FlaskConical className="size-5" aria-hidden="true" />
         </span>
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="text-2xl font-semibold tracking-tight">Developer tools</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Data tools</h1>
           <p className="text-muted-foreground text-sm">
             Believable data from your own schema. Absent entirely from a build that did not ask for
-            them.
+            them — and what the admin thinks of that schema is on{' '}
+            <a className="text-link underline-offset-4 hover:underline" href="#/~schema">
+              Schema
+            </a>
+            .
           </p>
         </div>
       </header>
 
       <StatusCards status={status} />
-
-      {/*
-       * Above the generator on purpose. Nobody navigates to a diagnosis - they
-       * open this page because something looks wrong, and what is wrong is
-       * usually in here.
-       */}
-      {report.data === undefined ? null : <SchemaDoctor findings={report.data} />}
 
       {failure === undefined ? null : <ErrorState error={failure} />}
 
@@ -396,8 +387,6 @@ export function DevToolsView() {
               </CardContent>
             </Card>
           )}
-
-          <MetadataViewer />
 
           <DangerZone
             models={models.map((model) => model.name)}

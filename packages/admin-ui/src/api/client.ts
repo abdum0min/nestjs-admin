@@ -564,21 +564,35 @@ export async function devUndo(): Promise<readonly DevRun[]> {
 }
 
 /**
+ * What to do about a finding.
+ *
+ * Three kinds, because a fix is not always an option in this package's own
+ * configuration - a missing `@updatedAt` column is a line of schema, and
+ * calling that "no fix available" was the first version's most repeated
+ * sentence.
+ */
+export interface DevRemedy {
+  readonly kind: 'config' | 'schema' | 'option'
+  readonly label: string
+  readonly code: string
+}
+
+/**
  * One thing the admin had to guess, or cannot do.
  *
- * `broken` does not work; `guessed` works with less than it could. Two levels
- * rather than three: a middle one invites an argument about which findings
- * belong in it.
+ * One finding is one **problem**, not one model: `subjects` carries everything
+ * it applies to. Severity is about requests, not disappointment - `broken`
+ * means something fails today when somebody clicks it.
  */
 export interface DevFinding {
   readonly code: string
-  readonly severity: 'broken' | 'guessed'
-  readonly model: string
-  readonly field?: string
+  readonly severity: 'broken' | 'warning' | 'note'
+  /** What it applies to: `Post`, or `User.avatarUrl`. Never empty. */
+  readonly subjects: readonly string[]
   readonly title: string
   readonly detail: string
-  /** Configuration that fixes it, ready to copy. Absent where none can. */
-  readonly fix?: string
+  /** Ways out. Empty only where there genuinely is nothing to do. */
+  readonly remedies: readonly DevRemedy[]
 }
 
 /** `GET /admin/dev/doctor`. No database queries; safe to ask for on load. */

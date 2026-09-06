@@ -1,49 +1,55 @@
 /**
  * What the admin had to guess about this schema.
  *
- * ## Why it is at the top of a page about generating data
+ * ## What the first version got wrong
  *
- * Nobody navigates to a diagnosis. They open the developer tools because
- * something looks wrong, and the thing that is wrong is usually one of these -
- * so it sits above the generator rather than behind a second click.
+ * It printed one entry per model, so a ten-model schema with optimistic
+ * concurrency on it showed the same paragraph eight times with a different name
+ * in each - a wall nobody reads, ending in "no option fixes this one" eight
+ * times over. One entry is now one **problem**, carrying the models it applies
+ * to, and every entry offers whatever the way out actually is: a configuration
+ * option, a line of schema, or turning something off.
  *
- * When there is nothing to report it collapses to one line. A panel that takes
- * a quarter of the screen to say "everything is fine" trains people to skip the
- * place where the problems appear.
+ * ## Quiet unless it matters
  *
- * ## The fix is the point
- *
- * Every finding that a configuration option can solve carries that option,
- * ready to copy. A diagnosis nobody can act on is a list of complaints, and the
- * whole reason these problems persist is that the reader does not know the
- * option exists.
+ * Nothing to report collapses to a line. Notes stay folded. Only something
+ * failing opens the card by itself, because that is the only case where the
+ * reader has not come looking.
  */
 import { Check, ChevronDown, ChevronRight, Copy, Stethoscope } from 'lucide-react'
 import { useState } from 'react'
 
-import type { DevFinding } from '../api/client.js'
+import type { DevFinding, DevRemedy } from '../api/client.js'
 import { Badge } from './ui/badge.jsx'
 import { Button } from './ui/button.jsx'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.jsx'
 
+/** What each severity is, in the words the page uses. */
+const SEVERITY: Readonly<Record<DevFinding['severity'], { label: string; destructive: boolean }>> =
+  {
+    broken: { label: 'fails today', destructive: true },
+    warning: { label: 'not happening', destructive: false },
+    note: { label: 'note', destructive: false },
+  }
+
 /** Copy, and say so - a button that does nothing visible is a button that failed. */
-function CopyFix({ fix }: { readonly fix: string }) {
+function CopyCode({ code }: { readonly code: string }) {
   const [copied, setCopied] = useState(false)
 
   return (
     <div className="flex items-start gap-2">
       <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded px-2 py-1 font-mono text-xs">
-        {fix}
+        {code}
       </code>
       <Button
         variant="ghost"
         size="sm"
-        aria-label={copied ? 'Copied' : 'Copy the fix'}
+        aria-label={copied ? 'Copied' : 'Copy'}
         onClick={() => {
           // `clipboard` is absent over plain HTTP on a remote host, and a
           // silent no-op would look like a broken button.
           void navigator.clipboard
-            ?.writeText(fix)
+            ?.writeText(code)
             .then(() => {
               setCopied(true)
               setTimeout(() => setCopied(false), 1500)
@@ -57,6 +63,15 @@ function CopyFix({ fix }: { readonly fix: string }) {
   )
 }
 
+function Remedy({ remedy }: { readonly remedy: DevRemedy }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-muted-foreground text-xs">{remedy.label}</span>
+      <CopyCode code={remedy.code} />
+    </div>
+  )
+}
+
 export function SchemaDoctor({ findings }: { readonly findings: readonly DevFinding[] }) {
   const broken = findings.filter((finding) => finding.severity === 'broken')
   const [open, setOpen] = useState(broken.length > 0)
@@ -64,7 +79,7 @@ export function SchemaDoctor({ findings }: { readonly findings: readonly DevFind
   if (findings.length === 0) {
     return (
       <Card>
-        <CardContent className="flex items-center gap-2 py-3 text-sm">
+        <CardContent className="flex flex-wrap items-center gap-2 py-3 text-sm">
           <Stethoscope className="text-muted-foreground size-4" aria-hidden="true" />
           <span className="font-medium">Nothing to report</span>
           <span className="text-muted-foreground">
@@ -92,34 +107,49 @@ export function SchemaDoctor({ findings }: { readonly findings: readonly DevFind
           <Stethoscope className="size-4 shrink-0" aria-hidden="true" />
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
             Schema report
-            {broken.length > 0 ? <Badge variant="destructive">{broken.length} broken</Badge> : null}
-            {findings.length - broken.length > 0 ? (
-              <Badge variant="outline">{findings.length - broken.length} guessed</Badge>
+            {broken.length > 0 ? (
+              <Badge variant="destructive">{broken.length} failing</Badge>
             ) : null}
+            <span className="text-muted-foreground text-sm font-normal">
+              {findings.length} {findings.length === 1 ? 'thing' : 'things'} to look at
+              {broken.length === 0 ? ' · nothing is failing' : ''}
+            </span>
           </CardTitle>
         </button>
       </CardHeader>
 
       {open ? (
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-5">
           {findings.map((finding) => (
-            <div
-              key={`${finding.code}:${finding.model}:${finding.field ?? ''}`}
-              className="flex flex-col gap-1.5"
-            >
+            <div key={finding.code} className="flex flex-col gap-2">
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="text-sm font-medium">{finding.title}</span>
-                <Badge variant={finding.severity === 'broken' ? 'destructive' : 'outline'}>
-                  {finding.severity}
+                <Badge variant={SEVERITY[finding.severity].destructive ? 'destructive' : 'outline'}>
+                  {SEVERITY[finding.severity].label}
                 </Badge>
               </div>
+
               <p className="text-muted-foreground text-sm">{finding.detail}</p>
-              {finding.fix === undefined ? (
+
+              {/* The list, once, rather than the paragraph repeated per model. */}
+              <p className="flex flex-wrap gap-1.5">
+                {finding.subjects.map((subject) => (
+                  <span key={subject} className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                    {subject}
+                  </span>
+                ))}
+              </p>
+
+              {finding.remedies.length === 0 ? (
                 <p className="text-muted-foreground text-xs italic">
-                  No option fixes this one — it needs a change to the schema.
+                  Nothing to change here — this is the schema being what it is.
                 </p>
               ) : (
-                <CopyFix fix={finding.fix} />
+                <div className="flex flex-col gap-2">
+                  {finding.remedies.map((remedy) => (
+                    <Remedy key={remedy.code} remedy={remedy} />
+                  ))}
+                </div>
               )}
             </div>
           ))}

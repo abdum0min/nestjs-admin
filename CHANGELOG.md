@@ -13,6 +13,62 @@ since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
 
 ---
 
+## 0.14.2
+
+The schema, as a picture — and a report somebody would read.
+
+### Added
+
+- **A schema map.** Models as boxes, relations as lines, laid out in columns by
+  dependency: what a model needs is to its left, what needs it is to its right.
+  Ten models with three self-relations and two many-to-many pairs is a shape
+  nobody holds in their head from a list of names.
+
+  Hand-drawn SVG, no dependency. The obvious libraries cost about a hundred
+  kilobytes and about a megabyte, for a screen that draws boxes and lines.
+
+  The layout is deterministic - the same schema always draws the same map, so a
+  screenshot taken twice is one picture and "the box on the left" means
+  something. Not draggable on purpose: positions somebody arranges have to be
+  stored and then reconciled with a schema that has changed since, and a good
+  automatic layout means nobody reaches for the mouse.
+
+  A model the report says is failing is outlined; clicking one dims everything
+  it does not touch.
+
+- **A `Developer` group in the navigation**, with two entries where there was
+  one: **Schema** (map, report, metadata) and **Data tools** (generate, undo,
+  danger zone). The single page had become a drawer - a diagnosis, a generator,
+  an undo, a metadata browser and a delete-everything button, in that order.
+
+### Changed
+
+- **The schema report is one entry per problem, not per model.** Against the
+  example application it printed the same paragraph eight times with a
+  different name in each, ending in "no option fixes this one" eight times
+  over. It now reports twelve findings as **two**, each carrying the list of
+  models it applies to.
+
+- **Every finding says what to do about it.** A fix was previously assumed to
+  be an option in this package's configuration, so the most repeated sentence
+  on the screen was an apology - while `updatedAt DateTime @updatedAt` was the
+  answer all along. A remedy is now a config option, a line of schema, or
+  turning something off, and a finding may offer more than one.
+
+- **Severity is about requests failing.** `broken` means something fails today
+  when somebody clicks it; `warning` means nothing fails but something you
+  asked for is not happening; `note` is the admin doing the best it can with
+  this schema. A missing version column was previously `broken`, which lit the
+  navigation up with an eight while nothing was wrong.
+
+- **Six new checks**, all of them configuration that was written and never
+  applied: upload options on a field with no upload, a widget the column cannot
+  carry, a display field that is never returned, a model with nothing to edit,
+  a model search can never match, and a relation pointing at a model
+  `resources` excludes.
+
+---
+
 ## 0.14.1
 
 Diagnosis, and two ways to start a form somewhere other than empty.

@@ -1,17 +1,22 @@
 /**
  * What the admin had to guess, reported.
  *
- * Every finding here corresponds to something that currently happens
- * **silently**: a relation picker full of cuids, a related list missing its
- * buttons, a model whose row actions all fail. The tests are written as the
- * symptom rather than as the rule, because the rule is the easy half - the
- * value is in the finding firing for the schema that actually has the problem
- * and staying quiet for the one that does not.
+ * Every finding corresponds to something that happens **silently** today: a
+ * relation picker full of cuids, a related list missing its buttons, a model
+ * whose row actions all fail. The tests are written as the symptom rather than
+ * as the rule, because the rule is the easy half - the value is in a finding
+ * firing for the schema that has the problem and staying quiet for the one that
+ * does not.
+ *
+ * Two properties get their own section at the bottom, because the first version
+ * of this file passed while the report was unreadable: **one finding is one
+ * problem**, not one model, and **severity is about requests failing**, not
+ * about disappointment.
  */
 import type { FieldMetadata, ModelMetadata } from '@nest-admin/core'
 import { describe, expect, it } from 'vitest'
 
-import { diagnose, type DiagnosisInput } from '../src/dev-tools/doctor.js'
+import { diagnose, type DiagnosisInput, type Finding } from '../src/dev-tools/doctor.js'
 
 const field = (name: string, over: Partial<FieldMetadata> = {}): FieldMetadata => ({
   name,
@@ -40,6 +45,12 @@ const report = (models: readonly ModelMetadata[], over: Partial<DiagnosisInput> 
     ...over,
   })
 
+const find = (
+  models: readonly ModelMetadata[],
+  code: string,
+  over: Partial<DiagnosisInput> = {},
+): Finding | undefined => report(models, over).find((finding) => finding.code === code)
+
 const codes = (models: readonly ModelMetadata[], over: Partial<DiagnosisInput> = {}) =>
   report(models, over).map((finding) => finding.code)
 
@@ -55,123 +66,73 @@ describe('a schema with nothing wrong', () => {
   })
 })
 
-describe('a model whose id is all it can show', () => {
-  it('is reported, because every reference to it shows a cuid', () => {
-    // The most visible symptom in the product, and the one most often mistaken
-    // for the admin being broken.
-    const events = model('Event', [
-      field('at', { kind: 'datetime', isRequired: true }),
-      field('count', { kind: 'number' }),
-    ])
-
-    const [finding] = report([events])
-    expect(finding?.code).toBe('display-field-fell-back')
-    expect(finding?.severity).toBe('guessed')
-    expect(finding?.detail).toContain('relation picker')
-  })
-
-  it('suggests a column the rule itself would not have picked', () => {
-    // The rule only considers strings; a number or an enum is still better
-    // than a cuid, and the person can point at one.
-    const events = model('Event', [field('code', { kind: 'number' })])
-
-    expect(report([events])[0]?.fix).toBe("models: { Event: { displayField: 'code' } }")
-  })
-
-  it('offers no fix when the model has nothing readable at all', () => {
-    // Pretending an option exists would be worse than saying nothing.
-    const link = model('Link', [field('other', { isGenerated: true })])
-
-    expect(report([link])[0]?.fix).toBeUndefined()
-  })
-
-  it('says nothing when the application already declared one', () => {
-    const events = model('Event', [field('at', { kind: 'datetime' })])
-
-    expect(codes([events], { overrides: { Event: { displayField: 'at' } } })).not.toContain(
-      'display-field-fell-back',
-    )
-  })
-})
-
-describe('a key the admin cannot address a row by', () => {
-  it('reports a composite primary key as broken', () => {
+describe('a request that fails today', () => {
+  it('reports a key the admin cannot address a row by', () => {
     const review: ModelMetadata = {
       ...model('Review', [field('body')]),
       primaryKey: ['userId', 'productId'],
     }
 
-    const finding = report([review]).find((entry) => entry.code === 'composite-primary-key')
+    const finding = find([review], 'unaddressable-key')
     expect(finding?.severity).toBe('broken')
     // The distinction that matters: the list works, everything below it does not.
     expect(finding?.detail).toContain('The list itself works')
   })
 
-  it('reports a model with no key at all', () => {
-    const view: ModelMetadata = { ...model('Snapshot', [field('body')]), primaryKey: [] }
-    expect(codes([view])).toContain('no-primary-key')
-  })
-})
+  it('reports a required column it cannot produce a value for', () => {
+    const invoice = model('Invoice', [
+      field('total', { kind: 'unknown', isRequired: true }),
+      field('reference'),
+      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+    ])
 
-describe('a relation whose other half could not be found', () => {
-  const orphan = model('Author', [
-    field('name'),
-    field('books', {
-      kind: 'relation',
-      isList: true,
-      relation: { targetModel: 'Book', cardinality: 'many', name: 'AuthorToBook' },
-    }),
-  ])
-
-  it('is reported, because the buttons quietly disappear', () => {
-    const finding = report([orphan]).find((entry) => entry.code === 'unpaired-relation')
-
-    expect(finding?.field).toBe('books')
-    expect(finding?.detail).toContain('Attach or Detach')
+    const finding = find([invoice], 'unwritable-required-column')
+    expect(finding?.severity).toBe('broken')
+    expect(finding?.subjects).toEqual(['Invoice.total'])
   })
 
-  it('says nothing when both halves are there', () => {
-    const book = model('Book', [
+  it('says nothing about one the database fills in', () => {
+    const invoice = model('Invoice', [
+      field('total', { kind: 'unknown', isRequired: true, isGenerated: true }),
+      field('reference'),
+      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+    ])
+
+    expect(codes([invoice])).not.toContain('unwritable-required-column')
+  })
+
+  it('reports a relation pointing at a model this admin excludes', () => {
+    // The field is dropped from the metadata before any screen sees it, which
+    // is right for a hidden model and a surprise if the exclusion was a typo.
+    const post = model('Post', [
       field('title'),
+      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
       field('author', {
         kind: 'relation',
-        relation: {
-          targetModel: 'Author',
-          cardinality: 'one',
-          from: 'authorId',
-          to: 'id',
-          name: 'AuthorToBook',
-        },
+        relation: { targetModel: 'User', cardinality: 'one', from: 'authorId', to: 'id' },
       }),
-      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
     ])
 
-    expect(codes([orphan, book])).not.toContain('unpaired-relation')
+    const finding = find([post], 'relation-to-excluded-model')
+    expect(finding?.severity).toBe('broken')
+    expect(finding?.subjects[0]).toContain('User')
   })
 })
 
-describe('dates the admin looks for', () => {
-  it('says which models the dashboard cannot chart', () => {
-    const tag = model('Tag', [field('name')])
-
-    const finding = report([tag]).find((entry) => entry.code === 'no-created-at')
-    expect(finding?.severity).toBe('guessed')
-    expect(finding?.detail).toContain('chart')
-  })
-
-  it('says where the concurrency guard is not running', () => {
-    // Turned on everywhere and silently absent here, which is the failure mode
-    // of every safety check nobody can see.
-    const tag = model('Tag', [
-      field('name'),
-      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
-    ])
-
-    const finding = report([tag], { concurrency: 'optimistic' }).find(
-      (entry) => entry.code === 'no-version-column',
+describe('something asked for that is not happening', () => {
+  it('says where the concurrency guard is not running, once', () => {
+    const models = ['A', 'B', 'C'].map((name) =>
+      model(name, [
+        field('title'),
+        field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+      ]),
     )
-    expect(finding?.severity).toBe('broken')
-    expect(finding?.detail).toContain('overwrite each other silently')
+
+    const finding = find(models, 'no-version-column', { concurrency: 'optimistic' })
+    expect(finding?.severity).toBe('warning')
+    expect(finding?.subjects).toEqual(['A', 'B', 'C'])
+    // Both ways out, because either is a real answer.
+    expect(finding?.remedies.map((remedy) => remedy.kind)).toEqual(['schema', 'option'])
   })
 
   it('says nothing about versions when the guard is off', () => {
@@ -179,82 +140,178 @@ describe('dates the admin looks for', () => {
       field('name'),
       field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
     ])
-
     expect(codes([tag])).not.toContain('no-version-column')
   })
+
+  it('reports a model that can only show its id, and names a column to use', () => {
+    const events = model('Event', [
+      field('at', { kind: 'datetime', isRequired: true }),
+      field('count', { kind: 'number' }),
+    ])
+
+    const finding = find([events], 'display-field-fell-back')
+    expect(finding?.severity).toBe('warning')
+    expect(finding?.remedies[0]?.code).toBe("models: { Event: { displayField: 'at' } }")
+  })
+
+  it('says nothing when the application already nominated one', () => {
+    const events = model('Event', [field('at', { kind: 'datetime' })])
+    expect(codes([events], { overrides: { Event: { displayField: 'at' } } })).not.toContain(
+      'display-field-fell-back',
+    )
+  })
+
+  it('reports a relation whose other half is missing', () => {
+    const orphan = model('Author', [
+      field('name'),
+      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+      field('books', {
+        kind: 'relation',
+        isList: true,
+        relation: { targetModel: 'Author', cardinality: 'many', name: 'AuthorToBook' },
+      }),
+    ])
+
+    const finding = find([orphan], 'unpaired-relation')
+    expect(finding?.subjects).toEqual(['Author.books'])
+    expect(finding?.detail).toContain('Attach or Detach')
+  })
+
+  it('reports a model whose Edit button opens an empty form', () => {
+    // Usually a join table, and worth hiding rather than showing as a dead end.
+    const join = model('PostToTag', [
+      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+      field('post', {
+        kind: 'relation',
+        relation: { targetModel: 'PostToTag', cardinality: 'one', from: 'postId', to: 'id' },
+      }),
+    ])
+
+    expect(find([join], 'nothing-to-edit')?.severity).toBe('warning')
+  })
 })
 
-describe('a column the admin cannot edit safely', () => {
-  it('is broken when a record cannot be created without it', () => {
-    // Decimal, BigInt and Bytes arrive as `unknown`. Required and with no
-    // default, there is no value the form can produce that the database takes.
-    const invoice = model('Invoice', [
-      field('total', { kind: 'unknown', isRequired: true }),
-      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
-      field('reference'),
-    ])
-
-    const finding = report([invoice]).find((entry) => entry.code === 'unsupported-column')
-    expect(finding?.severity).toBe('broken')
-    expect(finding?.fix).toContain('readOnly: true')
-  })
-
-  it('is only a guess when the column is optional', () => {
-    const invoice = model('Invoice', [
-      field('weight', { kind: 'unknown' }),
-      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
-      field('reference'),
-    ])
-
-    expect(report([invoice])[0]?.severity).toBe('guessed')
-  })
-
-  it('says nothing about one the database fills in', () => {
-    const invoice = model('Invoice', [
-      field('total', { kind: 'unknown', isRequired: true, isGenerated: true }),
-      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
-      field('reference'),
-    ])
-
-    expect(codes([invoice])).not.toContain('unsupported-column')
-  })
-})
-
-describe('a file field with nowhere to put a file', () => {
-  const withUpload = model('User', [
-    field('name'),
-    field('avatarUrl'),
+describe('configuration that was written and never applied', () => {
+  const user = model('User', [
+    field('age', { kind: 'number' }),
     field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
   ])
-  const overrides = { User: { fields: { avatarUrl: { widget: 'image' as const } } } }
 
-  it('is reported when files are turned off', () => {
-    const finding = report([withUpload], { overrides, storage: false }).find(
-      (entry) => entry.code === 'file-field-without-storage',
-    )
+  it('reports upload options on a field with no upload', () => {
+    const finding = find([user], 'inert-file-options', {
+      overrides: { User: { fields: { age: { maxSize: '2mb' } } } },
+    })
 
-    expect(finding?.severity).toBe('broken')
-    // The one finding whose answer can differ between a laptop and a
-    // deployment, which is worth saying out loud on a screen that only runs
-    // on the laptop.
-    expect(finding?.detail).toContain('deployment')
+    expect(finding?.severity).toBe('note')
+    expect(finding?.subjects).toEqual(['User.age'])
   })
 
-  it('says nothing when there is storage', () => {
-    expect(codes([withUpload], { overrides, storage: true })).not.toContain(
-      'file-field-without-storage',
+  it('says nothing when the widget those options are for is there', () => {
+    const withFile = model('User', [
+      field('avatarUrl'),
+      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+    ])
+
+    expect(
+      codes([withFile], {
+        overrides: { User: { fields: { avatarUrl: { widget: 'image', maxSize: '2mb' } } } },
+      }),
+    ).not.toContain('inert-file-options')
+  })
+
+  it('reports a widget the column cannot carry', () => {
+    // A colour picker on a number: the interface falls back and says nothing,
+    // so the option reads as applied when it is not.
+    const finding = find([user], 'widget-kind-mismatch', {
+      overrides: { User: { fields: { age: { widget: 'color' } } } },
+    })
+
+    expect(finding?.subjects).toEqual(['User.age'])
+  })
+
+  it('reports a display field that is never returned', () => {
+    const person = model('Person', [
+      field('secret'),
+      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+    ])
+
+    const finding = find([person], 'write-only-display-field', {
+      overrides: { Person: { displayField: 'secret', fields: { secret: { writeOnly: true } } } },
+    })
+
+    expect(finding?.detail).toContain('blank')
+  })
+})
+
+describe('what the admin can only do so much about', () => {
+  it('says which models the dashboard cannot chart', () => {
+    const tag = model('Tag', [field('name')])
+
+    const finding = find([tag], 'no-created-at')
+    expect(finding?.severity).toBe('note')
+    expect(finding?.remedies[0]?.kind).toBe('schema')
+  })
+
+  it('says where the search box can never match anything', () => {
+    const reading = model('Reading', [
+      field('value', { kind: 'number' }),
+      field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+    ])
+
+    expect(find([reading], 'nothing-to-search')?.severity).toBe('note')
+  })
+})
+
+describe('one finding is one problem', () => {
+  it('does not repeat the same paragraph once per model', () => {
+    // The first version printed this eight times against the example schema,
+    // which is how a report becomes a wall nobody reads.
+    const models = ['A', 'B', 'C', 'D', 'E'].map((name) =>
+      model(name, [
+        field('title'),
+        field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+      ]),
+    )
+
+    const findings = report(models, { concurrency: 'optimistic' })
+    expect(findings).toHaveLength(1)
+    expect(findings[0]?.subjects).toHaveLength(5)
+    expect(findings[0]?.title).toContain('5 models')
+  })
+
+  it('reads correctly for one of them', () => {
+    const one = [
+      model('A', [
+        field('title'),
+        field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+      ]),
+    ]
+
+    expect(find(one, 'no-version-column', { concurrency: 'optimistic' })?.title).toContain(
+      'one model',
     )
   })
 })
 
-describe('the order findings arrive in', () => {
-  it('puts what is broken first', () => {
-    // Somebody scanning this list is looking for what is actually failing.
-    const broken: ModelMetadata = { ...model('Review', [field('body')]), primaryKey: ['a', 'b'] }
-    const guessed = model('Tag', [field('name')])
+describe('severity is about requests failing', () => {
+  it('does not call a missing version column broken', () => {
+    // The first version did, and lit the navigation up with an eight while
+    // nothing was failing.
+    const models = ['A', 'B'].map((name) =>
+      model(name, [
+        field('title'),
+        field('createdAt', { kind: 'datetime', isGenerated: true, isRequired: true }),
+      ]),
+    )
 
-    const severities = report([guessed, broken]).map((finding) => finding.severity)
-    expect(severities[0]).toBe('broken')
-    expect(severities.at(-1)).toBe('guessed')
+    const findings = report(models, { concurrency: 'optimistic' })
+    expect(findings.every((finding) => finding.severity !== 'broken')).toBe(true)
+  })
+
+  it('puts what fails first', () => {
+    const broken: ModelMetadata = { ...model('Review', [field('body')]), primaryKey: ['a', 'b'] }
+    const note = model('Tag', [field('name')])
+
+    expect(report([note, broken])[0]?.severity).toBe('broken')
   })
 })

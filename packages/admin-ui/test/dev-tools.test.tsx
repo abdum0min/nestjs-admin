@@ -64,55 +64,57 @@ function server(
 
     const body = path.startsWith('/meta')
       ? { success: true, data: { models: [model], capabilities } }
-      : path === '/dev'
-        ? {
-            success: true,
-            data: {
-              models: [
-                { name: 'User', relations: 0, records: 3 },
-                { name: 'Post', relations: 2, records: 0 },
-              ],
-              totalRecords: 3,
-              adapter: 'prisma',
-              environment: { deployed: false, because: [] },
-              faker: false,
-              images: true,
-              history: [],
-              ...status,
-            },
-          }
-        : path === '/dev/preview'
+      : path.startsWith('/dashboard')
+        ? { success: true, data: { widgets: [] } }
+        : path === '/dev'
           ? {
               success: true,
-              data: { model: 'User', records: [{ email: 'ada@example.com', name: 'Ada' }] },
+              data: {
+                models: [
+                  { name: 'User', relations: 0, records: 3 },
+                  { name: 'Post', relations: 2, records: 0 },
+                ],
+                totalRecords: 3,
+                adapter: 'prisma',
+                environment: { deployed: false, because: [] },
+                faker: false,
+                images: true,
+                history: [],
+                ...status,
+              },
             }
-          : path === '/dev/fill'
+          : path === '/dev/preview'
             ? {
                 success: true,
-                data: [
-                  { model: 'User', created: 20, ids: [], failed: [] },
-                  {
-                    model: 'Post',
-                    created: 2,
-                    ids: [],
-                    failed: [{ reason: 'Another Post already has this slug.', count: 3 }],
-                  },
-                ],
+                data: { model: 'User', records: [{ email: 'ada@example.com', name: 'Ada' }] },
               }
-            : path === '/dev/truncate'
-              ? { success: true, data: { deleted: 12, remaining: 0 } }
-              : path === '/dev/reset'
-                ? {
-                    success: true,
-                    data: {
-                      emptied: [
-                        { model: 'Post', deleted: 2, remaining: 0 },
-                        { model: 'User', deleted: 3, remaining: 0 },
-                      ],
-                      skipped: [{ model: 'AdminAccount', reason: 'outside this admin' }],
+            : path === '/dev/fill'
+              ? {
+                  success: true,
+                  data: [
+                    { model: 'User', created: 20, ids: [], failed: [] },
+                    {
+                      model: 'Post',
+                      created: 2,
+                      ids: [],
+                      failed: [{ reason: 'Another Post already has this slug.', count: 3 }],
                     },
-                  }
-                : { success: true, data: [], meta: { total: 0, page: 1, perPage: 25 } }
+                  ],
+                }
+              : path === '/dev/truncate'
+                ? { success: true, data: { deleted: 12, remaining: 0 } }
+                : path === '/dev/reset'
+                  ? {
+                      success: true,
+                      data: {
+                        emptied: [
+                          { model: 'Post', deleted: 2, remaining: 0 },
+                          { model: 'User', deleted: 3, remaining: 0 },
+                        ],
+                        skipped: [{ model: 'AdminAccount', reason: 'outside this admin' }],
+                      },
+                    }
+                  : { success: true, data: [], meta: { total: 0, page: 1, perPage: 25 } }
 
     return { status: 200, json: async () => body } as unknown as Response
   })
@@ -123,7 +125,7 @@ function server(
 async function openTools(): Promise<void> {
   window.location.hash = '#/~dev'
   render(<App />)
-  await screen.findByRole('heading', { name: 'Developer tools' })
+  await screen.findByRole('heading', { name: 'Data tools' })
 }
 
 const generateButton = () => screen.getByRole('button', { name: /Generate \d+ records/ })
@@ -134,7 +136,7 @@ describe('whether the screen exists at all', () => {
     window.location.hash = '#/'
     render(<App />)
 
-    const link = await screen.findByRole('link', { name: /Developer tools/ })
+    const link = await screen.findByRole('link', { name: /Data tools/ })
     expect(link.getAttribute('href')).toBe('#/~dev')
   })
 
@@ -146,7 +148,7 @@ describe('whether the screen exists at all', () => {
     render(<App />)
 
     await screen.findByRole('link', { name: 'Dashboard' })
-    expect(screen.queryByRole('link', { name: /Developer tools/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Data tools/ })).toBeNull()
   })
 
   it('is absent against a server that has never heard of it', async () => {
@@ -155,7 +157,7 @@ describe('whether the screen exists at all', () => {
     render(<App />)
 
     await screen.findByRole('link', { name: 'Dashboard' })
-    expect(screen.queryByRole('link', { name: /Developer tools/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Data tools/ })).toBeNull()
   })
 
   it('is marked as not being one of the resources', async () => {
@@ -163,9 +165,19 @@ describe('whether the screen exists at all', () => {
     window.location.hash = '#/'
     render(<App />)
 
-    const link = await screen.findByRole('link', { name: /Developer tools/ })
-    // A tool that can empty a table must not look like a table.
+    const link = await screen.findByRole('link', { name: /Data tools/ })
+    // A tool that can empty a table must not look like a table. The group
+    // heading says so too, but not on the collapsed rail.
     expect(link.textContent).toContain('Dev')
+  })
+
+  it('sits under a heading that separates it from the data', async () => {
+    server()
+    window.location.hash = '#/'
+    render(<App />)
+
+    expect(await screen.findByText('Developer')).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Schema/ })).toBeTruthy()
   })
 })
 
@@ -275,7 +287,7 @@ describe('undo', () => {
     await openTools()
     expect(screen.queryByRole('button', { name: /Undo/ })).toBeNull()
 
-    await screen.findByRole('heading', { name: 'Developer tools' })
+    await screen.findByRole('heading', { name: 'Data tools' })
   })
 
   it('names how many records it would take back', async () => {

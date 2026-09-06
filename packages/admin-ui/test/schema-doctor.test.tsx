@@ -1,10 +1,14 @@
 /**
  * The schema report, on screen.
  *
- * Three things the interface owns here, and all three are about whether anybody
- * reads it: it collapses to one line when there is nothing wrong, it puts the
- * fix beside the finding, and it says so in the navigation when something is
- * actually broken.
+ * What this asserts is whether anybody reads it: one entry per **problem**
+ * rather than per model, the models listed once inside it, a way out beside
+ * each entry, a fold when nothing is failing, and a count in the navigation
+ * only for what actually fails.
+ *
+ * The first version failed every one of those and still passed its tests,
+ * because the tests asked whether a finding rendered rather than whether the
+ * page could be read.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -44,21 +48,26 @@ const model = {
   ],
 }
 
-const BROKEN = {
-  code: 'composite-primary-key',
+const FAILING = {
+  code: 'unaddressable-key',
   severity: 'broken',
-  model: 'Review',
-  title: 'Review has a composite primary key',
-  detail: 'Opening, editing and deleting a Review all fail. The list itself works.',
+  subjects: ['Review'],
+  title: 'A model has no single-column primary key',
+  detail: 'Opening, editing and deleting fail. The list itself works.',
+  remedies: [],
 }
 
-const GUESSED = {
-  code: 'display-field-fell-back',
-  severity: 'guessed',
-  model: 'Event',
-  title: 'Event has no readable column, so its id is shown',
-  detail: 'Every reference to an Event shows its id instead of something a person recognises.',
-  fix: "models: { Event: { displayField: 'code' } }",
+/** The one that used to be printed eight times. */
+const UNVERSIONED = {
+  code: 'no-version-column',
+  severity: 'warning',
+  subjects: ['Profile', 'Category', 'Product', 'Tag', 'Order', 'OrderItem', 'Comment', 'Review'],
+  title: 'Optimistic concurrency is not running on 8 models',
+  detail: 'The guard compares a column recording when the row last changed.',
+  remedies: [
+    { kind: 'schema', label: 'Add the column', code: 'updatedAt DateTime @updatedAt' },
+    { kind: 'option', label: 'Or turn it off', code: "concurrency: 'last-write-wins'" },
+  ],
 }
 
 function server(findings: readonly unknown[] = []) {
@@ -72,30 +81,16 @@ function server(findings: readonly unknown[] = []) {
         ? { success: true, data: findings }
         : path.startsWith('/dashboard')
           ? { success: true, data: { widgets: [] } }
-          : path === '/dev'
-            ? {
-                success: true,
-                data: {
-                  models: [{ name: 'User', relations: 0, records: 0 }],
-                  totalRecords: 0,
-                  adapter: 'prisma',
-                  database: 'sqlite',
-                  environment: { deployed: false, because: [] },
-                  faker: false,
-                  images: false,
-                  history: [],
-                },
-              }
-            : { success: true, data: [], meta: { total: 0, page: 1, perPage: 25 } }
+          : { success: true, data: [], meta: { total: 0, page: 1, perPage: 25 } }
 
     return { status: 200, json: async () => body } as unknown as Response
   })
 }
 
-async function openTools(): Promise<void> {
-  window.location.hash = '#/~dev'
+async function openSchema(): Promise<void> {
+  window.location.hash = '#/~schema'
   render(<App />)
-  await screen.findByRole('heading', { name: 'Developer tools' })
+  await screen.findByRole('heading', { name: 'Schema' })
 }
 
 describe('when there is nothing to report', () => {
@@ -103,7 +98,7 @@ describe('when there is nothing to report', () => {
     // A panel that spends that much space saying "everything is fine" trains
     // people to skip the place where the problems appear.
     server()
-    await openTools()
+    await openSchema()
 
     expect(await screen.findByText('Nothing to report')).toBeTruthy()
   })
@@ -113,81 +108,93 @@ describe('when there is nothing to report', () => {
     window.location.hash = '#/'
     render(<App />)
 
-    const link = await screen.findByRole('link', { name: /Developer tools/ })
-    expect(link.textContent).toContain('Dev')
+    const link = await screen.findByRole('link', { name: /Schema/ })
+    expect(link.textContent).not.toMatch(/\d/)
   })
 })
 
-describe('when something is wrong', () => {
-  it('opens itself for anything broken', async () => {
-    // Nobody navigates to a diagnosis. It has to be in front of them.
-    server([BROKEN])
-    await openTools()
+describe('one entry is one problem', () => {
+  it('lists eight models inside a single finding', async () => {
+    // The first version printed this paragraph eight times, once per model.
+    server([UNVERSIONED])
+    await openSchema()
 
-    expect(await screen.findByText(BROKEN.title)).toBeTruthy()
-    expect(screen.getByText('1 broken')).toBeTruthy()
-  })
-
-  it('counts the guesses separately', async () => {
-    server([BROKEN, GUESSED])
-    await openTools()
-
-    await screen.findByText('1 broken')
-    expect(screen.getByText('1 guessed')).toBeTruthy()
-  })
-
-  it('puts the fix beside the finding, ready to copy', async () => {
-    // The whole reason these problems persist is that the reader does not know
-    // the option exists.
-    server([GUESSED])
-    await openTools()
-
-    // Guesses alone do not open the card - they are not failures, and a report
-    // that unfolds itself over every schema is one people fold away for good.
     fireEvent.click(await screen.findByRole('button', { name: /Schema report/ }))
 
-    expect(await screen.findByText(GUESSED.fix)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Copy the fix' })).toBeTruthy()
+    expect(await screen.findByText(UNVERSIONED.title)).toBeTruthy()
+    expect(screen.getAllByText(UNVERSIONED.detail)).toHaveLength(1)
+    expect(screen.getByText('Profile')).toBeTruthy()
+    expect(screen.getByText('Comment')).toBeTruthy()
   })
 
-  it('says plainly when no option can fix one', async () => {
-    server([BROKEN])
-    await openTools()
+  it('offers every way out, not just a configuration option', async () => {
+    // The most repeated sentence in the first version was an apology; a
+    // `@updatedAt` column was the answer all along.
+    server([UNVERSIONED])
+    await openSchema()
 
-    expect(await screen.findByText(/needs a change to the schema/)).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: /Schema report/ }))
+
+    expect(await screen.findByText('updatedAt DateTime @updatedAt')).toBeTruthy()
+    expect(screen.getByText("concurrency: 'last-write-wins'")).toBeTruthy()
+  })
+})
+
+describe('severity is about requests failing', () => {
+  it('says nothing is failing when nothing is', async () => {
+    server([UNVERSIONED])
+    await openSchema()
+
+    expect(await screen.findByText(/nothing is failing/)).toBeTruthy()
+  })
+
+  it('opens itself, and counts, only for what fails', async () => {
+    server([FAILING, UNVERSIONED])
+    await openSchema()
+
+    // Open without being asked: the reader has not come looking for this one.
+    expect(await screen.findByText(FAILING.title)).toBeTruthy()
+    expect(screen.getByText('1 failing')).toBeTruthy()
+  })
+
+  it('admits when there is nothing to change', async () => {
+    server([FAILING])
+    await openSchema()
+
+    expect(await screen.findByText(/the schema being what it is/)).toBeTruthy()
   })
 
   it('can be folded away', async () => {
-    server([BROKEN])
-    await openTools()
+    server([FAILING])
+    await openSchema()
 
     const header = await screen.findByRole('button', { name: /Schema report/ })
     expect(header.getAttribute('aria-expanded')).toBe('true')
 
     fireEvent.click(header)
-    await waitFor(() => expect(screen.queryByText(BROKEN.title)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(FAILING.title)).toBeNull())
   })
 })
 
 describe('the count in the navigation', () => {
-  it('appears for what is broken', async () => {
-    server([BROKEN])
+  it('appears for what is failing', async () => {
+    server([FAILING])
     window.location.hash = '#/'
     render(<App />)
 
-    const link = await screen.findByRole('link', { name: /Developer tools/ })
+    const link = await screen.findByRole('link', { name: /Schema/ })
     await waitFor(() => expect(link.textContent).toContain('1'))
   })
 
-  it('ignores the guesses', async () => {
+  it('ignores everything else', async () => {
     // Most schemas leave the admin guessing something. A badge that never goes
     // out is a warning people stop seeing.
-    server([GUESSED, GUESSED])
+    server([UNVERSIONED])
     window.location.hash = '#/'
     render(<App />)
 
-    const link = await screen.findByRole('link', { name: /Developer tools/ })
-    await waitFor(() => expect(link.textContent).toContain('Dev'))
-    expect(link.textContent).not.toContain('2')
+    const link = await screen.findByRole('link', { name: /Schema/ })
+    await waitFor(() => expect(link.textContent).toContain('Schema'))
+    expect(link.textContent).not.toContain('8')
   })
 })

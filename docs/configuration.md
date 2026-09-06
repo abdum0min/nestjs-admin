@@ -652,9 +652,32 @@ import { devTools } from '@nest-admin/nestjs/dev-tools'
 AdminModule.forRoot({ adapter, auth, devTools: devTools() })
 ```
 
-A **Developer tools** entry appears at the bottom of the navigation, marked, and
-separated from the resources — a tool that can empty a table must not look like
+A **Developer** group appears at the bottom of the navigation, separated from
+the resources, with two pages:
+
+| Page           | What is on it                                  |
+| -------------- | ---------------------------------------------- |
+| **Schema**     | the map, the report, and the metadata document |
+| **Data tools** | generate, undo, and the danger zone            |
+
+The second is marked, because a tool that can empty a table must not look like
 a table.
+
+### The schema map
+
+Models as boxes, relations as lines, in columns by dependency — what a model
+needs is to its left, what needs it is to its right. Drawn from `/admin/meta`
+and nothing else, so it is always what this admin actually believes about your
+schema.
+
+Deterministic: the same schema always draws the same map, so a screenshot taken
+twice is one picture and "the box on the left" means something. Clicking a model
+dims everything it does not touch, and a model the report says is failing is
+outlined.
+
+Not draggable, on purpose. Positions somebody arranges have to be stored and
+then reconciled with a schema that has changed since; a layout good enough means
+nobody reaches for the mouse.
 
 ### What it does
 
@@ -700,12 +723,24 @@ of them:
 | Decimal, BigInt or Bytes      | A required one makes every create fail                         |
 | File field, no storage        | The widget is drawn and every upload fails                     |
 
-Two severities: **broken** does not work, **guessed** works with less than it
-could. A third level would only start an argument about the middle.
+**One entry is one problem**, carrying the models it applies to. Reported per
+model, "the concurrency guard is not running" appears once for every model that
+lacks the column — against a ten-model schema that is the same paragraph eight
+times, and a wall nobody reads.
 
-Every finding a configuration option can fix carries that option, ready to
-copy - the reason these problems persist is that nobody knows the option
-exists. Where none can, it says so rather than inventing one.
+Three severities, with a rule that keeps the middle from being an argument:
+
+|           |                                                             |
+| --------- | ----------------------------------------------------------- |
+| `broken`  | a request fails today, when somebody clicks the thing       |
+| `warning` | nothing fails, but something you asked for is not happening |
+| `note`    | the admin is doing the best it can with this schema         |
+
+**Every finding says what to do about it**, ready to copy — and a remedy is not
+always an option here. It may be a line of schema (`updatedAt DateTime
+@updatedAt`) or turning something off (`concurrency: 'last-write-wins'`), and a
+finding may offer more than one. Where there is genuinely nothing to change, it
+says so rather than inventing an option.
 
 **It never touches the database.** No data quality, no missing rows, and
 deliberately no index advice: indexes are invisible from here, and guessing

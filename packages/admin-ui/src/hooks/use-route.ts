@@ -31,6 +31,8 @@ export type Route =
   | { readonly kind: 'team' }
   /** The developer tools. `~dev` for the same reason `~team` is. */
   | { readonly kind: 'dev' }
+  /** The schema: its map, its report, and the metadata document. */
+  | { readonly kind: 'schema' }
   | {
       readonly kind: 'list'
       readonly model: string
@@ -74,6 +76,7 @@ export function parseHash(hash: string): Route {
   if (model === undefined) return { kind: 'home' }
   if (model === '~team') return { kind: 'team' }
   if (model === '~dev') return { kind: 'dev' }
+  if (model === '~schema') return { kind: 'schema' }
   if (second === undefined) return { kind: 'list', model, ...(filter ? { filter } : {}) }
   if (second === 'new') return { kind: 'create', model, ...(from ? { from } : {}) }
   if (third === 'edit') return { kind: 'edit', model, id: second }
@@ -88,6 +91,8 @@ export function href(route: Route): string {
       return '#/~team'
     case 'dev':
       return '#/~dev'
+    case 'schema':
+      return '#/~schema'
     case 'list':
       return (
         `#/${encodeURIComponent(route.model)}` +

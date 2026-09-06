@@ -90,7 +90,8 @@ function server(can = ALL, capabilities: Record<string, unknown> = {}) {
   return { calls, bodies }
 }
 
-const value = (label: string): string => (screen.getByLabelText(label) as HTMLInputElement).value
+const value = (label: string | RegExp): string =>
+  (screen.getByLabelText(label) as HTMLInputElement).value
 
 describe('duplicating a record', () => {
   it('is offered on the record itself', async () => {

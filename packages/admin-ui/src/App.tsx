@@ -6,7 +6,14 @@
  * authorization simply is not in the document and therefore is not in the UI -
  * no client-side filtering, and nothing to keep in sync.
  */
-import { FlaskConical, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
+import {
+  FlaskConical,
+  LayoutDashboard,
+  Network,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+} from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
 
 import { devDoctor, fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
@@ -14,6 +21,7 @@ import type { AdminAccountSummary, ModelDescriptor } from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
 import { DashboardView } from './components/DashboardView.jsx'
 import { DevToolsView } from './components/DevToolsView.jsx'
+import { SchemaView } from './components/SchemaView.jsx'
 import { TeamView } from './components/TeamView.jsx'
 import { ListView } from './components/ListView.jsx'
 import { LoginPage } from './components/LoginPage.jsx'
@@ -146,7 +154,10 @@ function Admin({
   }
 
   const active =
-    route.kind === 'home' || route.kind === 'team' || route.kind === 'dev'
+    route.kind === 'home' ||
+    route.kind === 'team' ||
+    route.kind === 'dev' ||
+    route.kind === 'schema'
       ? undefined
       : models.find((m) => m.name === route.model)
 
@@ -158,12 +169,15 @@ function Admin({
       canUseDevTools={canUseDevTools}
       brokenCount={broken}
       activeDev={route.kind === 'dev'}
+      activeSchema={route.kind === 'schema'}
       {...shellProps}
     >
       {route.kind === 'home' ? (
         <DashboardView />
       ) : route.kind === 'dev' ? (
         <DevToolsView />
+      ) : route.kind === 'schema' ? (
+        <SchemaView />
       ) : route.kind === 'team' ? (
         // Rendered only when the metadata says so. Reaching the URL without the
         // capability still gets a page - one whose first request is refused,
@@ -236,6 +250,7 @@ function Shell({
   canUseDevTools = false,
   brokenCount = 0,
   activeDev = false,
+  activeSchema = false,
   children,
 }: {
   readonly models?: readonly ModelDescriptor[]
@@ -258,6 +273,8 @@ function Shell({
   readonly brokenCount?: number
   /** Whether the developer tools are the page being shown. */
   readonly activeDev?: boolean
+  /** Whether the schema screen is the page being shown. */
+  readonly activeSchema?: boolean
   readonly onSignedOut?: () => void
   readonly children: React.ReactNode
 }) {
@@ -389,6 +406,7 @@ function Shell({
               canUseDevTools={canUseDevTools}
               brokenCount={brokenCount}
               activeDev={activeDev}
+              activeSchema={activeSchema}
             />
           </nav>
 
@@ -418,6 +436,7 @@ function Shell({
                 canUseDevTools={canUseDevTools}
                 brokenCount={brokenCount}
                 activeDev={activeDev}
+                activeSchema={activeSchema}
               />
             </nav>
           </DialogContent>
@@ -446,6 +465,7 @@ function ResourceNav({
   canUseDevTools = false,
   brokenCount = 0,
   activeDev = false,
+  activeSchema = false,
 }: {
   readonly models: readonly ModelDescriptor[]
   readonly activeModel?: string
@@ -453,6 +473,7 @@ function ResourceNav({
   readonly canUseDevTools?: boolean
   readonly brokenCount?: number
   readonly activeDev?: boolean
+  readonly activeSchema?: boolean
 }) {
   return (
     <ul className="flex flex-col gap-0.5">
@@ -499,17 +520,38 @@ function ResourceNav({
        * empty a table must never look like a table.
        */}
       {canUseDevTools ? (
-        <li className="mt-1 border-t pt-1">
-          <NavLink
-            href={href({ kind: 'dev' })}
-            label="Developer tools"
-            icon={FlaskConical}
-            current={activeDev}
-            collapsed={collapsed}
-            marker={brokenCount > 0 ? String(brokenCount) : 'Dev'}
-            alarming={brokenCount > 0}
-          />
-        </li>
+        <>
+          {collapsed ? (
+            <li className="mt-1 border-t pt-1" aria-hidden="true" />
+          ) : (
+            <li className="text-muted-foreground mt-2 border-t px-2.5 pt-2 pb-0.5 text-[10px] font-medium tracking-wider uppercase">
+              Developer
+            </li>
+          )}
+          <li>
+            <NavLink
+              href={href({ kind: 'schema' })}
+              label="Schema"
+              icon={Network}
+              current={activeSchema}
+              collapsed={collapsed}
+              {...(brokenCount > 0 ? { marker: String(brokenCount), alarming: true } : {})}
+            />
+          </li>
+          <li>
+            <NavLink
+              href={href({ kind: 'dev' })}
+              label="Data tools"
+              icon={FlaskConical}
+              current={activeDev}
+              collapsed={collapsed}
+              // Kept even though the group heading says "Developer": on the
+              // collapsed rail there is no heading, and this is the entry that
+              // can empty a table.
+              marker="Dev"
+            />
+          </li>
+        </>
       ) : null}
     </ul>
   )
