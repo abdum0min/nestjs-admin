@@ -38,9 +38,16 @@ interface had stopped changing shape, and a second adapter had proved the
 | 0.13.1  | A file column drawn wherever it is read, not printed as a key               |
 | 0.13.2  | Soft delete, and `eq null` fixed in the Drizzle adapter                     |
 | 0.14.0  | Developer tools: mock data, pictures, undo, four-layer production gating    |
+| 0.14.1  | Schema report, metadata viewer, fill this form, duplicate a record          |
+| 0.14.2  | Schema map, and a report grouped by problem rather than by model            |
+| 0.14.3  | Rich text on a string column, as its own chunk                              |
 
-**1186 tests, 67/67 packed-consumer checks, published as
+**1300+ tests, 67/67 packed-consumer checks, published as
 [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs).**
+
+Three of the versions above never reached npm - `0.12.0`, `0.13.0` and `0.14.1`
+were folded into the patch that followed. See the note at the top of the
+changelog.
 
 Where the project stands in full, including risks and carried debt:
 [`project-state.md`](project-state.md).

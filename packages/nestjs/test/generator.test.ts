@@ -382,3 +382,79 @@ describe('a one-to-one', () => {
     expect(exclusiveLimit(post, new Map([['User', ['u1']]]))).toBeUndefined()
   })
 })
+
+/**
+ * A column the application declared rich text.
+ *
+ * It holds a document, so generating a flat paragraph into it would prove
+ * nothing about the editor that has to round-trip it, the detail page that has
+ * to render it through a parser, or the list cell that has to strip the tags.
+ */
+describe('rich text', () => {
+  const html = (over: Partial<FieldMetadata> = {}): string =>
+    String(
+      valueFor({
+        field: field('body', over),
+        index: 0,
+        random: randomFrom('doc'),
+        record: {},
+        widget: 'richtext',
+      }),
+    )
+
+  it('produces a document, not a sentence', () => {
+    const value = html()
+
+    expect(value).toContain('<h2>')
+    expect(value).toContain('<p>')
+    expect(value).toContain('<ul>')
+    expect(value).toContain('<a href="https://')
+  })
+
+  it('uses only tags the editor can carry', () => {
+    // Markup the reader would silently drop is data that changes the moment
+    // anybody opens it.
+    const allowed = new Set(['h2', 'h3', 'p', 'ul', 'ol', 'li', 'a', 'strong', 'em', 'code'])
+    const tags = [...html().matchAll(/<\/?([a-z0-9]+)/g)].map((match) => match[1])
+
+    expect(tags.every((tag) => allowed.has(tag as string))).toBe(true)
+  })
+
+  it('is only for a string column', () => {
+    // A number declared rich text is a configuration mistake the doctor
+    // reports; the generator does not compound it by writing markup into it.
+    expect(typeof html({ kind: 'number' })).toBe('string')
+    expect(html({ kind: 'number' })).not.toContain('<')
+  })
+
+  it('says nothing about markup when the column is ordinary', () => {
+    const plain = String(
+      valueFor({ field: field('body'), index: 0, random: randomFrom('doc'), record: {} }),
+    )
+
+    expect(plain).not.toContain('<')
+  })
+})
+
+describe('the words in generated prose', () => {
+  it('are not Latin, even where faker is installed', () => {
+    // Placeholder Latin tells whoever is looking at the screen that they are
+    // looking at a placeholder, which is the one thing generated data exists to
+    // avoid. Faker is used where it is better - names, addresses, companies -
+    // and its `lorem` is not one of those places.
+    const shared = randomFrom('prose')
+    const text = Array.from({ length: 10 }, (_, index) =>
+      String(
+        valueFor({
+          field: field('description'),
+          index,
+          random: shared,
+          record: {},
+          faker: { lorem: { sentences: () => 'Lorem ipsum dolor sit amet.' } },
+        }),
+      ),
+    ).join(' ')
+
+    expect(text).not.toContain('Lorem ipsum')
+  })
+})

@@ -58,6 +58,7 @@ import { FileField } from './ui/file-field.jsx'
 import { DatePicker } from './ui/date-picker.jsx'
 import { Input } from './ui/input.jsx'
 import { PasswordInput } from './ui/password-input.jsx'
+import { RichTextField } from './ui/rich-text-lazy.jsx'
 import { SimpleSelect } from './ui/select.jsx'
 import { Textarea } from './ui/textarea.jsx'
 
@@ -409,6 +410,7 @@ function FieldInput({
   const label = `${fieldLabel(field)}${field.isRequired ? ' *' : ''}`
   const id = `field-${field.name}`
   const errorId = `${id}-error`
+  const labelId = `${id}-label`
 
   /*
    * The label points at the control by id rather than wrapping it.
@@ -483,6 +485,21 @@ function FieldInput({
         onChange={onChange}
       />
     )
+  } else if (field.widget === 'richtext') {
+    // The column holds HTML. The editor is its own chunk, so a schema without
+    // one of these never downloads it.
+    wide = true
+    control = (
+      <RichTextField
+        {...described}
+        value={String(value)}
+        onChange={onChange}
+        // `htmlFor` names a form control, and this one is a div with
+        // `role="textbox"`, which `for` does not reach. Without this the editor
+        // has no accessible name at all.
+        aria-labelledby={labelId}
+      />
+    )
   } else if (field.widget === 'textarea' || field.widget === 'json') {
     wide = true
     // A widget is the application saying what the column actually holds. The
@@ -542,7 +559,7 @@ function FieldInput({
   }
 
   const text = (
-    <label className="text-sm font-medium" htmlFor={id}>
+    <label className="text-sm font-medium" id={labelId} htmlFor={id}>
       {label}
     </label>
   )

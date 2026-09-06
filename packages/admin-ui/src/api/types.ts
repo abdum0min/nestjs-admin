@@ -37,7 +37,16 @@ export interface RelationDescriptor {
 }
 
 export type FieldWidget =
-  'textarea' | 'password' | 'email' | 'url' | 'color' | 'json' | 'file' | 'image'
+  | 'textarea'
+  | 'password'
+  | 'email'
+  | 'url'
+  | 'color'
+  | 'json'
+  | 'file'
+  | 'image'
+  /** Formatted text on a string column, stored as HTML. */
+  | 'richtext'
 
 /** An application-defined button. */
 export interface ActionDescriptor {

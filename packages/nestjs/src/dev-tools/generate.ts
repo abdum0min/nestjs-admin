@@ -155,11 +155,18 @@ export interface DraftContext {
   readonly claimed?: Map<string, Set<unknown>>
   /** Per-column overrides the application supplied, keyed `Model.field`. */
   readonly generators?: Readonly<Record<string, (index: number) => unknown>> | undefined
+  /**
+   * The widget each column was configured with.
+   *
+   * Passed in rather than read from the configuration here, so this file stays
+   * a function of metadata and its arguments.
+   */
+  readonly widgetOf?: ((field: string) => string | undefined) | undefined
 }
 
 /** One record, ready for `adapter.create`. */
 export function draft(context: DraftContext): Record<string, unknown> {
-  const { model, index, random, faker, parents, siblings, generators, claimed } = context
+  const { model, index, random, faker, parents, siblings, generators, claimed, widgetOf } = context
   const record: Record<string, unknown> = {}
 
   const keys = new Map(foreignKeys(model).map((key) => [key.column, key]))
@@ -209,7 +216,14 @@ export function draft(context: DraftContext): Record<string, unknown> {
     if (!field.isRequired && field.defaultValue !== undefined && random.chance(0.3)) continue
     if (!field.isRequired && random.chance(0.15)) continue
 
-    const value = valueFor({ field, index, random, faker, record })
+    const value = valueFor({
+      field,
+      index,
+      random,
+      faker,
+      record,
+      widget: widgetOf?.(field.name),
+    })
     if (value !== undefined) record[field.name] = value
   }
 

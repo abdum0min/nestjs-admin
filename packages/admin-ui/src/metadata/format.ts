@@ -7,6 +7,7 @@
  * generic admin that was not finished.
  */
 import type { FieldDescriptor } from '../api/types.js'
+import { textFromHtml } from './html.js'
 
 /** A short, single-line rendering suitable for a table cell. */
 export function formatCell(field: FieldDescriptor, value: unknown): string {
@@ -25,7 +26,9 @@ export function formatCell(field: FieldDescriptor, value: unknown): string {
     return '{…}'
   }
 
-  const text = String(value)
+  // Stored markup is not what a cell is for, and it must never be rendered as
+  // markup here: the tags come out and what is left is a sentence.
+  const text = field.widget === 'richtext' ? textFromHtml(String(value)) : String(value)
   return text.length > 60 ? `${text.slice(0, 57)}…` : text
 }
 

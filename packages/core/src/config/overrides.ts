@@ -49,6 +49,17 @@ export type FieldWidget =
    */
   | 'file'
   | 'image'
+  /**
+   * Formatted text on a string column, stored as HTML.
+   *
+   * HTML rather than the editor's own JSON, because the value belongs to the
+   * application: it renders it on its own site, and a document shape only this
+   * admin understands would make that its problem too.
+   *
+   * The editor is loaded as its own chunk, so a schema without one of these
+   * pays nothing for it.
+   */
+  | 'richtext'
 
 export interface FieldOverride {
   /**

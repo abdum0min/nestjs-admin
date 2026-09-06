@@ -24,6 +24,7 @@ import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Button } from './ui/button.jsx'
 import { Card, CardContent } from './ui/card.jsx'
 import { MediaCell } from './ui/media.jsx'
+import { RichTextValue } from './ui/rich-text-lazy.jsx'
 import { useConfirm } from './ui/confirm.jsx'
 
 export function RecordView({
@@ -191,6 +192,12 @@ export function RecordView({
                     <span className="text-muted-foreground italic">Not shown</span>
                   ) : field.kind === 'relation' ? (
                     <RelationValue field={field} models={models} record={record} />
+                  ) : field.widget === 'richtext' ? (
+                    // Through the editor's parser, never through innerHTML:
+                    // HTML out of a database, rendered on the admin's own
+                    // origin, is an XSS wherever anything less trusted than an
+                    // administrator can write that column.
+                    <RichTextValue value={String(record[field.name] ?? '')} />
                   ) : field.widget === 'image' || field.widget === 'file' ? (
                     // The key is still available - it is what the edit form
                     // shows - but this page is for looking at the record, and

@@ -116,7 +116,8 @@ export interface FieldDto {
    * A `string` column may be a sentence, a password or a colour, and the schema
    * cannot tell them apart.
    */
-  readonly widget?: 'textarea' | 'password' | 'email' | 'url' | 'color' | 'json' | 'file' | 'image'
+  readonly widget?:
+    'textarea' | 'password' | 'email' | 'url' | 'color' | 'json' | 'file' | 'image' | 'richtext'
 
   /**
    * What a file field accepts, and how large.

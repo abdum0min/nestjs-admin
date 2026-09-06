@@ -11,6 +11,89 @@ breaking change is listed below with what to do about it.
 Published to npm as [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs)
 since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
 
+**Not every version below reached npm.** `0.12.0`, `0.13.0` and `0.14.1` were
+finished and then folded into the patch that followed, because something worth
+fixing turned up before the release went out. They are documented as their own
+entries because that is where the work belongs; on npm their contents arrived in
+`0.12.1`, `0.13.1` and `0.14.2`. Released versions are
+`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2`.
+
+---
+
+## 0.14.3
+
+Formatted text, and three documents that were saying something untrue.
+
+### Added
+
+- **`widget: 'richtext'`** on a string column. TipTap, with bold, italic, two
+  heading levels, lists, quote, code and links.
+
+  **Not CKEditor**, which is the name people use for this: CKEditor 5 is
+  GPL-2.0-or-later or commercial, and bundling it into an MIT package would push
+  GPL onto every application that installs this one. TipTap's core is MIT.
+
+  **Its own chunk.** 385 KB of editor arrives when a form or a record page
+  actually contains one of these fields, and never otherwise - a schema without
+  rich text pays about fourteen kilobytes for the wrapper.
+
+  The stored value is **HTML**, because the application renders it on its own
+  site and a document shape only this admin understood would make that its
+  problem too.
+
+- **Generated rich text is a document.** Where a column is declared
+  `richtext`, the mock data generator writes a heading, a paragraph, a list and
+  a link rather than a flat sentence - which is what the editor has to
+  round-trip, what the record page has to render through its parser, and what
+  the list cell has to reduce to one line. Only the tags the editor's own schema
+  contains, since markup the reader would drop is data that changes the moment
+  anybody opens it.
+
+### Security
+
+**Stored HTML is never handed to `innerHTML`.** HTML that came out of a
+database, rendered on the admin's own origin, is a session-stealing XSS wherever
+anything less trusted than an administrator can write that column - a comment
+box, on most schemas.
+
+The record page renders it **through the editor's own parser**, which builds
+TipTap's document model and drops everything the model does not contain:
+`<script>`, `<iframe>`, `onerror=`. The editor somebody types into and the
+view somebody else's text is displayed in are one component in two modes, so
+there is one parser and therefore one answer about what survives. A sanitiser
+library would have been the other way, at twenty kilobytes and a second set of
+rules to keep in step with the first.
+
+Links are restricted to `http`, `https` and `mailto`, and a link the toolbar
+refuses says so rather than being silently dropped.
+
+Table cells show the text with the tags removed. They never render markup.
+
+### Fixed
+
+- **The rich-text editor had no accessible name.** A `<label for>` names a form
+  control, and the editor is a `div` with `role="textbox"`, which `for` does not
+  reach - so it was an unnamed text box to anything reading the page. The label
+  now carries an id and the editor points at it.
+
+- **Generated prose was Latin where faker was installed.** `faker.lorem` is
+  lorem ipsum, and placeholder Latin tells whoever is looking at the screen that
+  they are looking at a placeholder - which is the one thing generated data
+  exists to avoid. Faker is still used where it is better: names, addresses,
+  companies, cities.
+
+- **The changelog listed three releases that never reached npm.** `0.12.0`,
+  `0.13.0` and `0.14.1` were finished and folded into the patch that followed,
+  and a reader looking for them on npm would not have found them. There is a
+  note at the top now, and the roadmap says the same.
+
+- **The schema report overstated one finding.** It said the admin "cannot
+  produce a value" for Decimal, BigInt and Bytes columns. The form sends what
+  was typed as a string, which Prisma accepts for a Decimal and does not for
+  Bytes - so the behaviour is left alone and the wording now says which is
+  which. Making those columns read-only would have broken admins where editing
+  a Decimal works today.
+
 ---
 
 ## 0.14.2

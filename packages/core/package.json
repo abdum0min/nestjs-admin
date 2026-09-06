@@ -1,6 +1,6 @@
 {
   "name": "@nest-admin/core",
-  "version": "0.14.2",
+  "version": "0.14.3",
   "private": true,
   "description": "ORM-agnostic engine for Nest Admin: adapter contract, model metadata and query abstractions.",
   "license": "MIT",

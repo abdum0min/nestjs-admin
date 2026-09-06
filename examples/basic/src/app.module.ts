@@ -173,7 +173,9 @@ const models = {
       slug: { order: 2 },
       status: { order: 3 },
       excerpt: { widget: 'textarea', order: 4 } as const,
-      body: { widget: 'textarea', order: 5 } as const,
+      // Formatted text on an ordinary string column. The editor is its own
+      // chunk, so a schema without one of these never downloads it.
+      body: { widget: 'richtext', order: 5 } as const,
       authorId: { label: 'Author', order: 6 },
       // Maintained by the application, not by whoever opens the form.
       views: { readOnly: true, order: 7 },

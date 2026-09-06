@@ -487,8 +487,46 @@ are presentation. Treating one of the first as one of the last would be a hole
 with a reassuring name.
 
 `widget` accepts `textarea`, `password`, `email`, `url`, `color`, `json`,
-`file`, `image`. Anything else is inferred from the field's kind — a date gets
-a date picker, an enum a select, a boolean a checkbox, a relation a picker.
+`file`, `image`, `richtext`. Anything else is inferred from the field's kind — a
+date gets a date picker, an enum a select, a boolean a checkbox, a relation a
+picker.
+
+### `richtext`
+
+Formatted text on an ordinary string column, stored as **HTML**:
+
+```ts
+models: {
+  Post: {
+    fields: {
+      body: {
+        widget: 'richtext'
+      }
+    }
+  }
+}
+```
+
+Bold, italic, two heading levels, lists, quote, code and links. HTML rather than
+the editor's own JSON, because your application renders the value on its own
+site and a document shape only this admin understood would make that its problem
+too.
+
+**The editor is its own chunk.** It arrives when a form or a record page
+actually contains one of these fields; a schema without rich text never
+downloads it.
+
+**Stored HTML is never handed to `innerHTML`.** HTML out of a database, rendered
+on the admin's own origin, is a session-stealing XSS wherever anything less
+trusted than an administrator can write that column. The record page renders it
+through the editor's own parser, which drops everything its document model does
+not contain — `<script>`, `<iframe>`, `onerror=`. Table cells show the text with
+the tags removed and never render markup. Links are restricted to `http`,
+`https` and `mailto`.
+
+Not CKEditor, which is the name people use for this. CKEditor 5 is
+GPL-2.0-or-later or commercial, and bundling it into an MIT package would push
+GPL onto every application that installs this one.
 
 ---
 

@@ -131,6 +131,7 @@ const models = {
         placeholder: '/img/default-avatar.png',
       },
       contract: { widget: 'file', accept: ['application/pdf'] },
+      body: { widget: 'richtext' },
     },
   },
 } as const satisfies ModelOverrides

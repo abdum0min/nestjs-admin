@@ -144,8 +144,11 @@ const keyless: Check = ({ models }) => {
  * A required column the admin has no honest way to fill in.
  *
  * `Decimal`, `BigInt` and `Bytes` arrive as `unknown` because they do not
- * round-trip through JSON without losing precision. Required, with no default,
- * that is a create nobody can complete.
+ * round-trip through JSON reliably. The form sends whatever was typed as a
+ * string, which Prisma happens to accept for a Decimal and does not for Bytes -
+ * so this is reported rather than blocked. Saying "the admin cannot write this"
+ * would be wrong for the case that works, and saying nothing would leave the
+ * case that fails to be discovered at the database.
  */
 const unwritableColumns: Check = ({ models }) => {
   const subjects = models.flatMap((model) =>
@@ -166,8 +169,10 @@ const unwritableColumns: Check = ({ models }) => {
     severity: 'broken',
     title: `${plural(subjects.length, 'A required column is', 'required columns are')} a type the admin cannot produce`,
     detail:
-      'Decimal, BigInt and Bytes do not survive JSON without losing precision, so the form ' +
-      'cannot offer a value the database will accept. Every create on these models fails.',
+      'Decimal, BigInt and Bytes arrive as an unhandled kind, so the form offers a plain text ' +
+      'box and sends what was typed as a string. A Decimal usually survives that; Bytes does ' +
+      'not. Required and with no default, whether a record can be created at all depends on ' +
+      'which of the three it is.',
     remedies: [
       { kind: 'schema', label: 'Give the column a default', code: '@default(0)' },
       {
@@ -473,6 +478,7 @@ const WIDGET_KINDS: Readonly<Record<string, readonly FieldMetadata['kind'][]>> =
   color: ['string'],
   file: ['string'],
   image: ['string'],
+  richtext: ['string'],
   json: ['json', 'string'],
 }
 

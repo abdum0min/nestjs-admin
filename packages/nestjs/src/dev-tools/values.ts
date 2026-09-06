@@ -140,6 +140,15 @@ export interface ValueContext {
   readonly record: Readonly<Record<string, unknown>>
   /** Rows already created in this run, so a self-relation has somewhere to point. */
   readonly created?: readonly unknown[]
+  /**
+   * The widget the application declared for this column, if any.
+   *
+   * Only `richtext` changes what is generated, and it changes it completely: a
+   * rich-text column holds HTML, so a paragraph of plain prose in it would
+   * render as one flat line and prove nothing about the editor, the detail page
+   * or the list cell that has to strip the tags.
+   */
+  readonly widget?: string | undefined
 }
 
 /**
@@ -153,6 +162,10 @@ export function valueFor(context: ValueContext): unknown {
 
   // The schema's own answer beats every guess below it.
   if (field.enumValues && field.enumValues.length > 0) return random.pick(field.enumValues)
+
+  // The application's own answer beats the name and the kind: a column declared
+  // rich text holds a document, whatever it happens to be called.
+  if (context.widget === 'richtext' && field.kind === 'string') return document(context)
 
   const category = categoryOf(field.name)
   const value = byCategory(category, context) ?? byKind(context)
@@ -277,15 +290,75 @@ function personOrThing(context: ValueContext): string {
   return title.charAt(0).toUpperCase() + title.slice(1)
 }
 
+/**
+ * Sentences, and deliberately not faker's.
+ *
+ * Faker is used everywhere it is better - names, addresses, companies - and not
+ * here, because `lorem` is Latin. Placeholder Latin tells whoever is looking at
+ * the screen that they are looking at a placeholder, which is the one thing
+ * generated data exists to avoid: the whole point is a screen somebody can read
+ * as a product. Ordinary English sentences do that; `repellendus perspiciatis`
+ * does not.
+ */
 function prose(context: ValueContext): string {
-  const { random, faker } = context
-  const fromFaker = tryFaker(() => faker?.lorem?.sentences?.(random.int(1, 3)))
-  if (fromFaker !== undefined) return fromFaker
+  const { random } = context
 
   const count = random.int(1, 3)
   const picked = new Set<string>()
   while (picked.size < count) picked.add(random.pick(SENTENCES))
   return `${[...picked].join('. ')}.`
+}
+
+/**
+ * A small HTML document, of the shape a real one has.
+ *
+ * A heading, prose, a list and a link - because that is what the editor has to
+ * round-trip, what the detail page has to render through its parser, and what
+ * the list cell has to reduce to one line. A paragraph of lorem would exercise
+ * none of it.
+ *
+ * Deliberately only the tags the editor's own schema contains. Generating
+ * markup the reader will silently drop would be data that changes the moment
+ * anybody opens it.
+ */
+function document(context: ValueContext): string {
+  const { random } = context
+
+  const heading = `${random.pick(ADJECTIVES)} ${random.pick(NOUNS)}`
+  const opening = prose(context)
+  const closing = prose(context)
+
+  const bullets = Array.from({ length: random.int(2, 4) }, () => {
+    const item = random.pick(SENTENCES)
+    return `<li>${escapeHtml(item.replace(/.$/, ''))}</li>`
+  }).join('')
+
+  const link = `<a href="https://example.com/${slugify(words(random, 2))}">${escapeHtml(
+    words(random, 2),
+  )}</a>`
+
+  return [
+    `<h2>${escapeHtml(heading.charAt(0).toUpperCase() + heading.slice(1))}</h2>`,
+    `<p>${escapeHtml(opening)}</p>`,
+    `<ul>${bullets}</ul>`,
+    `<p>${escapeHtml(closing)} See ${link} for the rest.</p>`,
+  ].join('')
+}
+
+/**
+ * Text placed inside markup.
+ *
+ * The words here are ours and contain no angle brackets, so this changes
+ * nothing today. It is here because the day somebody adds a word list with an
+ * apostrophe or an ampersand in it, the alternative is generated data that is
+ * subtly malformed and nobody looks for it.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 function words(random: Random, count: number): string {

@@ -239,6 +239,18 @@ export class DevToolsService {
     }
   }
 
+  /**
+   * Which widget each column of a model was given.
+   *
+   * The generator reads it for one thing only: a rich-text column holds a
+   * document, and plain prose in it would render as one flat line and prove
+   * nothing about the editor that has to round-trip it.
+   */
+  private widgetsFor(model: string): (field: string) => string | undefined {
+    const fields = this.overrides?.[model]?.fields
+    return (field) => fields?.[field]?.widget
+  }
+
   /** How many rows a model has. One query, and only for this screen. */
   private async countOf(model: string): Promise<number> {
     try {
@@ -276,6 +288,7 @@ export class DevToolsService {
         faker,
         parents,
         siblings: [],
+        widgetOf: this.widgetsFor(model.name),
         ...(this.options.generators ? { generators: this.options.generators } : {}),
       }),
     )
@@ -588,6 +601,7 @@ export class DevToolsService {
         parents,
         siblings: ids,
         claimed,
+        widgetOf: this.widgetsFor(model.name),
         ...(this.options.generators ? { generators: this.options.generators } : {}),
       })
 
