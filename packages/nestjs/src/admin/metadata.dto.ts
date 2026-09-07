@@ -23,8 +23,12 @@ import {
   fieldOverride,
   isReadOnly,
   inverseRelationField,
+  isNavigationGroup,
+  isNavigationLink,
   relationShape,
   softDeleteFieldOf,
+  type AdminNavigation,
+  type DetailPresentation,
   type FieldMetadata,
   type ModelMetadata,
   type ModelOverrides,
@@ -179,6 +183,48 @@ export interface ActionDto {
   readonly danger?: boolean
 }
 
+export interface ListDto {
+  readonly columns?: readonly string[]
+  readonly sort?: { readonly field: string; readonly direction: 'asc' | 'desc' }
+  readonly perPage?: number
+}
+
+export interface DetailSectionDto {
+  readonly heading: string
+  readonly description?: string
+  readonly fields: readonly string[]
+  readonly collapsed?: boolean
+}
+
+export interface DetailDto {
+  readonly layout: 'sections' | 'tabs'
+  readonly sections: readonly DetailSectionDto[]
+}
+
+/**
+ * The navigation, already resolved.
+ *
+ * Groups are filtered to the models this principal can see and empty ones are
+ * gone, so a role that cannot reach `Order` never receives a "Sales" heading
+ * with nothing under it. Discriminated by `kind` rather than by which key is
+ * present, because the interface switches on it.
+ */
+export type NavigationDto =
+  | {
+      readonly kind: 'group'
+      readonly heading?: string
+      readonly models: readonly string[]
+      readonly collapsed?: boolean
+    }
+  | {
+      readonly kind: 'link'
+      readonly label: string
+      readonly href: string
+      readonly icon?: ModelIcon
+      readonly external?: boolean
+    }
+  | { readonly kind: 'divider' }
+
 export interface ModelDto {
   readonly name: string
   /** Field names forming the primary key. Single-column in this version. */
@@ -240,6 +286,24 @@ export interface ModelDto {
    */
   readonly actions: readonly ActionDto[]
 
+  /**
+   * How the list screen should look, when the application said.
+   *
+   * Presentation, and the interface is free to ignore it: which columns are
+   * worth showing is an opinion, and every one of them is a column this
+   * principal may already read.
+   */
+  readonly list?: ListDto
+
+  /**
+   * How the record screen should be arranged, when the application said.
+   *
+   * A section never hides a field. Anything left out of every section is
+   * collected into a final group, so adding a column to the schema cannot make
+   * it invisible - see `DetailPresentation` in Core.
+   */
+  readonly detail?: DetailDto
+
   /** What to call the model. Absent unless the application said so. */
   readonly label?: string
 
@@ -286,6 +350,13 @@ export interface CapabilitiesDto {
 export interface MetadataDto {
   readonly models: readonly ModelDto[]
   readonly capabilities: CapabilitiesDto
+
+  /**
+   * How to group the resources, when the application said.
+   *
+   * Absent means what it has always meant: one flat list, in model order.
+   */
+  readonly navigation?: readonly NavigationDto[]
 }
 
 /**
@@ -438,12 +509,18 @@ export function toMetadataDto(
    * server enforces it again either way.
    */
   uploadCeiling?: number,
+  /** The navigation the application declared, if it did. */
+  navigation?: AdminNavigation,
 ): MetadataDto {
   const present = new Set(models.map((model) => model.name))
+  const ordered = byOrder(models, (model) => overrides?.[model.name]?.order)
 
   return {
     capabilities,
-    models: byOrder(models, (model) => overrides?.[model.name]?.order).map((model) => ({
+    ...(resolveNavigation(navigation, ordered) !== undefined
+      ? { navigation: resolveNavigation(navigation, ordered) }
+      : {}),
+    models: ordered.map((model) => ({
       name: model.name,
       primaryKey: [...model.primaryKey],
       displayField: displayFieldFor(model),
@@ -457,10 +534,136 @@ export function toMetadataDto(
         ? { label: overrides[model.name]?.label }
         : {}),
       ...(overrides?.[model.name]?.icon !== undefined ? { icon: overrides[model.name]?.icon } : {}),
+      ...(overrides?.[model.name]?.list !== undefined ? { list: overrides[model.name]?.list } : {}),
+      ...(detailOf(overrides?.[model.name]?.detail, model) !== undefined
+        ? { detail: detailOf(overrides?.[model.name]?.detail, model) }
+        : {}),
       fields: byOrder(
         model.fields.filter((field) => !field.relation || present.has(field.relation.targetModel)),
         (field) => fieldOverride(overrides, model.name, field.name)?.order,
       ).map((field) => toFieldDto(field, model.name, models, overrides, uploadCeiling)),
     })),
   }
+}
+
+/**
+ * The record layout, with nothing left behind.
+ *
+ * Whatever the application grouped, plus a final group holding every field it
+ * did not. That last group is the whole reason a section is safe to configure:
+ * adding a column to the schema puts it on the screen, rather than making it
+ * invisible until somebody notices and edits the config.
+ *
+ * `undefined` when nothing was configured, so the interface keeps drawing the
+ * flat list it always did rather than a single section called "Other".
+ */
+function detailOf(
+  detail: DetailPresentation | undefined,
+  model: ModelMetadata,
+): DetailDto | undefined {
+  const sections = detail?.sections
+  if (sections === undefined || sections.length === 0) return undefined
+
+  const known = new Set(model.fields.map((field) => field.name))
+  const claimed = new Set<string>()
+
+  const groups = sections
+    .map((section) => ({
+      heading: section.heading,
+      ...(section.description !== undefined ? { description: section.description } : {}),
+      ...(section.collapsed !== undefined ? { collapsed: section.collapsed } : {}),
+      // Dropped rather than kept: a field named twice would render twice, and
+      // one hidden by an override is not part of this admin at all.
+      fields: section.fields.filter((name) => {
+        if (!known.has(name) || claimed.has(name)) return false
+        claimed.add(name)
+        return true
+      }),
+    }))
+    .filter((section) => section.fields.length > 0)
+
+  const rest = model.fields.filter((field) => !claimed.has(field.name)).map((field) => field.name)
+
+  return {
+    layout: detail?.layout ?? 'sections',
+    sections: rest.length === 0 ? groups : [...groups, { heading: 'Other', fields: rest }],
+  }
+}
+
+/**
+ * The navigation as this principal should receive it.
+ *
+ * Three things happen here rather than in the interface, because all three
+ * need to know which models are visible and that is a decision the server has
+ * already made: groups lose the models this principal cannot see, groups left
+ * with nothing are dropped, and whatever no group claimed is collected at the
+ * end.
+ *
+ * Dividers are tidied last. A rule exists to separate two things, so one that
+ * ends up first, last, or beside another rule is separating nothing - which is
+ * exactly what happens when the group between them was filtered away.
+ */
+function resolveNavigation(
+  navigation: AdminNavigation | undefined,
+  models: readonly ModelMetadata[],
+): readonly NavigationDto[] | undefined {
+  if (navigation === undefined) return undefined
+
+  const visible = new Set(models.map((model) => model.name))
+  const claimed = new Set<string>()
+  const entries: NavigationDto[] = []
+
+  for (const entry of navigation) {
+    if ('divider' in entry) {
+      entries.push({ kind: 'divider' })
+      continue
+    }
+
+    if (isNavigationLink(entry)) {
+      entries.push({
+        kind: 'link',
+        label: entry.label,
+        href: entry.href,
+        ...(entry.icon !== undefined ? { icon: entry.icon } : {}),
+        // An absolute URL leaves this application, so it opens in a new tab
+        // unless the application says otherwise. A path or a hash route does
+        // not, and stays in place.
+        external: entry.external ?? /^https?:/.test(entry.href),
+      })
+      continue
+    }
+
+    if (!isNavigationGroup(entry)) continue
+
+    const named = entry.models.filter((name) => {
+      if (!visible.has(name) || claimed.has(name)) return false
+      claimed.add(name)
+      return true
+    })
+
+    if (named.length === 0) continue
+
+    entries.push({
+      kind: 'group',
+      ...(entry.heading !== undefined ? { heading: entry.heading } : {}),
+      ...(entry.collapsed !== undefined ? { collapsed: entry.collapsed } : {}),
+      models: named,
+    })
+  }
+
+  const rest = models.filter((model) => !claimed.has(model.name)).map((model) => model.name)
+  if (rest.length > 0) entries.push({ kind: 'group', heading: 'Other', models: rest })
+
+  return tidyDividers(entries)
+}
+
+/** Drop a rule that separates nothing: leading, trailing, or beside another. */
+function tidyDividers(entries: readonly NavigationDto[]): readonly NavigationDto[] {
+  const kept = entries.filter(
+    (entry, index) =>
+      entry.kind !== 'divider' || (index > 0 && entries[index - 1]?.kind !== 'divider'),
+  )
+
+  while (kept.at(-1)?.kind === 'divider') kept.pop()
+  return kept
 }

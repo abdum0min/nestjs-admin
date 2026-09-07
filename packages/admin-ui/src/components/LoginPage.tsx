@@ -65,12 +65,17 @@ export function LoginPage({
     <div className="bg-background flex min-h-svh items-center justify-center p-4">
       <div className="flex w-full max-w-sm flex-col gap-6">
         <div className="flex flex-col items-center gap-3 text-center">
-          {theme.logoUrl === undefined ? null : (
-            <img className="size-12 rounded-lg" src={theme.logoUrl} alt="" />
+          {/* The sign-in logo where the application supplied one, and the
+              header logo otherwise: a wordmark has more room here than it does
+              in a header, and most applications only have the one. */}
+          {(theme.loginLogoUrl ?? theme.logoUrl) === undefined ? null : (
+            <img className="max-h-16 rounded-lg" src={theme.loginLogoUrl ?? theme.logoUrl} alt="" />
           )}
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl font-semibold tracking-tight">{theme.title ?? 'Admin'}</h1>
-            <p className="text-muted-foreground text-sm">Sign in to continue.</p>
+            <p className="text-muted-foreground text-sm">
+              {theme.welcome ?? 'Sign in to continue.'}
+            </p>
           </div>
         </div>
 

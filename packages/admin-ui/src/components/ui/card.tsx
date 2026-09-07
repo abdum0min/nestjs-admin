@@ -24,7 +24,7 @@ export function CardDescription({ className, ...props }: React.ComponentProps<'p
 }
 
 export function CardContent({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('px-5 pb-5', className)} {...props} />
+  return <div data-slot="card-content" className={cn('px-5 pb-5', className)} {...props} />
 }
 
 export function CardFooter({ className, ...props }: React.ComponentProps<'div'>) {

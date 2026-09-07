@@ -25,7 +25,7 @@
  * gets the banner. It has to: the alternative is a submission that appears to
  * do nothing.
  */
-import { Wand2 } from 'lucide-react'
+import { ChevronRight, Wand2 } from 'lucide-react'
 import { useState } from 'react'
 
 import {
@@ -47,6 +47,8 @@ import {
   toRequestValue,
 } from '../metadata/fields.js'
 import { relationForForeignKey } from '../metadata/relations.js'
+import { errorCount, fieldGroups, groupWithError } from '../metadata/sections.js'
+import { ActionRail, RailButton, WithRail } from './ActionRail.jsx'
 import { cn } from '../lib/utils.js'
 import { RelationPicker } from './RelationPicker.jsx'
 import { ErrorState, FormSkeleton } from './States.jsx'
@@ -59,6 +61,7 @@ import { DatePicker } from './ui/date-picker.jsx'
 import { Input } from './ui/input.jsx'
 import { PasswordInput } from './ui/password-input.jsx'
 import { RichTextField } from './ui/rich-text-lazy.jsx'
+import { Tabs } from './ui/tabs.jsx'
 import { SimpleSelect } from './ui/select.jsx'
 import { Textarea } from './ui/textarea.jsx'
 
@@ -190,6 +193,18 @@ function Form({
     return seed
   })
 
+  /**
+   * The record this form is currently a change to.
+   *
+   * The prop, until "Save and continue editing" replaces it with what came
+   * back. Two things depend on that: the version stamp the next save sends -
+   * which has to be the one the database now holds, or the second save is
+   * refused as stale - and the values themselves, because a hook may have
+   * derived a slug or normalised an address and the form should show what was
+   * actually stored.
+   */
+  const [baseline, setBaseline] = useState<AdminRecord | undefined>(initial)
+
   const [submitting, setSubmitting] = useState(false)
   const [filling, setFilling] = useState(false)
   const [error, setError] = useState<unknown>(undefined)
@@ -257,7 +272,16 @@ function Form({
   // nothing is shown at all.
   const banner = error !== undefined && shown.length === 0 ? error : undefined
 
-  const onSubmit = async (event: React.FormEvent): Promise<void> => {
+  /**
+   * Save.
+   *
+   * `stay` is "Save and continue editing": on a form long enough to need
+   * sections, being thrown back to the record after every save means opening
+   * it again and finding your place again. The record still has to be re-read
+   * afterwards - a hook may have changed it, and the version the next save
+   * sends has to be the one the database now holds.
+   */
+  const onSubmit = async (event: React.FormEvent, stay = false): Promise<void> => {
     event.preventDefault()
     setSubmitting(true)
     setError(undefined)
@@ -287,9 +311,24 @@ function Form({
       const saved =
         id === undefined
           ? await createRecord(model.name, body)
-          : await updateRecord(model.name, id, body, versionOf(model, initial))
+          : await updateRecord(model.name, id, body, versionOf(model, baseline))
 
       const savedId = id ?? readId(model, saved)
+
+      if (stay && savedId !== undefined) {
+        setBaseline(saved)
+        setValues(() => {
+          const next: FormValues = {}
+          for (const field of editable) next[field.name] = toFormValue(field, saved[field.name])
+          return next
+        })
+        setSubmitting(false)
+        // A create that stays becomes an edit of what it created, so the next
+        // save updates that record rather than making a second one.
+        if (id === undefined) navigate({ kind: 'edit', model: model.name, id: savedId })
+        return
+      }
+
       navigate(
         savedId === undefined
           ? { kind: 'list', model: model.name }
@@ -311,72 +350,220 @@ function Form({
         ]}
       />
 
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {id === undefined ? `New ${modelLabel(model)}` : `Edit ${modelLabel(model)}`}
-        </h1>
-      </header>
+      <WithRail
+        rail={
+          <ActionRail>
+            {/* Outside the form element, and attached to it by `form`. One
+                Save, wherever the rail happens to be on this screen size -
+                two would have to stay in step about being disabled, and
+                would not. */}
+            <RailButton type="submit" form={FORM_ID} disabled={submitting || editable.length === 0}>
+              {submitting ? 'Saving…' : 'Save'}
+            </RailButton>
 
-      {banner !== undefined ? <ErrorState error={banner} /> : null}
+            {editable.length === 0 ? null : (
+              <RailButton
+                type="button"
+                variant="outline"
+                disabled={submitting}
+                onClick={(event: React.MouseEvent) => void onSubmit(event, true)}
+              >
+                Save and continue editing
+              </RailButton>
+            )}
 
-      <Card>
-        <CardContent className="pt-5">
-          <form className="flex flex-col gap-5" onSubmit={(event) => void onSubmit(event)}>
-            {editable.length === 0 ? (
-              <p className="text-muted-foreground text-sm">This resource has no editable fields.</p>
+            <RailButton variant="ghost" asChild>
+              <a
+                href={
+                  id === undefined
+                    ? href({ kind: 'list', model: model.name })
+                    : href({ kind: 'detail', model: model.name, id })
+                }
+              >
+                Cancel
+              </a>
+            </RailButton>
+
+            {/* Quiet, and separated. It is a convenience for whoever is
+                building the thing, not a step in filling the form in. */}
+            {canFill ? (
+              <RailButton
+                type="button"
+                variant="ghost"
+                className="border-t pt-3"
+                disabled={filling || submitting}
+                onClick={() => void fill()}
+              >
+                <Wand2 />
+                {filling ? 'Filling…' : 'Fill with example data'}
+              </RailButton>
             ) : null}
+          </ActionRail>
+        }
+      >
+        <header className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {id === undefined ? `New ${modelLabel(model)}` : `Edit ${modelLabel(model)}`}
+          </h1>
+        </header>
 
-            {/*
-             * Two columns once there is room for them.
-             *
-             * A form that stops at half the window leaves the other half empty,
-             * and one that runs the whole width gives a two-character number an
-             * input a thousand pixels wide. Pairing short fields uses the space
-             * and shortens the form; anything with a paragraph in it takes the
-             * full row, because a narrow textarea is worse than a wide one.
-             */}
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              {editable.map((field) => (
-                <FieldInput
-                  key={field.name}
-                  field={field}
-                  model={model}
-                  models={models}
-                  value={values[field.name] ?? ''}
-                  error={messageFor(field.name)}
-                  editing={id !== undefined}
-                  onChange={(next) => change(field.name, next)}
-                />
-              ))}
-            </div>
+        {banner !== undefined ? <ErrorState error={banner} /> : null}
 
-            <div className="flex items-center gap-2 border-t pt-4">
-              <Button type="submit" disabled={submitting || editable.length === 0}>
-                {submitting ? 'Saving…' : 'Save'}
-              </Button>
-              <Button variant="ghost" asChild>
-                <a href={href({ kind: 'list', model: model.name })}>Cancel</a>
-              </Button>
+        <form id={FORM_ID} className="contents" onSubmit={(event) => void onSubmit(event)}>
+          {editable.length === 0 ? (
+            <Card>
+              <CardContent className="pt-5">
+                <p className="text-muted-foreground text-sm">
+                  This resource has no editable fields.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <FormFields
+              model={model}
+              models={models}
+              editable={editable}
+              values={values}
+              editing={id !== undefined}
+              errorFor={messageFor}
+              onChange={change}
+            />
+          )}
+        </form>
+      </WithRail>
+    </section>
+  )
+}
 
-              {/* Last, and quiet. It is a convenience for whoever is building
-                  the thing, not a step in filling the form in. */}
-              {canFill ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="ml-auto"
-                  disabled={filling || submitting}
-                  onClick={() => void fill()}
-                >
-                  <Wand2 />
-                  {filling ? 'Filling…' : 'Fill with example data'}
-                </Button>
-              ) : null}
-            </div>
-          </form>
+/** The id the rail's Save points at. One form per screen, so one id. */
+const FORM_ID = 'nest-admin-record-form'
+
+/**
+ * The inputs, however the application grouped them.
+ *
+ * The grouping is shared with the read view, so a field sits under the same
+ * heading whether you are looking at it or changing it.
+ *
+ * ## A group is never allowed to hide a problem
+ *
+ * Both arrangements can put a field out of sight, and a form that refuses to
+ * save while the reason is behind a folded section or an unselected tab is the
+ * failure every grouped form has. So a section holding an error is forced
+ * open, the tab holding the first one is selected, and every tab carries a
+ * count of what is wrong inside it.
+ */
+function FormFields({
+  model,
+  models,
+  editable,
+  values,
+  editing,
+  errorFor,
+  onChange,
+}: {
+  readonly model: ModelDescriptor
+  readonly models: readonly ModelDescriptor[]
+  readonly editable: readonly FieldDescriptor[]
+  readonly values: FormValues
+  readonly editing: boolean
+  readonly errorFor: (field: string) => string | undefined
+  readonly onChange: (field: string, value: string | boolean) => void
+}) {
+  const { layout, groups } = fieldGroups(model, editable)
+
+  const errors: Record<string, string> = {}
+  for (const field of editable) {
+    const message = errorFor(field.name)
+    if (message !== undefined) errors[field.name] = message
+  }
+
+  const broken = groupWithError(groups, errors)
+  const [chosen, setChosen] = useState(0)
+  // The tab the person picked, unless something on another one is stopping the
+  // save. Their choice is about reading; an error is about being unable to
+  // finish, and that wins.
+  const active = broken ?? chosen
+
+  const inputs = (fields: readonly FieldDescriptor[]) => (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      {fields.map((field) => (
+        <FieldInput
+          key={field.name}
+          field={field}
+          model={model}
+          models={models}
+          value={values[field.name] ?? ''}
+          error={errorFor(field.name)}
+          editing={editing}
+          onChange={(next) => onChange(field.name, next)}
+        />
+      ))}
+    </div>
+  )
+
+  if (layout === 'tabs' && groups.length > 1) {
+    return (
+      <Card>
+        <CardContent className="pt-4">
+          <Tabs
+            tabs={groups.map((group, index) => {
+              const count = errorCount(group, errors)
+              return {
+                id: String(index),
+                label: group.heading,
+                ...(count > 0 ? { marker: String(count), alarming: true } : {}),
+              }
+            })}
+            active={String(active)}
+            onSelect={(id) => setChosen(Number(id))}
+          >
+            <div className="pt-5">{inputs(groups[active]?.fields ?? [])}</div>
+          </Tabs>
         </CardContent>
       </Card>
-    </section>
+    )
+  }
+
+  if (layout === 'flat') {
+    return (
+      <Card>
+        <CardContent className="pt-5">{inputs(groups[0]?.fields ?? [])}</CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <>
+      {groups.map((group, index) => (
+        <Card key={group.heading}>
+          <CardContent className="pt-5">
+            <details
+              // Forced open where something inside it is wrong, whatever the
+              // application said about starting folded.
+              open={group.collapsed !== true || errorCount(group, errors) > 0}
+              className="group/section"
+            >
+              <summary className="mb-4 flex cursor-pointer list-none items-center gap-2">
+                <ChevronRight className="text-muted-foreground size-4 shrink-0 transition-transform group-open/section:rotate-90" />
+                <span className="text-base font-semibold">{group.heading}</span>
+                {group.description === undefined ? null : (
+                  <span className="text-muted-foreground truncate text-sm">
+                    {group.description}
+                  </span>
+                )}
+                {errorCount(group, errors) > 0 ? (
+                  <span className="bg-destructive text-destructive-foreground ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium">
+                    {errorCount(group, errors)}
+                  </span>
+                ) : null}
+              </summary>
+              {inputs(group.fields)}
+              {index === 0 ? null : null}
+            </details>
+          </CardContent>
+        </Card>
+      ))}
+    </>
   )
 }
 

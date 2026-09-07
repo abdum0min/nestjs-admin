@@ -42,6 +42,7 @@ interface had stopped changing shape, and a second adapter had proved the
 | 0.14.2  | Schema map, and a report grouped by problem rather than by model            |
 | 0.14.3  | Rich text on a string column, as its own chunk                              |
 | 0.15.0  | Import and export, with a dry run that cannot be skipped                    |
+| 0.16.0  | Sidebar groups, record sections and tabs, an action rail, full theming      |
 
 **1300+ tests, 67/67 packed-consumer checks, published as
 [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs).**
@@ -92,20 +93,22 @@ far side of it is no longer the consumer's problem to solve from scratch.
 
 ## Releases
 
-| Release | Name                               | Why in this position                                                                           |
-| ------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 0.8.0   | Design system                      | Everything after it is drawn with it. Doing it later means building the dashboard twice        |
-| 0.9.0   | Authentication                     | The single largest adoption barrier, and it needs the design system for its login screen       |
-| 0.10.0  | Dashboard                          | The landing page. Needs the design system; independent of auth                                 |
-| 0.11.0  | Second adapter, and the docs       | The contract had one implementation and 1.0 freezes it; docs had drifted three releases behind |
-| 0.12.0  | Permissions, roles and scoping     | Scoping touches every read path, so it is cheapest before more read paths exist                |
-| 0.13.0  | Files                              | The most-asked-for gap, and mock images and import both sit on top of it                       |
-| 0.14.0  | Developer tools                    | Mock data, and the empty-admin problem. Needs 0.13 for avatars and covers                      |
-| 0.14.1  | Diagnosis, and filling a form      | Reads the same metadata the tools do; no generation of its own                                 |
-| 0.14.2  | Rich text                          | A widget with a bundle cost, so it ships where that cost is visible                            |
-| 0.16.0  | Customisation                      | Deliberately after the functional set: you cannot design it before knowing what needs bending  |
-| 0.17.0  | Docs site, demo, publishing polish | Once there is something worth showing                                                          |
-| 1.0.0   | API freeze                         | Only after all of the above is stable                                                          |
+| Release | Name                                                       | Why in this position                                                                           |
+| ------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 0.8.0   | Design system                                              | Everything after it is drawn with it. Doing it later means building the dashboard twice        |
+| 0.9.0   | Authentication                                             | The single largest adoption barrier, and it needs the design system for its login screen       |
+| 0.10.0  | Dashboard                                                  | The landing page. Needs the design system; independent of auth                                 |
+| 0.11.0  | Second adapter, and the docs                               | The contract had one implementation and 1.0 freezes it; docs had drifted three releases behind |
+| 0.12.0  | Permissions, roles and scoping                             | Scoping touches every read path, so it is cheapest before more read paths exist                |
+| 0.13.0  | Files                                                      | The most-asked-for gap, and mock images and import both sit on top of it                       |
+| 0.14.0  | Developer tools                                            | Mock data, and the empty-admin problem. Needs 0.13 for avatars and covers                      |
+| 0.14.1  | Diagnosis, and filling a form                              | Reads the same metadata the tools do; no generation of its own                                 |
+| 0.14.2  | Rich text                                                  | A widget with a bundle cost, so it ships where that cost is visible                            |
+| 0.15.0  | Import and export                                          | Needed 0.13 for the upload half                                                                |
+| 0.16.0  | Customisation, part one                                    | Deliberately after the functional set: you cannot design it before knowing what needs bending  |
+| next    | Custom pages, audit log, field permissions, composite keys | The last of them changes the adapter contract, so it must land before the freeze               |
+| last    | Docs site, demo, publishing polish                         | Once there is something worth showing                                                          |
+| 1.0.0   | API freeze                                                 | Only after all of the above is stable                                                          |
 
 ---
 
@@ -487,37 +490,55 @@ and reason, and nothing is written until it is confirmed.
 
 ---
 
-### 0.16.0 — Customisation
+### 0.16.0 — Customisation, part one — **delivered**
 
-Deliberately after the functional set. Everything that turns "the admin" into
-"our admin", now that there is enough built to know what needs bending.
+Everything that turns "the admin" into "our admin", by configuration only: no
+forked component and no build step in the consuming project.
 
-- **Navigation**: groups with headings, ordering, icons, custom links, dividers.
-- **List presentation** per model: which columns, default sort, page size,
-  density.
-- **Detail layout** hints: field groups and sections, rather than one flat list.
-- **Saved views** — a named filter and sort a person returns to.
-- **Theming to the full token set**: fonts, radius, density, a complete palette
-  rather than one accent.
-- **Field-level permissions per principal**, which shares the metadata-shape
-  change the items above need.
-- **More dashboard widgets, and the beginnings of custom pages** - server
-  declared, drawn from the same closed vocabulary, so still no build step in the
-  consuming project.
-- **Carried debt, closed here**: the non-owning half of a one-to-one is
-  currently invisible (`User.profile` is absent from the record and its nested
-  route answers 400); composite primary keys can be listed but not addressed,
-  because `RecordId` is a single value; and `packages/cli` is still an empty
-  package that is versioned every release and should either gain content or go.
+- **The sidebar**: headings, ordering, dividers, links out, folding. Resolved
+  per principal, so a role never receives a heading whose models it cannot see.
+- **The list**: which columns, in which order, sorted how, how many rows.
+- **The record**: sections or tabs, on both the read view and the form. A
+  section never hides a field, and a group is never allowed to hide the reason
+  a form will not save.
+- **The actions moved beside the record** rather than above it. A row is
+  horizontal and competes for one line; a column does not.
+- **The whole token set**, per palette, plus radius, fonts, density and the
+  branding a sign-in screen and a footer need. Plus `customCss`, because the
+  alternative to an escape hatch is a fork.
 
-**Out of scope:** custom pages, plugins, a component API.
-
-**Acceptance:** the example application looks like a product built for its own
-domain, using configuration only — no forked component, no build step.
+**Acceptance:** met — the example application looks like a product built for
+its own domain, using configuration only.
 
 ---
 
-### 0.17.0 — Docs site, demo, publishing polish
+### Still ahead, before the freeze
+
+The remaining work before the API freeze, in the order it should happen:
+
+- **Custom pages.** The half of customisation configuration cannot reach: the
+  consumer writes their own screen and their own endpoint, and the admin gives
+  it a route, a place in the navigation and the same session guard. Three
+  levels - a declared widget vocabulary that needs no frontend code at all, a
+  page module loaded at runtime, and an iframe for a screen that already
+  exists. **No bundler in the consuming project**, which is what separates this
+  from every other extensible admin.
+- **The audit log.** Who changed what, recorded inside the write path rather
+  than in a hook - a hook belongs to the application and could suppress it.
+  Never records a value the admin would not show, and says plainly that it
+  covers what happened _in this admin_, not what happened to the database.
+- **Field-level permissions**, enforced at the three places that already exist:
+  the field scope, the projection, and write validation.
+- **Composite primary keys.** `RecordId` is a single value, which is why they
+  can be listed and not addressed. It changes the adapter contract, so it has
+  to land **before** 1.0 freezes it.
+- **The empty `packages/cli`**: content, or removal.
+- **`docs/project-state.md`**, which describes 0.11.0 and says things that are
+  no longer true.
+
+---
+
+### Last — Docs site, demo, publishing polish
 
 - A documentation site covering every configuration key, hook, widget, action
   and relation scenario. Tooling still undecided — see below.

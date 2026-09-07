@@ -23,6 +23,7 @@ export function Actions({
   scope,
   id,
   onDone,
+  layout = 'row',
 }: {
   readonly model: ModelDescriptor
   readonly scope: 'record' | 'list'
@@ -30,6 +31,11 @@ export function Actions({
   readonly id?: string
   /** Called after a successful run, so the screen can re-read what changed. */
   readonly onDone?: () => void
+  /**
+   * `'column'` in the record screen's action rail, where every button is full
+   * width and reads as a sentence. A row is what a list toolbar wants.
+   */
+  readonly layout?: 'row' | 'column'
 }) {
   const confirm = useConfirm()
   const [busy, setBusy] = useState<string | undefined>(undefined)
@@ -66,13 +72,16 @@ export function Actions({
     }
   }
 
+  const column = layout === 'column'
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className={column ? 'flex flex-col gap-2' : 'flex flex-wrap items-center gap-2'}>
       {available.map((action) => (
         <Button
           key={action.name}
           variant={action.danger === true ? 'destructive' : 'outline'}
           disabled={busy !== undefined}
+          className={column ? 'w-full justify-center' : undefined}
           onClick={() => void run(action)}
         >
           {busy === action.name ? `${action.label}…` : action.label}

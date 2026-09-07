@@ -213,7 +213,7 @@ describe('read-only fields', () => {
     render(<App />)
 
     fireEvent.change(await screen.findByLabelText(/name/), { target: { value: 'Ada' } })
-    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await vi.waitFor(() => expect(sent).toHaveLength(1))
     expect(sent[0]).not.toHaveProperty('slug')

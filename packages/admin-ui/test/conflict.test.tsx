@@ -107,7 +107,7 @@ const openForm = () => {
 }
 
 const save = async () => {
-  fireEvent.click(await screen.findByRole('button', { name: /save/i }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
 }
 
 describe('sending the version', () => {

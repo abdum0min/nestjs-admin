@@ -50,6 +50,7 @@ export function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
 export function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
   return (
     <th
+      data-slot="table-head"
       className={cn(
         'text-muted-foreground h-10 px-3 text-left align-middle text-xs font-medium tracking-wide uppercase',
         className,
@@ -60,5 +61,7 @@ export function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
 }
 
 export function TableCell({ className, ...props }: React.ComponentProps<'td'>) {
-  return <td className={cn('px-3 py-2.5 align-middle', className)} {...props} />
+  return (
+    <td data-slot="table-cell" className={cn('px-3 py-2.5 align-middle', className)} {...props} />
+  )
 }

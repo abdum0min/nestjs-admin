@@ -43,6 +43,7 @@ export {
   type AdminModuleOptions,
   type AdminModuleOptionsFactory,
 } from './module.js'
+export type { AdminFonts, AdminPalette, AdminTheme } from './ui/theme.js'
 
 // The authentication boundary the consuming application implements. The guard
 // that calls it is internal - a consumer supplies the decision, not the wiring.
@@ -108,14 +109,19 @@ export type {
 // type their own adapters and configuration without a second install.
 export type {
   AdminErrorKind,
+  AdminNavigation,
   ConstraintKind,
+  DetailPresentation,
+  DetailSection,
   FieldKind,
   FieldOverride,
   FieldWidget,
   FieldMetadata,
   FilterOperator,
   FilterRule,
+  ListPresentation,
   ListQuery,
+  ModelIcon,
   ModelMetadata,
   ModelOverride,
   ModelOverrides,
@@ -123,6 +129,10 @@ export type {
   Page,
   RecordData,
   RecordId,
+  NavigationDivider,
+  NavigationEntry,
+  NavigationGroup,
+  NavigationLink,
   RelationCardinality,
   RelationMetadata,
   SortDirection,

@@ -101,6 +101,39 @@
 }
 
 /*
+ * Compact.
+ *
+ * `theme.density: 'compact'` puts `data-density` on the root element and this
+ * tightens what is worth tightening. Four rules, on the four surfaces that
+ * decide how much of a table fits on a screen.
+ *
+ * Deliberately **not** an override of Tailwind's `--spacing`, which would have
+ * been one line and would have worked: every utility derives from it, so the
+ * whole interface would shrink proportionally - including `size-4`, which is
+ * how every icon is sized. Icons at thirteen pixels are not compact, they are
+ * blurry. Padding is what somebody asking for a denser table means.
+ *
+ * The hooks are `data-slot` attributes rather than class names, because class
+ * names here are Tailwind utilities and change whenever the design does.
+ */
+[data-density='compact'] [data-slot='table-cell'],
+[data-density='compact'] [data-slot='table-head'] {
+  padding-block: calc(var(--spacing) * 1.5);
+}
+
+[data-density='compact'] [data-slot='card-content'] {
+  padding: calc(var(--spacing) * 3);
+}
+
+[data-density='compact'] [data-slot='nav-link'] {
+  padding-block: calc(var(--spacing) * 1);
+}
+
+[data-density='compact'] [data-slot='detail-row'] {
+  padding-block: calc(var(--spacing) * 2);
+}
+
+/*
  * Light.
  *
  * The neutral carries a slight cool bias - a hue of 255 rather than none at

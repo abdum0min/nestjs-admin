@@ -163,6 +163,46 @@ const models = {
     displayField: 'title',
     order: 8,
     icon: 'file-text',
+
+    /*
+     * The table, and the record.
+     *
+     * Without `list.columns` the table shows the first six scalar columns in
+     * schema order, which here would be id, title, slug, excerpt, body and
+     * status - two of them paragraphs, and no author. Naming them is the
+     * difference between a table you scan and one you read.
+     *
+     * `authorId` rather than `author`: the cell draws a foreign key as the
+     * related record's name with a link to it, and the column is headed by the
+     * relation. Writing `author` works too and resolves to the same thing.
+     */
+    list: {
+      columns: ['title', 'status', 'authorId', 'views', 'publishedAt'],
+      sort: { field: 'createdAt', direction: 'desc' },
+      perPage: 25,
+    },
+
+    /*
+     * Tabs rather than sections, because these groups are unrelated and the
+     * one somebody came for is usually Content. Nothing is hidden: a field in
+     * no group is collected into a final tab, and a tab holding the reason a
+     * save was refused opens itself.
+     */
+    detail: {
+      layout: 'tabs',
+      sections: [
+        {
+          heading: 'Content',
+          description: 'What readers see.',
+          fields: ['title', 'slug', 'excerpt', 'body'],
+        },
+        {
+          heading: 'Publishing',
+          fields: ['status', 'publishedAt', 'authorId'],
+        },
+        { heading: 'Statistics', fields: ['views', 'createdAt', 'updatedAt'] },
+      ],
+    },
     // Delete marks the row instead of removing it. The list gains a
     // Live/Deleted/All chooser, a marked record gains Restore, and the column
     // itself becomes read-only - a date picker that deletes the record when it
@@ -384,9 +424,28 @@ class DatabaseModule {}
       // default and is spelled out here only to show where it goes.
       path: '/admin',
 
+      /*
+       * Branding, without a build step in this project.
+       *
+       * `brandColor` alone would be enough for most applications - one hex, and
+       * the server derives a button fill, its label and a readable link colour
+       * for both palettes. The rest is here to show what the option can reach:
+       * every token the stylesheet names is settable, per appearance.
+       */
       theme: {
         title: 'Nest Admin Example',
-        brandColor: '#3f6212',
+        // brandColor: '#3f6212',  i prefer default color dont change this
+        welcome: 'Sign in to the example application.',
+        copyright: '© 2026 Nest Admin. An example, not a product.',
+        radius: '0.5rem',
+
+        // A sidebar that is faintly its own surface rather than the page in a
+        // different grey - the smallest change that makes an admin look like
+        // it belongs to somebody.
+        colors: {
+          light: { sidebar: 'oklch(0.972 0.008 250)', sidebarBorder: 'oklch(0.9 0.012 250)' },
+          dark: { sidebar: 'oklch(0.2 0.018 250)', sidebarBorder: 'oklch(0.29 0.02 250)' },
+        },
       },
 
       /*
@@ -431,6 +490,26 @@ class DatabaseModule {}
         // Both optional. Without them every account may do everything, which
         // is exactly how this example behaved before 0.12.
         roles,
+
+        /*
+         * The sidebar, grouped.
+         *
+         * Ten models in one flat list is already hard to scan and a real schema
+         * has thirty. Nothing here hides anything: a model left out of every
+         * group lands in a final one, and hiding a model is what `resources` is
+         * for - which is enforced, unlike this.
+         */
+        navigation: [
+          { heading: 'Publishing', models: ['Post', 'Comment', 'Category', 'Tag'] },
+          { heading: 'Shop', models: ['Product', 'Order', 'OrderItem', 'Review'] },
+          { heading: 'People', models: ['User', 'Profile'] },
+          { divider: true },
+          {
+            label: 'Documentation',
+            href: 'https://github.com/abdum0min/nestjs-admin',
+            icon: 'file-text',
+          },
+        ],
         roleOf: builtInRoleOf(),
 
         /*

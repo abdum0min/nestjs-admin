@@ -136,6 +136,57 @@ export type ModelIcon =
   | 'bookmark'
   | 'link'
 
+/** How the application wants the list screen to look. Presentation only. */
+export interface ListPresentation {
+  /** The columns, in this order. Without it the table picks the first six. */
+  readonly columns?: readonly string[]
+  readonly sort?: { readonly field: string; readonly direction: 'asc' | 'desc' }
+  /** Rows per page before the viewer chooses. Their choice wins over it. */
+  readonly perPage?: number
+}
+
+/**
+ * One group of fields on the record screen.
+ *
+ * Resolved by the server, which means two things the interface can rely on:
+ * every field named here exists, and whatever no group claimed is already in a
+ * final group of its own. A section never hides a field.
+ */
+export interface DetailSection {
+  readonly heading: string
+  readonly description?: string
+  readonly fields: readonly string[]
+  readonly collapsed?: boolean
+}
+
+export interface DetailPresentation {
+  readonly layout: 'sections' | 'tabs'
+  readonly sections: readonly DetailSection[]
+}
+
+/**
+ * The navigation, as the server resolved it.
+ *
+ * Groups already contain only the models this principal can see, and empty
+ * ones are gone - so there is no rule here about hiding a heading whose models
+ * were all refused. Drawing it is the whole job.
+ */
+export type NavigationEntry =
+  | {
+      readonly kind: 'group'
+      readonly heading?: string
+      readonly models: readonly string[]
+      readonly collapsed?: boolean
+    }
+  | {
+      readonly kind: 'link'
+      readonly label: string
+      readonly href: string
+      readonly icon?: ModelIcon
+      readonly external?: boolean
+    }
+  | { readonly kind: 'divider' }
+
 export interface ModelDescriptor {
   readonly name: string
   readonly primaryKey: readonly string[]
@@ -146,6 +197,10 @@ export interface ModelDescriptor {
   readonly label?: string
   /** Which icon to draw beside it in the navigation, if the application chose one. */
   readonly icon?: ModelIcon
+  /** How the list screen should look, when the application said. */
+  readonly list?: ListPresentation
+  /** How the record screen should be arranged, when the application said. */
+  readonly detail?: DetailPresentation
   /**
    * What this principal may do. Not the enforcement - every request is checked
    * again - but what the interface should offer.
@@ -179,6 +234,13 @@ export interface Metadata {
    * because an older server did not mention it.
    */
   readonly capabilities?: Capabilities
+  /**
+   * How to group the resources.
+   *
+   * Absent from a server that was not told how - and from every server older
+   * than this feature - which means one flat list, as it always was.
+   */
+  readonly navigation?: readonly NavigationEntry[]
 }
 
 /** A record as it crosses the wire. Values are whatever JSON allows. */

@@ -199,7 +199,7 @@ describe('the form', () => {
     fireEvent.click(option)
 
     fireEvent.change(screen.getByLabelText(/^title/i), { target: { value: 'A post' } })
-    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(created).toHaveBeenCalled())
     // What reaches the API is the foreign key.

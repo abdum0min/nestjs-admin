@@ -31,12 +31,14 @@ import {
   type Page,
   type RecordData,
   type RecordId,
+  type AdminNavigation,
   type ModelOverrides,
   type ResourceSelection,
   selectModels,
   softDeleteFieldOf,
   unknownOverrideNames,
   unknownSelectionNames,
+  unusableNavigation,
   unusablePlaceholders,
   unusableSoftDeleteFields,
   unwritableHiddenFields,
@@ -71,6 +73,7 @@ import {
   ADMIN_TEAM,
   ADMIN_HOOKS,
   ADMIN_MODELS,
+  ADMIN_NAVIGATION,
   ADMIN_RESOURCE_AUTH,
   ADMIN_RESOURCES,
 } from '../tokens.js'
@@ -138,6 +141,7 @@ export class AdminService implements OnModuleInit {
     private readonly can: (context: ExecutionContext, capability: AdminCapability) => boolean,
     @Inject(ADMIN_CONCURRENCY)
     private readonly concurrency: 'last-write-wins' | 'optimistic',
+    @Inject(ADMIN_NAVIGATION) private readonly navigation: AdminNavigation | undefined,
   ) {}
 
   private readonly logger = new Logger('NestAdmin')
@@ -171,6 +175,16 @@ export class AdminService implements OnModuleInit {
       selectModels(schema, this.resources),
       this.overrides,
     )
+    const brokenNavigation = unusableNavigation(
+      this.navigation,
+      selectModels(schema, this.resources).map((model) => model.name),
+    )
+    if (brokenNavigation.length > 0) {
+      throw new Error(
+        `AdminModule \`navigation\` cannot be drawn:\n  ${brokenNavigation.join('\n  ')}`,
+      )
+    }
+
     if (missingOverrides.length > 0) {
       throw new Error(
         `AdminModule \`models\` names ${missingOverrides.length === 1 ? 'a model or field' : 'models or fields'} ` +
@@ -378,6 +392,7 @@ export class AdminService implements OnModuleInit {
       // suggest a protection that is not running.
       (model) => (this.concurrency === 'optimistic' ? updatedFieldFor(model) : undefined),
       (this.files as { maxSize?: number } | undefined)?.maxSize,
+      this.navigation,
     )
   }
 

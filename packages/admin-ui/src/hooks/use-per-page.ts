@@ -40,11 +40,27 @@ function stored(): number | undefined {
   }
 }
 
-export function usePerPage(): {
+export function usePerPage(configured?: number): {
   readonly perPage: number
   readonly setPerPage: (next: number) => void
 } {
-  const [perPage, setState] = useState<number>(() => stored() ?? DEFAULT_PER_PAGE)
+  /*
+   * The viewer's own choice, then the application's, then twenty-five.
+   *
+   * That order is the point: the application knows its tables and sets a
+   * sensible first impression, and the person reading them knows their screen.
+   * Once they have chosen, the configuration stops applying - a preference
+   * that gets overruled on every visit is not a preference.
+   *
+   * A configured size the control cannot show is ignored for the same reason
+   * a stored one is: it would be a page size nobody could change.
+   */
+  const offered =
+    configured !== undefined && (PER_PAGE_OPTIONS as readonly number[]).includes(configured)
+      ? configured
+      : undefined
+
+  const [perPage, setState] = useState<number>(() => stored() ?? offered ?? DEFAULT_PER_PAGE)
 
   const setPerPage = useCallback((next: number) => {
     setState(next)

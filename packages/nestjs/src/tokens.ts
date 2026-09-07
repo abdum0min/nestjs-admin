@@ -100,6 +100,14 @@ export const ADMIN_OPTIONS = Symbol.for('nest-admin.options')
  */
 export const ADMIN_MODELS = Symbol.for('nest-admin.models')
 
+/**
+ * How the resources are grouped in the sidebar.
+ *
+ * A factory option rather than a structural one: it names models, and which
+ * models exist is something the adapter answers after the module is defined.
+ */
+export const ADMIN_NAVIGATION = Symbol.for('nest-admin.navigation')
+
 /** Application code that runs around a write. */
 export const ADMIN_HOOKS = Symbol.for('nest-admin.hooks')
 

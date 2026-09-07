@@ -187,6 +187,83 @@ export type ModelIcon =
   | 'bookmark'
   | 'link'
 
+/**
+ * How the list screen for one model should look.
+ *
+ * Presentation only. Which rows somebody may see is `resourceAuth`; this is
+ * which columns are worth showing them, and a client that ignores it renders
+ * a correct - if less useful - table.
+ */
+export interface ListPresentation {
+  /**
+   * The columns, in this order.
+   *
+   * Without it the table shows the first six scalar columns in schema order,
+   * which is a guess that is right often enough to be the default and wrong
+   * exactly where it matters: an `Order` whose first six columns are
+   * timestamps and flags shows no customer.
+   *
+   * A to-one relation may be named here - it renders as the record's name.
+   * A to-many may not: it is a page of other records, not a cell.
+   */
+  readonly columns?: readonly string[]
+
+  /** How the list is sorted before anybody touches the headers. */
+  readonly sort?: {
+    readonly field: string
+    readonly direction: 'asc' | 'desc'
+  }
+
+  /**
+   * Rows per page, before the viewer chooses.
+   *
+   * Their own choice, once made, wins over this and is remembered by their
+   * browser - so this sets the first impression rather than a policy.
+   */
+  readonly perPage?: number
+}
+
+/**
+ * One group of fields on the record screen.
+ *
+ * A section is not a security boundary and never hides anything: a field left
+ * out of every section still appears, in a final group of its own. See
+ * {@link DetailPresentation}.
+ */
+export interface DetailSection {
+  /** The heading, or the tab label when the layout is `'tabs'`. */
+  readonly heading: string
+
+  /** A line under the heading, for what the fields have in common. */
+  readonly description?: string
+
+  readonly fields: readonly string[]
+
+  /** Start folded. Only meaningful when the layout is `'sections'`. */
+  readonly collapsed?: boolean
+}
+
+/**
+ * How the record screen is arranged - both the read view and the form.
+ *
+ * Thirty fields in one flat list is a wall, and it is what every generated
+ * admin produces. Sections and tabs are the same fields with somewhere to
+ * stand.
+ */
+export interface DetailPresentation {
+  /**
+   * `'sections'` stacks the groups down the page, each with its heading.
+   * `'tabs'` puts each group behind a tab. Defaults to `'sections'`.
+   *
+   * Tabs are better when the groups are unrelated and one of them is the one
+   * people actually want; sections are better when somebody reads down the
+   * whole record. Neither hides anything the other shows.
+   */
+  readonly layout?: 'sections' | 'tabs'
+
+  readonly sections?: readonly DetailSection[]
+}
+
 export interface ModelOverride {
   /** What to call the model. */
   readonly label?: string
@@ -222,6 +299,12 @@ export interface ModelOverride {
    * else is refused at startup - see `unusableSoftDeleteFields`.
    */
   readonly softDelete?: string
+
+  /** How the list screen looks. See {@link ListPresentation}. */
+  readonly list?: ListPresentation
+
+  /** How the record screen is arranged. See {@link DetailPresentation}. */
+  readonly detail?: DetailPresentation
 
   readonly fields?: Readonly<Record<string, FieldOverride>>
 }
@@ -341,6 +424,26 @@ export function unknownOverrideNames(
 
     for (const fieldName of Object.keys(override.fields ?? {})) {
       if (!names.has(fieldName)) unknown.push(`${modelName}.${fieldName}`)
+    }
+
+    // The presentation options name fields too, and a misspelling there is the
+    // quiet kind: a column that never appears, or a section that renders empty
+    // beside a "leftovers" group holding the field it meant to claim.
+    for (const column of override.list?.columns ?? []) {
+      if (!names.has(column)) unknown.push(`${modelName}.list.columns: ${column}`)
+    }
+
+    const sortField = override.list?.sort?.field
+    if (sortField !== undefined && !names.has(sortField)) {
+      unknown.push(`${modelName}.list.sort: ${sortField}`)
+    }
+
+    for (const [index, section] of (override.detail?.sections ?? []).entries()) {
+      for (const fieldName of section.fields) {
+        if (!names.has(fieldName)) {
+          unknown.push(`${modelName}.detail.sections[${index}]: ${fieldName}`)
+        }
+      }
     }
   }
 

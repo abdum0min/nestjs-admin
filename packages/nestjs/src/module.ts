@@ -17,7 +17,12 @@
  * It is not `@Global()`: making a library's providers globally visible in
  * someone else's application is a decision the application should make.
  */
-import type { ModelOverrides, OrmAdapter, ResourceSelection } from '@nest-admin/core'
+import type {
+  AdminNavigation,
+  ModelOverrides,
+  OrmAdapter,
+  ResourceSelection,
+} from '@nest-admin/core'
 import {
   Logger,
   Module,
@@ -79,6 +84,7 @@ import {
   ADMIN_AUTH,
   ADMIN_HOOKS,
   ADMIN_MODELS,
+  ADMIN_NAVIGATION,
   ADMIN_MOUNT_PATH,
   ADMIN_OPTIONS,
   ADMIN_CAPABILITIES,
@@ -244,6 +250,18 @@ export interface AdminModuleOptions {
    * field fails at startup.
    */
   readonly models?: ModelOverrides
+
+  /**
+   * How the resources are grouped in the sidebar.
+   *
+   * Headings, ordering, dividers and links out. A model not named in any group
+   * is not hidden - it lands in a final group, because a model that vanished
+   * from the admin when somebody edited a list is worse than an untidy
+   * sidebar. Hiding one is what `resources` is for.
+   *
+   * A name matching no model fails at startup.
+   */
+  readonly navigation?: AdminNavigation
 
   /**
    * Application code that runs around a write, per model.
@@ -679,6 +697,7 @@ export class AdminModule {
         { provide: ADMIN_ADAPTER, useValue: options.adapter },
         { provide: ADMIN_RESOURCES, useValue: options.resources },
         { provide: ADMIN_MODELS, useValue: options.models },
+        { provide: ADMIN_NAVIGATION, useValue: options.navigation },
         { provide: ADMIN_HOOKS, useValue: options.hooks },
         { provide: ADMIN_ACTIONS, useValue: options.actions },
         { provide: ADMIN_DASHBOARD, useValue: options.dashboard },
@@ -750,6 +769,7 @@ export class AdminModule {
         derive(ADMIN_ADAPTER, (resolved) => resolved.adapter),
         derive(ADMIN_RESOURCES, (resolved) => resolved.resources),
         derive(ADMIN_MODELS, (resolved) => resolved.models),
+        derive(ADMIN_NAVIGATION, (resolved) => resolved.navigation),
         derive(ADMIN_HOOKS, (resolved) => resolved.hooks),
         derive(ADMIN_ACTIONS, (resolved) => resolved.actions),
         derive(ADMIN_DASHBOARD, (resolved) => resolved.dashboard),

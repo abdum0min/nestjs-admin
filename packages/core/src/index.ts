@@ -39,6 +39,16 @@ export {
   type StoredFile,
 } from './storage/storage.js'
 export { displayFieldFor } from './metadata/display-field.js'
+export {
+  isNavigationGroup,
+  isNavigationLink,
+  unusableNavigation,
+  type AdminNavigation,
+  type NavigationDivider,
+  type NavigationEntry,
+  type NavigationGroup,
+  type NavigationLink,
+} from './config/navigation.js'
 
 export type { RelationShape } from './metadata/relation-shape.js'
 export {
@@ -62,6 +72,9 @@ export type {
   FieldOverride,
   FieldWidget,
   ModelOverride,
+  ListPresentation,
+  DetailPresentation,
+  DetailSection,
   ModelOverrides,
 } from './config/overrides.js'
 export type { DeletedView } from './config/soft-delete.js'

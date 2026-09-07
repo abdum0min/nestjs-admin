@@ -7,6 +7,7 @@
  * no client-side filtering, and nothing to keep in sync.
  */
 import {
+  ChevronRight,
   FlaskConical,
   LayoutDashboard,
   Network,
@@ -17,7 +18,7 @@ import {
 import { useEffect, useState, type ComponentType } from 'react'
 
 import { devDoctor, fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
-import type { AdminAccountSummary, ModelDescriptor } from './api/types.js'
+import type { AdminAccountSummary, ModelDescriptor, NavigationEntry } from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
 import { DashboardView } from './components/DashboardView.jsx'
 import { DevToolsView } from './components/DevToolsView.jsx'
@@ -164,6 +165,7 @@ function Admin({
   return (
     <Shell
       models={models}
+      {...(metadata.data?.navigation ? { navigation: metadata.data.navigation } : {})}
       activeModel={active?.name}
       canManageTeam={metadata.data?.capabilities?.manageTeam === true}
       canUseDevTools={canUseDevTools}
@@ -259,6 +261,7 @@ const SIDEBAR_KEY = 'nest-admin.sidebar'
 
 function Shell({
   models = [],
+  navigation,
   activeModel,
   account,
   onSignedOut,
@@ -271,6 +274,8 @@ function Shell({
   children,
 }: {
   readonly models?: readonly ModelDescriptor[]
+  /** How to group them, when the application said. Resolved by the server. */
+  readonly navigation?: readonly NavigationEntry[]
   readonly activeModel?: string
   /** Absent when the application brought its own authentication. */
   readonly account?: AdminAccountSummary | undefined
@@ -427,6 +432,7 @@ function Shell({
           >
             <ResourceNav
               models={models}
+              {...(navigation ? { navigation } : {})}
               activeModel={activeModel}
               collapsed={collapsed}
               activeHome={activeHome}
@@ -440,13 +446,27 @@ function Shell({
           {/* `tabIndex={-1}` so the skip link can move focus here. It makes the
               element programmatically focusable without adding it to the tab
               order, which is exactly the distinction the attribute exists for. */}
-          <main
-            className="min-w-0 flex-1 p-4 focus-visible:outline-none sm:p-6"
-            id="admin-main"
-            tabIndex={-1}
-          >
-            {children}
-          </main>
+          {/* A column, so the footer sits under the content rather than
+              beside the navigation - and at the bottom of a short page rather
+              than halfway up it. */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* `tabIndex={-1}` so the skip link can move focus here. It makes the
+                element programmatically focusable without adding it to the tab
+                order, which is exactly the distinction the attribute exists for. */}
+            <main
+              className="min-w-0 flex-1 p-4 focus-visible:outline-none sm:p-6"
+              id="admin-main"
+              tabIndex={-1}
+            >
+              {children}
+            </main>
+
+            {theme.copyright === undefined ? null : (
+              <footer className="text-muted-foreground border-t px-4 py-3 text-xs sm:px-6">
+                {theme.copyright}
+              </footer>
+            )}
+          </div>
         </div>
 
         <Dialog open={drawer} onOpenChange={setDrawer}>
@@ -458,6 +478,7 @@ function Shell({
             <nav aria-label="Resources">
               <ResourceNav
                 models={models}
+                {...(navigation ? { navigation } : {})}
                 activeModel={activeModel}
                 collapsed={false}
                 activeHome={activeHome}
@@ -488,6 +509,7 @@ function Shell({
  */
 function ResourceNav({
   models,
+  navigation,
   activeModel,
   collapsed,
   canUseDevTools = false,
@@ -497,6 +519,14 @@ function ResourceNav({
   activeSchema = false,
 }: {
   readonly models: readonly ModelDescriptor[]
+  /**
+   * How to group them, when the application said.
+   *
+   * Already resolved by the server: every model named here is one this
+   * principal can see, and anything no group claimed is in a final group. So
+   * there is no filtering to do and no risk of drawing an empty heading.
+   */
+  readonly navigation?: readonly NavigationEntry[]
   readonly activeModel?: string
   readonly collapsed: boolean
   readonly canUseDevTools?: boolean
@@ -525,21 +555,26 @@ function ResourceNav({
           collapsed={collapsed}
         />
       </li>
-      {models.map((model) => {
-        const label = modelLabel(model)
-
-        return (
-          <li key={model.name}>
-            <NavLink
-              href={href({ kind: 'list', model: model.name })}
-              label={label}
-              icon={modelIcon(model.icon)}
-              current={model.name === activeModel}
+      {navigation === undefined
+        ? models.map((model) => (
+            <ModelLink
+              key={model.name}
+              model={model}
+              activeModel={activeModel}
               collapsed={collapsed}
             />
-          </li>
-        )
-      })}
+          ))
+        : navigation.map((entry, index) => (
+            <NavigationEntryItem
+              // Position, because nothing else identifies a divider and two
+              // groups may legitimately share a heading of none.
+              key={index}
+              entry={entry}
+              models={models}
+              activeModel={activeModel}
+              collapsed={collapsed}
+            />
+          ))}
 
       {/*
        * Below the resources and separated from them, because it is not one.
@@ -594,6 +629,161 @@ function ResourceNav({
  * generic shape: on the collapsed rail something has to distinguish one row
  * from the next, and a letter does that while a repeated symbol does not.
  */
+/**
+ * One model in the sidebar.
+ *
+ * Its own component because it is now drawn from two places - the flat list and
+ * the inside of a group - and a second copy is a second place for the active
+ * state to be got wrong.
+ */
+function ModelLink({
+  model,
+  activeModel,
+  collapsed,
+}: {
+  readonly model: ModelDescriptor
+  readonly activeModel?: string
+  readonly collapsed: boolean
+}) {
+  return (
+    <li>
+      <NavLink
+        href={href({ kind: 'list', model: model.name })}
+        label={modelLabel(model)}
+        icon={modelIcon(model.icon)}
+        current={model.name === activeModel}
+        collapsed={collapsed}
+      />
+    </li>
+  )
+}
+
+/**
+ * A group, a link, or a rule.
+ *
+ * A group with a heading folds, and remembers whether it was folded - by
+ * heading rather than by position, so adding a group above does not shuffle
+ * everybody's folded state onto different headings.
+ *
+ * **A group holding the open model never folds.** Hiding the page somebody is
+ * looking at, because they folded that heading last week, is worse than an
+ * open group: they lose the only thing on the screen telling them where they
+ * are.
+ */
+function NavigationEntryItem({
+  entry,
+  models,
+  activeModel,
+  collapsed,
+}: {
+  readonly entry: NavigationEntry
+  readonly models: readonly ModelDescriptor[]
+  readonly activeModel?: string
+  readonly collapsed: boolean
+}) {
+  const heading = entry.kind === 'group' ? entry.heading : undefined
+  const [folded, setFolded] = useGroupFolded(heading, entry.kind === 'group' && entry.collapsed)
+
+  if (entry.kind === 'divider') {
+    return <li className="border-sidebar-border my-1.5 border-t" aria-hidden="true" />
+  }
+
+  if (entry.kind === 'link') {
+    return (
+      <li>
+        <NavLink
+          href={entry.href}
+          label={entry.label}
+          icon={modelIcon(entry.icon)}
+          current={false}
+          collapsed={collapsed}
+          {...(entry.external ? { external: true } : {})}
+        />
+      </li>
+    )
+  }
+
+  const shown = entry.models
+    .map((name) => models.find((model) => model.name === name))
+    .filter((model): model is ModelDescriptor => model !== undefined)
+
+  const holdsActive = activeModel !== undefined && entry.models.includes(activeModel)
+  // A rail has no room for a heading, so a collapsed sidebar shows the icons
+  // in group order and nothing else. Folding there would hide them for good.
+  const open = collapsed || holdsActive || !folded
+
+  return (
+    <>
+      {heading === undefined || collapsed ? null : (
+        <li className="mt-2 first:mt-0">
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1 px-2.5 py-1 text-[10px] font-medium tracking-wider uppercase transition-colors"
+            aria-expanded={open}
+            onClick={() => setFolded(!folded)}
+          >
+            <ChevronRight
+              className={cn('size-3 transition-transform', open && 'rotate-90')}
+              aria-hidden="true"
+            />
+            <span className="truncate">{heading}</span>
+          </button>
+        </li>
+      )}
+
+      {open
+        ? shown.map((model) => (
+            <ModelLink
+              key={model.name}
+              model={model}
+              activeModel={activeModel}
+              collapsed={collapsed}
+            />
+          ))
+        : null}
+    </>
+  )
+}
+
+/**
+ * Whether a group is folded, remembered across visits.
+ *
+ * Per browser, like the appearance and the page size: it is how one person
+ * likes their sidebar, not a decision the application made for everybody. The
+ * application's `collapsed` is the starting point, and the person's own choice
+ * wins from then on.
+ */
+function useGroupFolded(
+  heading: string | undefined,
+  initial: boolean | undefined,
+): [boolean, (value: boolean) => void] {
+  const key = heading === undefined ? undefined : `nest-admin.nav.${heading}`
+
+  const [folded, setFolded] = useState(() => {
+    if (key === undefined) return false
+    try {
+      const stored = window.localStorage.getItem(key)
+      if (stored !== null) return stored === 'folded'
+    } catch {
+      // A browser refusing storage is not a reason to fail to draw a sidebar.
+    }
+    return initial === true
+  })
+
+  return [
+    folded,
+    (value: boolean) => {
+      setFolded(value)
+      if (key === undefined) return
+      try {
+        window.localStorage.setItem(key, value ? 'folded' : 'open')
+      } catch {
+        // As above.
+      }
+    },
+  ]
+}
+
 function NavLink({
   href: to,
   label,
@@ -618,10 +808,14 @@ function NavLink({
   readonly marker?: string
   /** Draw the marker as a problem rather than as a label. */
   readonly alarming?: boolean
+  /** A link out of the admin. Opens in a new tab, and says so to a reader. */
+  readonly external?: boolean
 }) {
   return (
     <a
       href={to}
+      data-slot="nav-link"
+      {...(external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
       aria-current={current ? 'page' : undefined}
       // The label is the accessible name whether or not it is drawn, so a rail
       // is not a column of unlabelled letters to a reader.

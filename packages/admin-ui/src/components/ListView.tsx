@@ -108,10 +108,12 @@ export function ListView({
   const confirm = useConfirm()
 
   const [page, setPage] = useState(1)
-  const { perPage, setPerPage } = usePerPage()
+  const { perPage, setPerPage } = usePerPage(model.list?.perPage)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const [sort, setSort] = useState<SortRule | undefined>(undefined)
+  // What the application said, until somebody clicks a header. Their click is
+  // about this visit; the configuration is about every first visit.
+  const [sort, setSort] = useState<SortRule | undefined>(() => configuredSort(model))
   const [filter, setFilter] = useState<FilterRule | undefined>(() => parseFilter(initialFilter))
 
   /**
@@ -159,7 +161,7 @@ export function ListView({
     setPage(1)
     setSearchInput('')
     setSearch('')
-    setSort(undefined)
+    setSort(configuredSort(model))
     // Back to whatever the URL asks for, not to nothing. This effect also runs
     // on mount, so clearing it unconditionally would throw away the filter a
     // link arrived with - "all the posts by this author" would open showing
@@ -1132,6 +1134,19 @@ function columnLabel(model: ModelDescriptor, column: FieldDescriptor): string {
  * usually does. Returns `undefined` for anything malformed rather than
  * throwing - a bad link should open an unfiltered list, not a broken screen.
  */
+/**
+ * The sort the application configured, if it configured a usable one.
+ *
+ * Checked against the fields this principal actually received: a sort on a
+ * column hidden from them would be a 400 on the first request, and a screen
+ * that fails to load is a worse outcome than one that loads unsorted.
+ */
+function configuredSort(model: ModelDescriptor): SortRule | undefined {
+  const sort = model.list?.sort
+  if (sort === undefined) return undefined
+  return model.fields.some((field) => field.name === sort.field) ? { ...sort } : undefined
+}
+
 function parseFilter(raw: string | undefined): FilterRule | undefined {
   if (!raw) return undefined
 

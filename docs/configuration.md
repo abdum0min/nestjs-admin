@@ -18,6 +18,7 @@ the order you actually need it. This page is for looking things up.
 - [`models`](#models)
 - [`hooks`](#hooks)
 - [`actions`](#actions)
+- [`navigation`](#navigation)
 - [`dashboard`](#dashboard)
 - [Import and export](#import-and-export)
 - [`path`, `uiRoot`, `theme`](#path-uiroot-theme)
@@ -469,6 +470,88 @@ deleted" that no reader keeps straight.
 
 A model without `softDelete` behaves exactly as it always has.
 
+### `list` — how the table looks
+
+```ts
+models: {
+  Order: {
+    list: {
+      columns: ['id', 'customer', 'status', 'total', 'createdAt'],
+      sort: { field: 'createdAt', direction: 'desc' },
+      perPage: 50,
+    },
+  },
+}
+```
+
+Without it the table shows the **first six scalar columns in schema order**,
+which is a guess that is right often enough to be the default and wrong exactly
+where it matters: an `Order` whose first six columns are timestamps and flags
+shows no customer.
+
+A **to-one relation may be named** — `author` or `authorId`, either works. The
+cell draws the key as the related record's name with a link to it, and the
+column is headed by the relation. A to-many may not: it is a page of other
+records, not a cell.
+
+`perPage` sets the first impression; the viewer's own choice wins over it and
+is remembered in their browser. It has to be one of 10, 25, 50 or 100 — a size
+the control cannot show would be one nobody could change.
+
+A column or sort field the model does not have is a startup error.
+
+### `detail` — how the record screen is arranged
+
+```ts
+models: {
+  Post: {
+    detail: {
+      layout: 'tabs',                       // or 'sections'
+      sections: [
+        { heading: 'Content', description: 'What readers see.',
+          fields: ['title', 'slug', 'body'] },
+        { heading: 'Publishing', fields: ['status', 'publishedAt', 'authorId'] },
+        { heading: 'Statistics', fields: ['views'], collapsed: true },
+      ],
+    },
+  },
+}
+```
+
+Thirty fields in one flat list is a wall, and it is what every generated admin
+produces. It applies to **both halves of the record screen** — the read view and
+the form — so a field sits under the same heading whether you are looking at it
+or changing it.
+
+`'tabs'` is better when the groups are unrelated and one of them is the one
+people actually want. `'sections'` is better when somebody reads down the whole
+record. Neither hides anything the other shows.
+
+**A section never hides a field.** Anything left out of every section is
+collected into a final group, so adding a column to the schema puts it on the
+screen rather than making it invisible until somebody notices. A section whose
+fields are all read-only simply does not appear on the form.
+
+**A group is never allowed to hide a problem.** A form that refuses to save
+while the reason is behind a folded section or an unselected tab is the failure
+mode of every grouped form ever built. So a section holding an error is forced
+open whatever `collapsed` says, the tab holding the first one is selected, and
+every tab carries a count of what is wrong inside it.
+
+A field a section names that the model does not have is a startup error.
+
+### The actions are beside the record, not above it
+
+Not configurable, and worth knowing about: Save, Delete, Duplicate, Restore and
+your own [actions](#actions) are in a column to the right of the record rather
+than a row above it. A row is horizontal, so every action added to it competes
+for the same line and ends up abbreviated, wrapped, or hidden in a menu — and a
+destructive action in a menu is a different kind of mistake from a visible one.
+
+The column follows the page as you scroll, because the thing it acts on is a
+form that can be three screens long. On a narrow screen it sits above the
+content, which is where the row used to be.
+
 ### Field options
 
 | Option        | Enforced by | Effect                                                           |
@@ -486,6 +569,8 @@ A model without `softDelete` behaves exactly as it always has.
 That division is the thing to remember: the first five are security, the rest
 are presentation. Treating one of the first as one of the last would be a hole
 with a reassuring name.
+
+### `widget`
 
 `widget` accepts `textarea`, `password`, `email`, `url`, `color`, `json`,
 `file`, `image`, `richtext`. Anything else is inferred from the field's kind — a
@@ -986,6 +1071,49 @@ it.
 
 ---
 
+## `navigation`
+
+How the resources are grouped in the sidebar. A factory option.
+
+```ts
+navigation: [
+  { heading: 'Publishing', models: ['Post', 'Comment', 'Category'] },
+  { heading: 'Shop', models: ['Product', 'Order'], collapsed: true },
+  { divider: true },
+  { label: 'Docs', href: 'https://example.com/docs', icon: 'file-text' },
+]
+```
+
+| Entry   | Keys                                  |
+| ------- | ------------------------------------- |
+| A group | `heading?`, `models`, `collapsed?`    |
+| A link  | `label`, `href`, `icon?`, `external?` |
+| A rule  | `divider: true`                       |
+
+**Nothing disappears by being left out.** A model named in no group lands in a
+final group called Other. Adding a model to the schema and finding it missing
+from the admin, with nothing saying why, is worse than an untidy sidebar —
+hiding a model is what [`resources`](#resources) is for, and that is enforced.
+
+**It is resolved per principal.** A group keeps only the models this role can
+see, an empty group is dropped, and a rule left separating nothing goes with
+it. A role that cannot reach `Order` never receives a "Shop" heading with
+nothing under it — which would have been a statement that something exists and
+was refused.
+
+**A group folds**, and each person's choice is remembered in their browser.
+The group holding the page they are on never folds: hiding it would remove the
+only thing on screen saying where they are.
+
+`href` must be an `http(s)` URL, a path starting with `/`, or a hash route
+starting with `#/`. Anything else is refused at startup — `javascript:` in an
+href is the reason, and the rule is a whitelist so there is nothing to keep up
+with. An absolute URL opens in a new tab unless you say otherwise.
+
+A model name matching nothing, or claimed by two groups, is a startup error.
+
+---
+
 ## Import and export
 
 Nothing to configure. Both appear on every list, and follow the permissions
@@ -1108,14 +1236,106 @@ theme: {
 }
 ```
 
-`brandColor` is one hex value. The server derives the rest — a fill colour, a
-readable ink for it and a link colour — separately for the light and dark
-palettes, adjusting the lightness until each meets its WCAG contrast floor
-(4.5:1 for text, 3:1 for a surface). So a brand colour that would be unreadable
-in dark mode is corrected rather than shipped.
+### One value, or all of them
 
-An unknown key here is a startup error. `accent` instead of `brandColor` would
-otherwise do nothing, silently, forever.
+`brandColor` is the shortcut, and it is what most applications want. One hex,
+and the server derives a fill colour, a readable ink for it and a link colour —
+separately for the light and dark palettes, adjusting the lightness until each
+meets its WCAG contrast floor (4.5:1 for text, 3:1 for a surface). A brand
+colour that would be unreadable in dark mode is corrected rather than shipped.
+
+`colors` is the other end: **every token the stylesheet reads**, per palette.
+
+```ts
+theme: {
+  colors: {
+    light: { sidebar: 'oklch(0.972 0.008 250)', border: '#e6e8ec' },
+    dark: { background: 'oklch(0.17 0.012 258)', primary: '#7c9cff' },
+  },
+}
+```
+
+The interface names **roles**, not colours — `bg-card`, `text-muted-foreground`,
+`border-input` — so overriding a role changes it everywhere at once. There is
+nothing a fork could reach that this cannot.
+
+| Group    | Tokens                                                                                  |
+| -------- | --------------------------------------------------------------------------------------- |
+| Page     | `background` `foreground`                                                               |
+| Surfaces | `card` `cardForeground` `popover` `popoverForeground`                                   |
+| Brand    | `primary` `primaryForeground` `link` `ring`                                             |
+| Quiet    | `secondary` `secondaryForeground` `muted` `mutedForeground` `accent` `accentForeground` |
+| Meaning  | `destructive` `success` `warning` and each `…Foreground`                                |
+| Edges    | `border` `input`                                                                        |
+| Sidebar  | `sidebar` `sidebarForeground` `sidebarBorder` `sidebarAccent` `sidebarAccentForeground` |
+
+Pairs are pairs on purpose: `destructive` fills a button and
+`destructiveForeground` is what is written on it. Setting one without the other
+is how a red button ends up with red text.
+
+Values may be hex, `oklch()`, `oklab()`, `rgb()` or `hsl()`. A token name the
+list does not contain is a startup error, not a setting that does nothing.
+
+### Shape, type and density
+
+```ts
+theme: {
+  radius: '0.5rem',            // '0' for square. The scale derives from it
+  density: 'compact',          // 'comfortable' (default) | 'compact'
+  fonts: {
+    body: '"Inter", system-ui, sans-serif',
+    code: '"JetBrains Mono", ui-monospace, monospace',
+    stylesheet: 'https://fonts.googleapis.com/css2?family=Inter…',
+  },
+}
+```
+
+`fonts.stylesheet` is `https` only, and opt-in: naming a family never implies
+fetching it. It is a third-party request from a page that shows your data, so
+you ask for it or it does not happen.
+
+`density: 'compact'` tightens table rows, card padding, the sidebar and the
+record rows — and nothing else. It is deliberately not a global scale, which
+would have been one line and would have shrunk every icon along with the
+padding. Icons at thirteen pixels are not compact.
+
+### Branding the rest of it
+
+```ts
+theme: {
+  loginLogoUrl: '/wordmark.svg',   // the sign-in screen, where there is room
+  faviconUrl: '/favicon.png',
+  welcome: 'Acme staff only.',     // a line under the sign-in form
+  copyright: '© 2026 Acme Ltd.',   // a line in the footer
+}
+```
+
+Images must be an `http(s)` URL or a `data:image/` URI; text must be plain text
+with nothing that could open a tag. These go into HTML, and a template that
+interpolates unchecked strings is a mistake waiting for the first value read
+from an environment variable.
+
+### `customCss`
+
+The escape hatch of last resort:
+
+```ts
+theme: {
+  customCss: '.admin-thing { letter-spacing: 0.01em }'
+}
+```
+
+Appended after everything the theme generates. Refused if it contains `<`,
+which is the only character that could end the style element — CSS never needs
+one.
+
+**What it targets is not a public API.** Class names come from Tailwind and
+change when the interface does. Style the tokens where you can; this exists for
+the case they do not cover, because the alternative to an escape hatch is a
+fork.
+
+An unknown key anywhere in `theme` is a startup error. `accent` instead of
+`brandColor` would otherwise do nothing, silently, forever.
 
 ---
 

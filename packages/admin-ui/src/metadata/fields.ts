@@ -27,6 +27,15 @@ export function fieldLabel(field: FieldDescriptor): string {
 
 /** Fields worth showing as table columns, in order, capped for readability. */
 export function listColumns(model: ModelDescriptor, limit = 6): readonly FieldDescriptor[] {
+  const chosen = (model.list?.columns ?? [])
+    .map((name) => asColumn(model, name))
+    .filter((field): field is FieldDescriptor => field !== undefined)
+
+  // Falls back rather than showing an empty table: a configuration naming only
+  // fields this principal cannot read is a table with no columns, which looks
+  // like a broken screen rather than like a permission.
+  if (chosen.length > 0) return chosen
+
   const scalars = model.fields.filter((field) => field.kind !== 'relation' && !field.isList)
 
   // The primary key first - it is what a person scans for and what every row
@@ -35,6 +44,28 @@ export function listColumns(model: ModelDescriptor, limit = 6): readonly FieldDe
   const rest = scalars.filter((field) => !field.isId)
 
   return [...primary, ...rest].slice(0, limit)
+}
+
+/**
+ * A configured column name, as the field a table cell can be built from.
+ *
+ * A to-one relation is accepted and resolved to its foreign key, because
+ * `author` is what somebody writes and `authorId` is what a row carries - and
+ * the cell draws that key as the related record's name with a link to it. A
+ * to-many is refused: it is a page of other records, not a value.
+ */
+function asColumn(model: ModelDescriptor, name: string): FieldDescriptor | undefined {
+  const field = model.fields.find((candidate) => candidate.name === name)
+  if (field === undefined) return undefined
+
+  if (field.kind === 'relation') {
+    const from = field.relation?.from
+    return from === undefined
+      ? undefined
+      : model.fields.find((candidate) => candidate.name === from)
+  }
+
+  return field.isList ? undefined : field
 }
 
 /** The field that identifies a record, if the model has a usable one. */

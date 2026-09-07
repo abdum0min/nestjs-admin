@@ -16,7 +16,108 @@ finished and then folded into the patch that followed, because something worth
 fixing turned up before the release went out. They are documented as their own
 entries because that is where the work belongs; on npm their contents arrived in
 `0.12.1`, `0.13.1` and `0.14.2`. Released versions are
-`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2 · 0.14.3`.
+`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2 · 0.14.3 · 0.15.0`.
+
+---
+
+## 0.16.0
+
+Making it yours: the sidebar, the record screen, and every colour in it.
+
+### Added
+
+- **`navigation`** — headings, ordering, dividers and links out. A flat list of
+  models is fine at eight and unusable at thirty, which is what a real schema
+  is.
+
+  **Nothing disappears by being left out**: a model in no group lands in a final
+  one. Adding a model to the schema and finding it missing from the admin, with
+  nothing saying why, is worse than an untidy sidebar — hiding a model is what
+  `resources` is for, and that is enforced.
+
+  **Resolved per principal.** A group keeps only the models this role can see,
+  an empty group is dropped, and a rule left separating nothing goes with it. A
+  role that cannot reach `Order` never receives a "Shop" heading with nothing
+  under it, which would have been a statement that something exists and was
+  refused.
+
+  Groups fold, and each person's choice is remembered. The group holding the
+  page they are on never folds: hiding it would remove the only thing on screen
+  saying where they are.
+
+- **`models.<Model>.list`** — which columns, in which order, sorted how, how
+  many rows. Without it the table shows the first six scalar columns in schema
+  order: right often enough to be the default, and wrong exactly where it
+  matters — an `Order` whose first six columns are timestamps and flags shows
+  no customer. A to-one relation may be named and renders as the record's name,
+  with a link to it.
+
+- **`models.<Model>.detail`** — sections or tabs, on **both halves** of the
+  record screen, so a field sits under the same heading whether you are reading
+  it or changing it.
+
+  **A section never hides a field**: anything left out is collected into a final
+  group, so adding a column to the schema puts it on the screen rather than
+  making it invisible until somebody notices.
+
+  **A group is never allowed to hide a problem.** A form that refuses to save
+  while the reason is behind a folded section or an unselected tab is the
+  failure mode of every grouped form ever built. A section holding an error is
+  forced open whatever the configuration said, the tab holding the first one is
+  selected, and every tab carries a count of what is wrong inside it.
+
+- **The record's actions moved into a column beside it.** Save, Delete,
+  Duplicate, Restore and the application's own actions were a row above the
+  content, and a row is horizontal: every action added to it competes for the
+  same line, so they shrink to icons, wrap onto a second row, or end up in a
+  menu — and a destructive action in a menu is a different kind of mistake from
+  a visible one.
+
+  A column does not have that problem. Full-width buttons with readable labels,
+  in a fixed order, in the same place on every record of every model. It follows
+  the page as you scroll, because the thing it acts on is a form that can be
+  three screens long; on a narrow screen it sits where the row used to be.
+
+  The primary Save is a submit button that lives outside the form, attached by
+  `form=`. The alternative — a second Save inside the form for narrow screens —
+  would have been two buttons that must stay in step about being disabled, and
+  would not.
+
+- **Save and continue editing.** On a form long enough to need sections, being
+  thrown back to the record after every save means opening it again and finding
+  your place again. It re-reads what came back, so the next save carries the
+  version the database now holds and shows whatever a hook derived.
+
+- **`theme.colors`** — every token the stylesheet reads, per palette. The
+  interface names roles rather than colours, so overriding a role changes it
+  everywhere at once; there is nothing a fork could reach that this cannot. The
+  token list is closed, so a misspelling is a startup error rather than a
+  setting that silently does nothing.
+
+- **`theme.radius`, `theme.fonts`, `theme.density`.** `fonts.stylesheet` is
+  https-only and opt-in — naming a family never implies fetching it, because
+  that is a third-party request from a page showing your data.
+
+  `density: 'compact'` tightens table rows, card padding, the sidebar and the
+  record rows, and nothing else. Deliberately not a global spacing scale, which
+  would have been one line and would have shrunk every icon along with the
+  padding.
+
+- **`theme.loginLogoUrl`, `faviconUrl`, `welcome`, `copyright`.**
+
+- **`theme.customCss`**, the escape hatch of last resort. Refused if it
+  contains `<`, the one character that could end the style element. What it
+  targets is not a public API — but the alternative to an escape hatch is a
+  fork.
+
+### Notes
+
+- Every one of these is presentation and the interface may ignore it. What is
+  not presentation is the validation: a model, column or field name that
+  matches nothing fails at **startup**, because a layout naming a misspelled
+  column renders as an empty section, and an empty section looks exactly like a
+  permission working correctly.
+- `theme.title`, `logoUrl`, `brandColor` and `appearance` are unchanged.
 
 ---
 
