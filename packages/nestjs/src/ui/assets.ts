@@ -91,6 +91,31 @@ export function readIndexHtml(root: string = uiRoot()): Buffer | undefined {
 }
 
 /**
+ * A value that changes whenever the built shell does.
+ *
+ * Its modification time and size - enough, because a rebuild rewrites the file.
+ * It exists so a memoised shell can be checked against the one on disk rather
+ * than trusted for the life of the process.
+ *
+ * That matters because the shell names **content-hashed** asset files. Replace
+ * the built UI under a running process - a rebuild in development, a deploy
+ * that swaps a directory in production - and a shell held in memory keeps
+ * pointing at bundles that are no longer there. Every asset then answers 404
+ * and the admin is a blank page until somebody restarts the process, with
+ * nothing anywhere saying why.
+ *
+ * `undefined` when there is no UI, which is a different thing from an
+ * unchanged one and is why this is not a number.
+ */
+export function shellStamp(root: string = uiRoot()): string | undefined {
+  const indexPath = join(root, 'index.html')
+  if (!existsSync(indexPath)) return undefined
+
+  const stats = statSync(indexPath)
+  return `${stats.mtimeMs}:${stats.size}`
+}
+
+/**
  * The base path Vite is configured to emit into asset URLs.
  *
  * A placeholder rather than a real default, because the mount path is not known

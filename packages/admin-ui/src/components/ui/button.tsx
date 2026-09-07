@@ -64,9 +64,21 @@ export function Button({
     readonly asChild?: boolean
   }) {
   const Component = asChild ? Slot : 'button'
+
   return (
     <Component
       data-slot="button"
+      /*
+       * A button with no `type` is a *submit* button - that is the HTML
+       * default, not a quirk - so one placed inside a form without thinking
+       * about it saves the record when it was meant to open a picker or turn a
+       * page. Every widget in this repository remembers to say `type="button"`;
+       * the pager did not, and the next component to forget would be a bug
+       * nobody could see in the JSX.
+       *
+       * Declared before the spread, so an explicit `type="submit"` still wins.
+       */
+      {...(asChild ? {} : { type: 'button' as const })}
       className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     />

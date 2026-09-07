@@ -42,7 +42,7 @@ import {
 } from '@nestjs/common'
 
 import { ADMIN_MOUNT_PATH, ADMIN_THEME, ADMIN_UI_ROOT } from '../tokens.js'
-import { contentTypeFor, readAsset, renderShell } from './assets.js'
+import { contentTypeFor, readAsset, renderShell, shellStamp } from './assets.js'
 import type { AdminTheme } from './theme.js'
 
 // No path here. The module registers this controller under the application's
@@ -51,14 +51,25 @@ import type { AdminTheme } from './theme.js'
 @Controller()
 export class AdminUiController {
   /**
-   * The rendered shell, built on first use.
+   * The rendered shell, and the state of the file it was built from.
    *
-   * It depends only on the bundled file and the mount path, and neither changes
-   * while the application runs. Held on the instance rather than in a
-   * module-level cache: the package ships two bundles that each inline their
-   * own copy of a module, so module-level state is not shared between them.
+   * Held on the instance rather than in a module-level cache: the package ships
+   * two bundles that each inline their own copy of a module, so module-level
+   * state is not shared between them.
+   *
+   * The stamp is the whole point. This was memoised for the life of the
+   * process on the grounds that the bundled file cannot change while the
+   * application runs - which is untrue in the two cases that matter. A rebuild
+   * in development replaces it under `nest start`, and a deployment that swaps
+   * a directory replaces it under a live process. Because the shell names
+   * content-hashed assets, the stale copy points at bundles that are no longer
+   * on disk: every one answers 404 and the admin is a blank page with nothing
+   * anywhere saying why.
    */
-  private shell?: Buffer | undefined
+  private shell?: {
+    readonly stamp: string | undefined
+    readonly html: Buffer | undefined
+  }
 
   constructor(
     @Inject(ADMIN_UI_ROOT) private readonly root: string,
@@ -75,8 +86,14 @@ export class AdminUiController {
   @Get()
   @Header('Cache-Control', 'no-cache')
   index(): StreamableFile {
-    this.shell ??= renderShell(this.mountPath, this.root, this.theme)
-    const html = this.shell
+    // One `stat` per page load, which is nothing beside reading and rewriting
+    // the file - and it is what makes the memoisation safe.
+    const stamp = shellStamp(this.root)
+    if (this.shell === undefined || this.shell.stamp !== stamp) {
+      this.shell = { stamp, html: renderShell(this.mountPath, this.root, this.theme) }
+    }
+
+    const html = this.shell.html
     if (!html) {
       throw new NotFoundException(
         'The admin UI was not bundled with this package. ' +

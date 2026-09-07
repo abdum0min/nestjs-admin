@@ -179,6 +179,63 @@ describe('the sidebar', () => {
   })
 })
 
+describe('moving between pages', () => {
+  /*
+   * The admin is one page. Nothing about changing route may re-read the
+   * metadata document or blank the shell: the schema does not change because
+   * somebody clicked a different resource, and re-reading it is what turns a
+   * navigation into something that looks like a page load.
+   */
+  it('does not re-read the metadata or lose the sidebar', async () => {
+    const calls = server({
+      models: [post(), user],
+      navigation: [
+        { kind: 'group', heading: 'Content', models: ['Post'] },
+        { kind: 'group', heading: 'People', models: ['User'] },
+      ],
+    })
+
+    window.location.hash = '#/Post'
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Post' })
+    const before = calls.filter((call) => call.includes('/meta')).length
+
+    const nav = within(screen.getByRole('navigation', { name: 'Resources' }))
+    const link = nav.getByRole('link', { name: 'User' })
+
+    // What a browser does with a hash link: it changes the hash. It does not
+    // fetch the document again, and neither may we.
+    fireEvent.click(link)
+    window.location.hash = link.getAttribute('href') as string
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+
+    await screen.findByRole('heading', { name: 'User' })
+
+    expect(calls.filter((call) => call.includes('/meta')).length).toBe(before)
+    expect(screen.queryByText(/Loading resources/)).toBeNull()
+    expect(nav.getByRole('link', { name: 'Post' })).toBeTruthy()
+  })
+
+  /*
+   * The HTML default for a button with no `type` is submit. Every control
+   * inside the record form has to say otherwise, or turning a page in a picker
+   * saves the record and leaves for the record screen - which from the other
+   * side of the screen is indistinguishable from the page reloading.
+   */
+  it('never leaves a button able to submit a form by accident', async () => {
+    server()
+    window.location.hash = '#/Post/p1/edit'
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'Save' })
+
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.getAttribute('type')).not.toBeNull()
+    }
+  })
+})
+
 describe('the record screen', () => {
   it('puts what you can do to a record in a column beside it', async () => {
     server()

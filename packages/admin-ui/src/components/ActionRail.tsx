@@ -96,9 +96,12 @@ export function WithRail({
  * Full width and labelled, which is the whole point of the column: a button
  * that says "Delete forever" cannot be mistaken for one that says "Delete".
  */
-export function RailButton({ children, ...props }: React.ComponentProps<typeof Button>) {
+export function RailButton({ className, children, ...props }: React.ComponentProps<typeof Button>) {
   return (
-    <Button className="w-full justify-center" {...props}>
+    // Merged rather than spread over: `{...props}` after a literal className
+    // would let any caller passing one silently drop the full width, which is
+    // the only thing making these read as a column.
+    <Button className={cn('w-full justify-center', className)} {...props}>
       {children}
     </Button>
   )

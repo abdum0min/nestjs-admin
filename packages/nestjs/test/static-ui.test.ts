@@ -7,6 +7,8 @@
  * and quietly breaking either half.
  */
 import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import type { INestApplication } from '@nestjs/common'
@@ -16,9 +18,34 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { Test } from '@nestjs/testing'
+
+import { AdminModule } from '../src/module.js'
+import { unsafeAllowAllRequests } from '../src/auth/contract.js'
 import { uiAvailable } from '../src/ui/assets.js'
 import { createAdminApp } from './app.js'
 import { InMemoryAdapter } from './in-memory-adapter.js'
+
+/** An admin whose built UI is a directory this test controls. */
+async function bootWithUi(root: string) {
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      AdminModule.forRoot({
+        adapter: new InMemoryAdapter({ User: [], Post: [] }),
+        auth: unsafeAllowAllRequests(),
+        uiRoot: root,
+      }),
+    ],
+  }).compile()
+
+  const started = moduleRef.createNestApplication()
+  await started.init()
+  extra.push(started)
+  return started.getHttpServer()
+}
+
+/** Applications started by a single test, closed with the file. */
+const extra: INestApplication[] = []
 
 let app: INestApplication
 
@@ -27,6 +54,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  for (const started of extra) await started.close()
   await app.close()
 })
 
@@ -175,5 +203,38 @@ describe('the UI shell is deliberately unauthenticated', () => {
     }
 
     await locked.close()
+  })
+})
+
+/*
+ * The shell names content-hashed assets, so a shell held in memory across a
+ * rebuild points at bundles that are no longer on disk. Every one answers 404
+ * and the admin is a blank page, with nothing anywhere saying why - in
+ * development on every `pnpm build` under a running `nest start`, and in
+ * production on any deployment that swaps a directory under a live process.
+ */
+describe('a build that changes under the running process', () => {
+  it('serves the new shell rather than the one it read first', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nest-admin-ui-'))
+    await mkdir(join(root, 'assets'), { recursive: true })
+
+    const shell = (asset: string) =>
+      `<!doctype html><html><head><title>x</title>` +
+      `<script type="module" src="/__nest-admin-base__/assets/${asset}"></script>` +
+      `</head><body><div id="root"></div></body></html>`
+
+    await writeFile(join(root, 'index.html'), shell('index-AAAA.js'))
+
+    const http = await bootWithUi(root)
+    const first = await request(http).get('/admin').expect(200)
+    expect(first.text).toContain('index-AAAA.js')
+
+    // What a rebuild does: the same path, different content and a new mtime.
+    await writeFile(join(root, 'index.html'), shell('index-BBBB.js'))
+    await utimes(join(root, 'index.html'), new Date(), new Date(Date.now() + 2000))
+
+    const second = await request(http).get('/admin').expect(200)
+    expect(second.text).toContain('index-BBBB.js')
+    expect(second.text).not.toContain('index-AAAA.js')
   })
 })
