@@ -26,6 +26,15 @@ Making it yours: the sidebar, the record screen, and every colour in it.
 
 ### Fixed
 
+- **Every link in the sidebar opened a new tab.** `external` was declared in the
+  navigation link's props type and never destructured, so the component read the
+  _global_ `external` — `window.external`, a legacy object every browser still
+  exposes and which is therefore truthy. Every link got `target="_blank"`, so
+  clicking a resource opened a second tab and loaded the whole admin again.
+
+  TypeScript could not catch it: `lib.dom` declares `external` as a global, so
+  the identifier resolves and the file type-checks.
+
 - **The admin served a shell pointing at bundles that were gone.** The SPA
   shell was rendered once and kept for the life of the process. The shell names
   content-hashed assets, so replacing the built UI under a running process - a
