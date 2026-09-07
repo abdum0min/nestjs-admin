@@ -24,6 +24,26 @@ entries because that is where the work belongs; on npm their contents arrived in
 
 Making it yours: the sidebar, the record screen, and every colour in it.
 
+### Fixed
+
+- **The admin served a shell pointing at bundles that were gone.** The SPA
+  shell was rendered once and kept for the life of the process. The shell names
+  content-hashed assets, so replacing the built UI under a running process - a
+  rebuild during development, a deployment that swaps a directory - left it
+  asking for files that were no longer there: every asset 404s and the admin is
+  a blank page until somebody restarts, with nothing saying why.
+
+  The handler already carried the comment explaining it. `Cache-Control:
+no-cache` is on that route because "a cached shell would keep pointing at a
+  previous deployment's bundle" - the browser was told not to do the thing the
+  server then did. The memoised shell now carries the modification time and
+  size of the file it came from and is rebuilt when they differ.
+
+- **A `Button` with no `type` was a submit button**, which is the HTML default
+  rather than a quirk. Harmless until the record form began wrapping its fields
+  in a real form element; the pager never declared one. Buttons now default to
+  `type="button"`, and an explicit `type="submit"` still wins.
+
 ### Added
 
 - **`navigation`** — headings, ordering, dividers and links out. A flat list of
