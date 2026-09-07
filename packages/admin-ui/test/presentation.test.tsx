@@ -159,6 +159,40 @@ describe('the sidebar', () => {
     expect(nav.getAllByRole('link', { name: 'Post' }).length).toBe(1)
   })
 
+  /*
+   * Every link in the sidebar opened a new tab, because `external` was
+   * declared in NavLink's props type and never destructured - so the body read
+   * the global `window.external`, which every browser exposes and which is
+   * truthy. Clicking anything opened a second tab and loaded the whole admin
+   * again, which is what "the page fully reloads" looks like from the outside.
+   *
+   * TypeScript could not catch it: `lib.dom` declares `external` as a global.
+   * So this asserts on the attribute.
+   */
+  it('keeps a resource in the tab it is already in', async () => {
+    server({
+      models: [post(), user],
+      navigation: [
+        { kind: 'group', heading: 'Content', models: ['Post'] },
+        { kind: 'link', label: 'Docs', href: 'https://example.com', external: true },
+      ],
+    })
+    window.location.hash = '#/Post'
+    render(<App />)
+
+    const nav = within(await screen.findByRole('navigation', { name: 'Resources' }))
+
+    for (const link of nav.getAllByRole('link')) {
+      const href = link.getAttribute('href') ?? ''
+      // Anything inside the admin is a hash route, and a hash route in a new
+      // tab is a fresh load of the whole application.
+      if (href.startsWith('#')) expect(link.getAttribute('target')).toBeNull()
+    }
+
+    expect(nav.getByRole('link', { name: 'Post' }).getAttribute('target')).toBeNull()
+    expect(nav.getByRole('link', { name: 'Dashboard' }).getAttribute('target')).toBeNull()
+  })
+
   it('draws a link out, and opens it in a new tab', async () => {
     server({
       models: [post()],

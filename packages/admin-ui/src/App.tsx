@@ -792,6 +792,20 @@ function NavLink({
   collapsed,
   marker,
   alarming = false,
+  /*
+   * Defaulted rather than left out, and the default is the point.
+   *
+   * It was declared in the type below and never destructured here, so the body
+   * read the *global* `external` - `window.external`, a legacy object every
+   * browser still exposes and which is therefore truthy. Every link in the
+   * sidebar got `target="_blank"`, so every click opened a new tab and loaded
+   * the whole admin again.
+   *
+   * TypeScript accepted it because `lib.dom` declares `external` as a global,
+   * which is exactly why the test below this file asserts on the attribute
+   * rather than trusting the types.
+   */
+  external = false,
 }: {
   readonly href: string
   readonly label: string
