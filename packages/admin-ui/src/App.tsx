@@ -9,6 +9,7 @@
 import {
   ChevronRight,
   FlaskConical,
+  History,
   LayoutDashboard,
   Network,
   PanelLeftClose,
@@ -21,6 +22,7 @@ import { devDoctor, fetchMetadata, fetchSession, onUnauthorized } from './api/cl
 import type { AdminAccountSummary, ModelDescriptor, NavigationEntry } from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
 import { DashboardView } from './components/DashboardView.jsx'
+import { AuditView } from './components/AuditView.jsx'
 import { DevToolsView } from './components/DevToolsView.jsx'
 import { SchemaView } from './components/SchemaView.jsx'
 import { TeamView } from './components/TeamView.jsx'
@@ -158,7 +160,8 @@ function Admin({
     route.kind === 'home' ||
     route.kind === 'team' ||
     route.kind === 'dev' ||
-    route.kind === 'schema'
+    route.kind === 'schema' ||
+    route.kind === 'audit'
       ? undefined
       : models.find((m) => m.name === route.model)
 
@@ -172,14 +175,22 @@ function Admin({
       brokenCount={broken}
       activeDev={route.kind === 'dev'}
       activeSchema={route.kind === 'schema'}
+      activeAudit={route.kind === 'audit'}
+      canViewAuditLog={metadata.data?.capabilities?.viewAuditLog === true}
       {...shellProps}
     >
       {route.kind === 'home' ? (
-        <DashboardView />
+        <DashboardView canViewAuditLog={metadata.data?.capabilities?.viewAuditLog === true} />
       ) : route.kind === 'dev' ? (
         <DevToolsView />
       ) : route.kind === 'schema' ? (
         <SchemaView />
+      ) : route.kind === 'audit' ? (
+        <AuditView
+          models={models}
+          {...(route.model === undefined ? {} : { model: route.model })}
+          {...(route.record === undefined ? {} : { record: route.record })}
+        />
       ) : route.kind === 'team' ? (
         // Rendered only when the metadata says so. Reaching the URL without the
         // capability still gets a page - one whose first request is refused,
@@ -200,6 +211,7 @@ function Admin({
           models={models}
           canFill={canUseDevTools}
           canExport={metadata.data?.capabilities?.exportData !== false}
+          canViewAuditLog={metadata.data?.capabilities?.viewAuditLog === true}
         />
       )}
     </Shell>
@@ -212,6 +224,7 @@ function Content({
   models,
   canFill = false,
   canExport = false,
+  canViewAuditLog = false,
 }: {
   readonly route: ReturnType<typeof useRoute>
   readonly model: ModelDescriptor
@@ -225,6 +238,8 @@ function Content({
    * is missing would be the wrong way round.
    */
   readonly canExport?: boolean
+  /** Whether a record should offer a History button. Decided by the server. */
+  readonly canViewAuditLog?: boolean
   // Every model, not just the active one: a relation names its target by name,
   // and rendering it needs that target's primary key and display field.
   readonly models: readonly ModelDescriptor[]
@@ -251,7 +266,9 @@ function Content({
     case 'edit':
       return <RecordForm model={model} models={models} id={route.id} />
     case 'detail':
-      return <RecordView model={model} models={models} id={route.id} />
+      return (
+        <RecordView model={model} models={models} id={route.id} canViewAuditLog={canViewAuditLog} />
+      )
     default:
       return null
   }
@@ -271,6 +288,8 @@ function Shell({
   activeHome = false,
   activeDev = false,
   activeSchema = false,
+  activeAudit = false,
+  canViewAuditLog = false,
   children,
 }: {
   readonly models?: readonly ModelDescriptor[]
@@ -293,6 +312,8 @@ function Shell({
    * on most schemas - a warning that never goes out is one people stop seeing.
    */
   readonly brokenCount?: number
+  /** Whether there is a history to read and this role may read it. */
+  readonly canViewAuditLog?: boolean
   /**
    * Whether the dashboard is the page being shown.
    *
@@ -305,6 +326,7 @@ function Shell({
   /** Whether the developer tools are the page being shown. */
   readonly activeDev?: boolean
   /** Whether the schema screen is the page being shown. */
+  readonly activeAudit?: boolean
   readonly activeSchema?: boolean
   readonly onSignedOut?: () => void
   readonly children: React.ReactNode
@@ -437,9 +459,11 @@ function Shell({
               collapsed={collapsed}
               activeHome={activeHome}
               canUseDevTools={canUseDevTools}
+              canViewAuditLog={canViewAuditLog}
               brokenCount={brokenCount}
               activeDev={activeDev}
               activeSchema={activeSchema}
+              activeAudit={activeAudit}
             />
           </nav>
 
@@ -483,9 +507,11 @@ function Shell({
                 collapsed={false}
                 activeHome={activeHome}
                 canUseDevTools={canUseDevTools}
+                canViewAuditLog={canViewAuditLog}
                 brokenCount={brokenCount}
                 activeDev={activeDev}
                 activeSchema={activeSchema}
+                activeAudit={activeAudit}
               />
             </nav>
           </DialogContent>
@@ -513,10 +539,12 @@ function ResourceNav({
   activeModel,
   collapsed,
   canUseDevTools = false,
+  canViewAuditLog = false,
   brokenCount = 0,
   activeHome = false,
   activeDev = false,
   activeSchema = false,
+  activeAudit = false,
 }: {
   readonly models: readonly ModelDescriptor[]
   /**
@@ -530,10 +558,12 @@ function ResourceNav({
   readonly activeModel?: string
   readonly collapsed: boolean
   readonly canUseDevTools?: boolean
+  readonly canViewAuditLog?: boolean
   readonly brokenCount?: number
   readonly activeHome?: boolean
   readonly activeDev?: boolean
   readonly activeSchema?: boolean
+  readonly activeAudit?: boolean
 }) {
   return (
     <ul className="flex flex-col gap-0.5">
@@ -575,6 +605,25 @@ function ResourceNav({
               collapsed={collapsed}
             />
           ))}
+
+      {/*
+       * Below the resources, and above the developer tools.
+       *
+       * The history is not a resource - it is what happened to them - but it is
+       * an ordinary part of running an admin rather than a tool for building
+       * one, so it sits with the data and not under the Developer heading.
+       */}
+      {canViewAuditLog ? (
+        <li className={collapsed ? 'mt-1 border-t pt-1' : 'mt-1 border-t pt-1'}>
+          <NavLink
+            href={href({ kind: 'audit' })}
+            label="History"
+            icon={History}
+            current={activeAudit}
+            collapsed={collapsed}
+          />
+        </li>
+      ) : null}
 
       {/*
        * Below the resources and separated from them, because it is not one.

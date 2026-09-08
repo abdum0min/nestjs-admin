@@ -16,10 +16,97 @@ since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
 something worth fixing turned up before they went out. They are documented as
 their own entries because that is where the work belongs; on npm their contents
 arrived in `0.12.1`, `0.13.1`, `0.14.2` and `0.16.0`. Released versions are
-`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2 · 0.14.3 · 0.16.0`.
+`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2 · 0.14.3 · 0.16.0 · 0.17.0`.
 
 Checked against `npm view @nest-admin/nestjs versions` rather than remembered,
 because this note has been wrong before.
+
+---
+
+## 0.17.0
+
+Who changed what, and the ability to put it back.
+
+### Added
+
+- **`audit`** — a trail of every write through the admin: who, when, which
+  model, which record, and field by field what changed. Absent by default; an
+  admin should not start writing a history into a table nobody chose.
+  `prismaAuditStore` ships with it, and `AdminAuditStore` is one required
+  method for anything else.
+
+  **Recorded inside the write path, not in a hook.** Recording from a hook
+  would have been less code and would have put the trail inside something the
+  _application_ owns: a `beforeUpdate` that throws, returns early, or is simply
+  removed takes the log with it. A trail anybody can switch off by editing their
+  own code is not a trail.
+
+- **Undo.** An entry with a diff can be put back, from the history screen or
+  from a record's own History.
+
+  **It is a new write, not a rewind**: the old values go through the ordinary
+  update path, so hooks run and the model's permissions decide — undo is not a
+  privilege of its own — and it is itself recorded.
+
+  **It refuses when the record has changed since**, naming the fields. Writing
+  the old values over somebody else's later edit is not an undo of anything; it
+  is a silent third edit that discards their work and reports success.
+
+  Each action is undone by its opposite rather than by writing values back: a
+  create by a delete, a **soft delete by Restore** — the marker column is
+  read-only precisely so nothing can delete a record by editing a form — and a
+  restore by deleting again. An application action cannot be undone, and says
+  so: it ran code this admin did not write.
+
+- **A History screen**, a **History button on every record**, and a card on the
+  dashboard counting the last seven days with the most recent lines behind it.
+  All three appear only where there is a history to read and the role may read
+  it. The Django admin and Jazzmin both put History on the record, and both are
+  right — "who touched this" is a question asked while standing on it.
+
+- **`viewAuditLog`**, a new `AdminCapability`. **The trail is scoped to the
+  models the reader can already see**: an entry carries the values of the record
+  it describes, so a readable log with no scope would be a way around every
+  permission in the admin.
+
+- **`keepDeleted`**, off by default. On, a permanently deleted record is kept so
+  the delete can be undone — which means the table holds a copy of every row
+  anybody ever removed, which on a model with personal data is a copy of exactly
+  the thing somebody asked to have deleted. It comes back with a new identity,
+  because the primary key is generated.
+
+### What it deliberately does not do
+
+- **It records what happened in this admin, not what happened to the database.**
+  A script or a migration changes the same rows and this will never know. Said
+  plainly here and on the screen, because an audit trail people believe is
+  complete when it is not is worse than none.
+- **It never records a value the admin would not show.** The diff is built from
+  the exposed fields, so a `writeOnly` password hash is absent — otherwise the
+  audit table is the one place in the product where every secret is written
+  down, kept forever, and read by a screen built to be browsed. Columns the
+  database produces are left out too.
+- **It does not record reads.** Thousands a day would bury the writes. Exports
+  are recorded regardless: taking a whole table away is not a read.
+- **A failure to record never fails the request.** The write it describes has
+  already happened.
+
+### Fixed
+
+- A test fixture that was not what it claimed. `'D:app
+ode_modulespkg'` is
+  not a Windows path — `
+` is a newline and `a` and `p` are just `a` and `p`
+  — so the Prisma constraint test's assertion passed for a reason unrelated to
+  what it covers. Found by the linter added in this release. Two dead imports
+  and a regex built from an unescaped string went with it.
+
+### Added, of a different kind
+
+- **A linter**, with one rule and fifteen names on it. Prettier decides how the
+  code looks and TypeScript decides whether it is correct; what neither covers
+  is an identifier that resolves to something other than what the author meant.
+  `external` cost two rounds of that in 0.16.0.
 
 ---
 

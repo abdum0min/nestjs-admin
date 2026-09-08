@@ -10,7 +10,7 @@ import {
   type AdminRoles,
 } from '@nest-admin/nestjs'
 import { devTools } from '@nest-admin/nestjs/dev-tools'
-import { PrismaAdapter, prismaAccountStore } from '@nest-admin/nestjs/prisma'
+import { PrismaAdapter, prismaAccountStore, prismaAuditStore } from '@nest-admin/nestjs/prisma'
 
 import { PrismaService } from './prisma.service.js'
 
@@ -366,6 +366,10 @@ const roles = {
       OrderItem: ['metadata', 'list', 'read'],
       User: ['metadata', 'list', 'read'],
     },
+    // Reading the history is not reading the data twice: the trail is scoped
+    // to the models this role can already see, so support sees what happened
+    // to orders and customers and nothing about posts.
+    capabilities: ['viewAuditLog'],
     // Filters, not a refusal: support sees the orders that need attention and
     // the query never returns the rest, so the count is right too.
     scope: ({ model }) =>
@@ -483,9 +487,29 @@ class DatabaseModule {}
          * the admin has, reachable from a form. The module warns at startup if
          * this is forgotten.
          */
-        resources: { exclude: ['AdminAccount'] },
+        // Both are the admin's own tables rather than the application's, and
+        // both would be a hole if they were editable: one holds the passwords
+        // that open this admin, the other the record of what everyone did with
+        // it.
+        resources: { exclude: ['AdminAccount', 'AdminAuditEntry'] },
 
         models,
+
+        /*
+         * Who did what, and the ability to put it back.
+         *
+         * Every write through the admin is recorded - who, when, which record,
+         * which fields - and the history screen and the undo path appear. It
+         * records what happened *in this admin*: a script or a migration
+         * changes the same rows and this will never know.
+         *
+         * `keepDeleted` is left off. On it, the trail keeps a copy of every row
+         * anybody ever deleted so a hard delete can be undone - which on a
+         * model holding personal data is a copy of exactly the thing somebody
+         * asked to have removed. Post uses soft delete instead, and a marked
+         * record can always be brought back.
+         */
+        audit: { store: prismaAuditStore({ client: prisma }) },
 
         // Both optional. Without them every account may do everything, which
         // is exactly how this example behaved before 0.12.

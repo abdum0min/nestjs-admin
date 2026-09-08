@@ -345,6 +345,15 @@ export interface CapabilitiesDto {
    * it, which is what a single-superuser admin always meant.
    */
   readonly exportData?: boolean
+
+  /**
+   * True when there is a history to read and this role may read it.
+   *
+   * Three conditions the interface cannot tell apart, and should not: a build
+   * with no audit store, a store that only writes, and a role without the
+   * capability are all the same answer - this admin has no history screen.
+   */
+  readonly viewAuditLog?: boolean
 }
 
 export interface MetadataDto {

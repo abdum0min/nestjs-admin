@@ -19,6 +19,7 @@ the order you actually need it. This page is for looking things up.
 - [`hooks`](#hooks)
 - [`actions`](#actions)
 - [`navigation`](#navigation)
+- [`audit`](#audit)
 - [`dashboard`](#dashboard)
 - [Import and export](#import-and-export)
 - [`path`, `uiRoot`, `theme`](#path-uiroot-theme)
@@ -1068,6 +1069,192 @@ Omit the option entirely and a dashboard is generated from the schema: a count
 per model, plus recent records and a month of activity for models that record
 when a row was created. Declaring widgets replaces that rather than adding to
 it.
+
+---
+
+## `audit`
+
+Who changed what, and the ability to put it back. A factory option, and absent
+by default — an admin should not start writing a history into a table nobody
+chose.
+
+```ts
+import { prismaAuditStore } from '@nest-admin/nestjs/prisma'
+
+audit: {
+  store: prismaAuditStore({ client: prisma })
+}
+```
+
+The model it needs, and the two indexes every query uses:
+
+```prisma
+model AdminAuditEntry {
+  id String @id @default(cuid())
+
+  at DateTime @default(now())
+
+  actorId    String?
+  actorEmail String?
+  actorLabel String
+
+  action String
+  model  String
+
+  recordId    String?
+  recordLabel String?
+
+  changes String?
+  detail  String?
+  outcome String  @default("ok")
+  undoOf  String?
+
+  ip    String?
+  agent String?
+
+  @@index([at])
+  @@index([model, recordId, at])
+}
+```
+
+**Exclude it**, like the account model:
+
+```ts
+resources: {
+  exclude: ['AdminAccount', 'AdminAuditEntry']
+}
+```
+
+A log anybody can edit is not a log, and one anybody can delete is worse — the
+first thing somebody covering their tracks reaches for is the row describing
+what they did.
+
+### What it records
+
+|              |                                                          |
+| ------------ | -------------------------------------------------------- |
+| **Writes**   | create, update, delete, restore, and application actions |
+| **Refusals** | a write the policy turned away, with the reason          |
+| **Undo**     | itself, carrying the entry it reversed                   |
+| **Reads**    | no — see below                                           |
+
+Each entry carries who, when, which model, which record, the record's name at
+the time, and **field by field what changed**.
+
+### Three things it does not do
+
+**It records what happened in this admin, not what happened to the database.**
+A script, a migration or a psql session changes the same rows and this will
+never know. Say so to anyone who might otherwise conclude from a quiet log that
+nobody touched a record.
+
+**It never records a value the admin would not show.** The diff is built from
+the fields the admin exposes, so a `writeOnly` password hash and a `hidden`
+column are absent from it. Without that rule the audit table becomes the one
+place in the product where every secret is written down, kept forever, and read
+by a screen whose whole purpose is to be browsed.
+
+Columns the database produces — `updatedAt` and anything else generated — are
+left out too. They move on every write, so they would be in every entry.
+
+**It does not record reads.** Every list and every record page would be an
+entry, which on a busy admin is thousands a day and buries the writes. Exports
+are recorded regardless, because taking a whole table away is not a read.
+
+### Undo
+
+An entry with a diff can be put back, from the history screen or from a
+record's own History.
+
+**It is a new write, not a rewind.** It replays the old values through the
+ordinary update path, so your hooks run and the model's permissions decide —
+undo is not a privilege of its own. It is itself recorded.
+
+**It refuses when the record has changed since**, naming the fields:
+
+> This record has changed since: title, status are no longer what this entry
+> left behind. Putting the old values back would discard that change rather
+> than undo this one.
+
+Each action is undone by its opposite rather than by writing values back: a
+create is undone by a delete, a **soft delete by Restore** — the marker column
+is read-only precisely so nothing can delete a record by editing a form — and a
+restore by deleting again.
+
+An application action cannot be undone: it ran code this admin did not write.
+Neither can an import, which is many writes; undo those from the records.
+
+### `keepDeleted`
+
+```ts
+audit: { store, keepDeleted: true }
+```
+
+Off by default. On, the trail keeps the whole record when it is **permanently**
+deleted, so that delete can be undone — which means the audit table holds a copy
+of every row anybody ever removed, for as long as the table is kept. On a model
+with personal data that is a copy of exactly the thing somebody asked to have
+deleted.
+
+The record comes back with a **new identity**: the primary key is generated, so
+this creates a record with the old values rather than the old row. Soft delete
+is the better answer where you have the column for it.
+
+### `actorOf`
+
+Unset, the trail reads the account from the built-in login. An admin behind
+your own session says who is there instead:
+
+```ts
+audit: {
+  store,
+  actorOf: (context) => {
+    const user = context.switchToHttp().getRequest().user
+    return user && { id: user.id, email: user.email, label: user.name }
+  },
+}
+```
+
+An entry is never dropped for want of a name — "something changed and we do not
+know who" is information.
+
+### Who may read it
+
+`viewAuditLog`, an [`AdminCapability`](#roles-and-roleof). Without `roles`
+every administrator has it; with roles it is granted.
+
+**The trail is scoped to the models the reader can already see.** An entry
+carries the values of the record it describes, so a role that cannot reach
+`Order` never sees `Order`'s history — otherwise the log would be a way around
+every permission in the admin.
+
+### Where it appears
+
+A **History** entry in the sidebar, a **History** button on every record, and a
+card on the dashboard counting the last seven days. All three appear only where
+there is a history to read and this role may read it.
+
+### A store of your own
+
+`AdminAuditStore` needs one method:
+
+```ts
+interface AdminAuditStore {
+  record(entry: NewAuditEntry): Promise<void> | void
+  list?(query: AuditQuery): Promise<AuditPage>
+  read?(id: string): Promise<AuditEntry | null>
+  countSince?(since: Date, models?: readonly string[]): Promise<number>
+}
+```
+
+A store that ships lines to a log aggregator implements `record` alone. The
+screen and the dashboard card appear only where `list` is implemented too,
+because offering a history page backed by something that cannot be queried
+would be a promise the store never made.
+
+**A failure to record never fails the request.** The write it describes has
+already happened; refusing the response because the log was unavailable would
+turn an audit outage into an outage. Failures are logged at error level.
 
 ---
 

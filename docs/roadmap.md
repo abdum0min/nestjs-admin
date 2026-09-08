@@ -43,6 +43,7 @@ interface had stopped changing shape, and a second adapter had proved the
 | 0.14.3  | Rich text on a string column, as its own chunk                              |
 | 0.15.0  | Import and export, with a dry run that cannot be skipped                    |
 | 0.16.0  | Sidebar groups, record sections and tabs, an action rail, full theming      |
+| 0.17.0  | The audit trail, with undo that refuses to overwrite somebody else          |
 
 **1300+ tests, 67/67 packed-consumer checks, published as
 [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs).**

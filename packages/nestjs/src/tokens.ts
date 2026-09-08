@@ -108,6 +108,24 @@ export const ADMIN_MODELS = Symbol.for('nest-admin.models')
  */
 export const ADMIN_NAVIGATION = Symbol.for('nest-admin.navigation')
 
+/**
+ * Where the audit trail goes, when the application gave it somewhere.
+ *
+ * Absent is a real answer and the default one: an admin with no store records
+ * nothing, has no history screen, and offers no undo - rather than recording
+ * into a place nobody chose.
+ */
+export const ADMIN_AUDIT = Symbol.for('nest-admin.audit')
+
+/**
+ * A provider that exists only to run once, after the two services it needs.
+ *
+ * The audit trail asks the admin service which models a principal may read,
+ * and the admin service records through the trail. Injecting both ways is a
+ * cycle; this hands one to the other after both are constructed.
+ */
+export const AUDIT_WIRING = Symbol.for('nest-admin.audit-wiring')
+
 /** Application code that runs around a write. */
 export const ADMIN_HOOKS = Symbol.for('nest-admin.hooks')
 

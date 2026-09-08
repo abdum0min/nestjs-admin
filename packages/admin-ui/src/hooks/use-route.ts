@@ -33,6 +33,14 @@ export type Route =
   | { readonly kind: 'dev' }
   /** The schema: its map, its report, and the metadata document. */
   | { readonly kind: 'schema' }
+  /**
+   * The audit trail. `~audit` for the reason `~team` is.
+   *
+   * `model` and `record` narrow it to one record's history, which is what the
+   * History button on a record links to - in the hash, so that history can be
+   * linked to and survives a reload.
+   */
+  | { readonly kind: 'audit'; readonly model?: string; readonly record?: string }
   | {
       readonly kind: 'list'
       readonly model: string
@@ -77,6 +85,13 @@ export function parseHash(hash: string): Route {
   if (model === '~team') return { kind: 'team' }
   if (model === '~dev') return { kind: 'dev' }
   if (model === '~schema') return { kind: 'schema' }
+  if (model === '~audit') {
+    return {
+      kind: 'audit',
+      ...(parameters.get('model') ? { model: parameters.get('model') as string } : {}),
+      ...(parameters.get('record') ? { record: parameters.get('record') as string } : {}),
+    }
+  }
   if (second === undefined) return { kind: 'list', model, ...(filter ? { filter } : {}) }
   if (second === 'new') return { kind: 'create', model, ...(from ? { from } : {}) }
   if (third === 'edit') return { kind: 'edit', model, id: second }
@@ -93,6 +108,13 @@ export function href(route: Route): string {
       return '#/~dev'
     case 'schema':
       return '#/~schema'
+    case 'audit': {
+      const params = new URLSearchParams()
+      if (route.model !== undefined) params.set('model', route.model)
+      if (route.record !== undefined) params.set('record', route.record)
+      const query = params.toString()
+      return `#/~audit${query === '' ? '' : `?${query}`}`
+    }
     case 'list':
       return (
         `#/${encodeURIComponent(route.model)}` +

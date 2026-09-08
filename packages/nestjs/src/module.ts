@@ -43,6 +43,9 @@ import { AdminAuthGuard } from './auth/guard.js'
 import { adminAccountOf, builtInRuntimeOf } from './auth/built-in.js'
 import type { AdminStorage } from '@nest-admin/core'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
+import { AdminAuditController } from './audit/controller.js'
+import { AuditService } from './audit/service.js'
+import type { AdminAuditConfig } from './audit/contract.js'
 import { AdminFilesController, type FilesRuntime } from './files/controller.js'
 import { AdminTransferController } from './transfer/controller.js'
 import { TransferService } from './transfer/service.js'
@@ -84,7 +87,9 @@ import {
   ADMIN_AUTH,
   ADMIN_HOOKS,
   ADMIN_MODELS,
+  ADMIN_AUDIT,
   ADMIN_NAVIGATION,
+  AUDIT_WIRING,
   ADMIN_MOUNT_PATH,
   ADMIN_OPTIONS,
   ADMIN_CAPABILITIES,
@@ -262,6 +267,20 @@ export interface AdminModuleOptions {
    * A name matching no model fails at startup.
    */
   readonly navigation?: AdminNavigation
+
+  /**
+   * Where to record what happens, and whether it can be put back.
+   *
+   * Absent records nothing, which is the default: an admin should not start
+   * writing a history into a table nobody chose. With a store, every write
+   * through the admin is recorded - who, when, which record, which fields -
+   * and the history screen and the undo path appear.
+   *
+   * It records what happened **in this admin**. A script or a migration changes
+   * the same rows and this will never know, which is worth saying to anyone who
+   * might otherwise conclude from a quiet log that nobody touched a record.
+   */
+  readonly audit?: AdminAuditConfig
 
   /**
    * Application code that runs around a write, per model.
@@ -572,6 +591,7 @@ function defineModule(
       AdminAuthController,
       AdminTeamController,
       AdminFilesController,
+      AdminAuditController,
       AdminTransferController,
       // Before the controller that owns `:model`, like every other literal.
       ...(devTools?.controllers ?? []),
@@ -585,6 +605,23 @@ function defineModule(
       { provide: ADMIN_THEME, useValue: theme },
       AdminService,
       TransferService,
+      AuditService,
+      /*
+       * The two are introduced to each other here, once.
+       *
+       * `AuditService` needs `AdminService` to decide which models a principal
+       * may read; `AdminService` needs somewhere to record. Injecting both ways
+       * is a cycle, so the trail is handed over after both exist - and the
+       * admin treats it as optional, because it is.
+       */
+      {
+        provide: AUDIT_WIRING,
+        inject: [AdminService, AuditService],
+        useFactory: (admin: AdminService, audit: AuditService) => {
+          admin.useAuditTrail(audit)
+          return true
+        },
+      },
       // The same instance, reachable by token. Anything in another
       // entrypoint holds a different copy of the class object and cannot ask
       // for it by name - see ADMIN_SERVICE in tokens.ts.
@@ -698,6 +735,7 @@ export class AdminModule {
         { provide: ADMIN_RESOURCES, useValue: options.resources },
         { provide: ADMIN_MODELS, useValue: options.models },
         { provide: ADMIN_NAVIGATION, useValue: options.navigation },
+        { provide: ADMIN_AUDIT, useValue: options.audit },
         { provide: ADMIN_HOOKS, useValue: options.hooks },
         { provide: ADMIN_ACTIONS, useValue: options.actions },
         { provide: ADMIN_DASHBOARD, useValue: options.dashboard },
@@ -770,6 +808,7 @@ export class AdminModule {
         derive(ADMIN_RESOURCES, (resolved) => resolved.resources),
         derive(ADMIN_MODELS, (resolved) => resolved.models),
         derive(ADMIN_NAVIGATION, (resolved) => resolved.navigation),
+        derive(ADMIN_AUDIT, (resolved) => resolved.audit),
         derive(ADMIN_HOOKS, (resolved) => resolved.hooks),
         derive(ADMIN_ACTIONS, (resolved) => resolved.actions),
         derive(ADMIN_DASHBOARD, (resolved) => resolved.dashboard),

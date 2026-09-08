@@ -40,6 +40,21 @@ export {
 } from './storage/storage.js'
 export { displayFieldFor } from './metadata/display-field.js'
 export {
+  diffRecords,
+  irreversibleReason,
+  reversible,
+  type AdminAuditOptions,
+  type AdminAuditStore,
+  type AuditAction,
+  type AuditActor,
+  type AuditChange,
+  type AuditEntry,
+  type AuditOutcome,
+  type AuditPage,
+  type AuditQuery,
+  type NewAuditEntry,
+} from './audit/audit.js'
+export {
   isNavigationGroup,
   isNavigationLink,
   unusableNavigation,

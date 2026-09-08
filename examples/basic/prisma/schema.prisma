@@ -277,3 +277,44 @@ model AdminAccount {
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
 }
+
+/// The audit trail.
+///
+/// A model of its own, beside AdminAccount rather than among the application's
+/// tables - and excluded from `resources` for the same reason that one is: a
+/// log anybody can edit is not a log, and the first thing somebody covering
+/// their tracks reaches for is the row describing what they did.
+///
+/// `changes` is text rather than Json, so the same schema works on SQLite and
+/// on PostgreSQL. The store writes JSON into it and reads it back.
+model AdminAuditEntry {
+  id String @id @default(cuid())
+
+  at DateTime @default(now())
+
+  actorId    String?
+  actorEmail String?
+  actorLabel String
+
+  action String
+  /// The model, or `*` for something that is not about one.
+  model  String
+
+  recordId    String?
+  recordLabel String?
+
+  changes String?
+  detail  String?
+  outcome String  @default("ok")
+
+  /// The entry this one reversed, on an undo.
+  undoOf String?
+
+  ip    String?
+  agent String?
+
+  /// What every query filters on: newest first, usually narrowed to a model or
+  /// a record. Without it the history page table-scans on every page.
+  @@index([at])
+  @@index([model, recordId, at])
+}

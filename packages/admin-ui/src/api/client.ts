@@ -24,6 +24,9 @@ import type {
   ListResult,
   Metadata,
   SuccessEnvelope,
+  Activity,
+  AuditEntry,
+  AuditResult,
   ImportOutcome,
   ImportPlan,
   ImportShape,
@@ -765,5 +768,54 @@ export async function runImport(
     `/import/${encodeURIComponent(model)}${importParams(mapping, matchBy)}`,
     fileBody(body),
   )
+  return data
+}
+
+/* ------------------------------------------------------------- audit trail */
+
+/** `GET /admin/audit` - a page of the trail, newest first. */
+export async function fetchAudit(query: {
+  readonly page?: number
+  readonly perPage?: number
+  readonly model?: string
+  readonly record?: string
+  readonly action?: string
+  readonly actor?: string
+}): Promise<AuditResult> {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') params.set(key, String(value))
+  }
+
+  const serialised = params.toString()
+  const envelope = await request<readonly AuditEntry[]>(
+    `/audit${serialised === '' ? '' : `?${serialised}`}`,
+  )
+
+  return {
+    entries: envelope.data,
+    meta: envelope.meta ?? { total: envelope.data.length, page: 1, perPage: envelope.data.length },
+  }
+}
+
+/** `GET /admin/audit/activity` - the number on the dashboard. */
+export async function fetchActivity(days?: number): Promise<Activity> {
+  const { data } = await request<Activity>(
+    `/audit/activity${days === undefined ? '' : `?days=${days}`}`,
+  )
+  return data
+}
+
+/**
+ * `POST /admin/audit/:id/undo` - put an entry back.
+ *
+ * Returns the record as it now stands, or `null` where the undo removed it.
+ * Refused where the record has moved since, which is a 400 carrying the reason
+ * - see the note on `AuditEntry.undoable`.
+ */
+export async function undoAudit(id: string): Promise<AdminRecord | null> {
+  const { data } = await request<AdminRecord | null>(`/audit/${encodeURIComponent(id)}/undo`, {
+    method: 'POST',
+  })
   return data
 }

@@ -6,7 +6,7 @@
  * sends that record's label alongside the key. A to-many gets its own
  * paginated section below the fields.
  */
-import { ChevronRight, Copy, Pencil, Trash2, Undo2 } from 'lucide-react'
+import { ChevronRight, Copy, History, Pencil, Trash2, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { deleteRecord, fetchRecord, restoreRecord } from '../api/client.js'
@@ -33,10 +33,13 @@ export function RecordView({
   model,
   models,
   id,
+  canViewAuditLog = false,
 }: {
   readonly model: ModelDescriptor
   readonly models: readonly ModelDescriptor[]
   readonly id: string
+  /** Whether there is a history to read and this role may read it. */
+  readonly canViewAuditLog?: boolean
 }) {
   const confirm = useConfirm()
   const state = useAsync(() => fetchRecord(model.name, id), [model.name, id])
@@ -151,6 +154,18 @@ export function RecordView({
                 </RailButton>
               )}
             </ActionRail>
+
+            {/* Last, and quiet: it changes nothing. Jazzmin and the Django
+                admin both put History here, and both are right - the question
+                "who touched this" is asked of a record, standing on it. */}
+            {canViewAuditLog ? (
+              <RailButton variant="ghost" asChild>
+                <a href={href({ kind: 'audit', model: model.name, record: id })}>
+                  <History />
+                  History
+                </a>
+              </RailButton>
+            ) : null}
 
             {/* The application's own, in a card of their own: they are not
                 variations on Edit and Delete, and a heading says so. */}

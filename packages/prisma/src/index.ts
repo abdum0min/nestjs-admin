@@ -14,4 +14,5 @@ export { PrismaSchemaInvalidError, PrismaSchemaNotFoundError } from './metadata/
 
 export { PrismaVersionUnsupportedError } from './client/version-gate.js'
 
+export { prismaAuditStore, type PrismaAuditStoreOptions } from './audit/store.js'
 export { prismaAccountStore, type PrismaAccountStoreOptions } from './auth/store.js'

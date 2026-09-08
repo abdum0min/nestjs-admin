@@ -33,6 +33,7 @@ import {
   type RecordId,
   type AdminNavigation,
   type ModelOverrides,
+  type NewAuditEntry,
   type ResourceSelection,
   selectModels,
   softDeleteFieldOf,
@@ -113,6 +114,52 @@ function readableFields(model: ModelMetadata): readonly FieldMetadata[] {
 
 export const MAX_BULK_DELETE = 200
 
+/**
+ * Operations whose refusal is worth a line in the audit trail.
+ *
+ * Writes only. A read is refused constantly and structurally - every metadata
+ * check on every model a principal cannot see is one - so recording those
+ * would bury the writes under thousands of lines a day, and the writes are what
+ * anybody opens the log to find.
+ */
+const WRITE_OPERATIONS: ReadonlySet<AdminOperation> = new Set([
+  'create',
+  'update',
+  'delete',
+  'action',
+])
+
+/**
+ * What this service needs of an audit trail, and nothing more.
+ *
+ * Declared here rather than imported, because the audit service depends on
+ * *this* one - it asks which models a principal may read - and importing it
+ * back would be a cycle. The module introduces them to each other once, after
+ * both exist.
+ */
+export interface AuditRecorder {
+  record(context: ExecutionContext, entry: Omit<NewAuditEntry, 'at' | 'actor'>): void
+  changesFor(
+    model: ModelMetadata,
+    before: RecordData | undefined,
+    after: RecordData,
+  ): Readonly<Record<string, { from: unknown; to: unknown }>>
+  labelFor(model: ModelMetadata, record: RecordData | undefined): string | undefined
+  /** Whether a hard delete should keep the record so it can be put back. */
+  readonly keepDeleted: boolean
+  /** Whether the store can be read back, and so whether a screen is offered. */
+  readonly readable: boolean
+}
+
+/** A record's own id, for an entry that has to name it. */
+function idOf(model: ModelMetadata, record: RecordData): RecordId | undefined {
+  const key = model.primaryKey[0]
+  if (key === undefined) return undefined
+
+  const value = record[key]
+  return typeof value === 'string' || typeof value === 'number' ? value : undefined
+}
+
 /** What happened to each record a bulk delete named. */
 export interface BulkDeleteResult {
   readonly deleted: readonly RecordId[]
@@ -143,6 +190,21 @@ export class AdminService implements OnModuleInit {
     private readonly concurrency: 'last-write-wins' | 'optimistic',
     @Inject(ADMIN_NAVIGATION) private readonly navigation: AdminNavigation | undefined,
   ) {}
+
+  /**
+   * The trail, when the application configured one.
+   *
+   * Set after construction rather than injected, and that is not laziness: the
+   * audit service needs `AdminService` to resolve which models a principal may
+   * read, so injecting it here would be a cycle. The module wires the two
+   * together once, and everything below treats it as optional because it is.
+   */
+  private trail: AuditRecorder | undefined
+
+  /** Called once by the module. See `trail`. */
+  useAuditTrail(recorder: AuditRecorder): void {
+    this.trail = recorder
+  }
 
   private readonly logger = new Logger('NestAdmin')
 
@@ -387,6 +449,10 @@ export class AdminService implements OnModuleInit {
         // One half only: export is always mounted, so this is the role's answer
         // and nothing else.
         exportData: this.can(context, 'exportData'),
+        // Three halves, and the interface cannot tell them apart - which is
+        // right. A build with no store, a store that cannot be read back, and
+        // a role without the capability are all "not part of this admin".
+        viewAuditLog: this.trail?.readable === true && this.can(context, 'viewAuditLog'),
       },
       // Only when the guard is on: naming a field the server will ignore would
       // suggest a protection that is not running.
@@ -447,6 +513,15 @@ export class AdminService implements OnModuleInit {
     const created = await this.adapter.create(model, prepared)
     await this.runAfter(context, model, 'afterCreate', { record: created })
 
+    this.trail?.record(context, {
+      action: 'create',
+      model,
+      recordId: idOf(metadata, created),
+      recordLabel: this.trail.labelFor(metadata, created),
+      changes: this.trail.changesFor(metadata, undefined, created),
+      outcome: 'ok',
+    })
+
     return this.project(metadata, created)
   }
 
@@ -480,8 +555,30 @@ export class AdminService implements OnModuleInit {
     if (current !== undefined) this.assertFresh(metadata, current, version)
 
     const prepared = await this.runBefore(context, metadata, 'beforeUpdate', data, id)
+
+    /*
+     * Read before the write when something is recording and the write path did
+     * not already need it.
+     *
+     * An update's diff is the only thing that makes an entry worth keeping -
+     * "changed Post" says nothing - and the old values are also what an undo
+     * writes back. One extra read per update, on an admin that asked for a
+     * trail.
+     */
+    const previous =
+      current ?? (this.trail === undefined ? undefined : await this.adapter.findOne(model, id))
+
     const updated = await this.adapter.update(model, id, prepared)
     await this.runAfter(context, model, 'afterUpdate', { id, record: updated })
+
+    this.trail?.record(context, {
+      action: 'update',
+      model,
+      recordId: id,
+      recordLabel: this.trail.labelFor(metadata, updated),
+      changes: this.trail.changesFor(metadata, previous ?? undefined, updated),
+      outcome: 'ok',
+    })
 
     return this.project(metadata, updated)
   }
@@ -593,7 +690,19 @@ export class AdminService implements OnModuleInit {
 
     if (scope.length > 0) await this.readInScope(metadata, id, scope)
 
-    return this.project(metadata, await this.adapter.update(model, id, { [field]: null }))
+    const restored = await this.adapter.update(model, id, { [field]: null })
+
+    this.trail?.record(context, {
+      action: 'restore',
+      model,
+      recordId: id,
+      recordLabel: this.trail.labelFor(metadata, restored),
+      // The column it cleared, so undoing a restore marks the record again.
+      changes: { [field]: { from: new Date().toISOString(), to: null } },
+      outcome: 'ok',
+    })
+
+    return this.project(metadata, restored)
   }
 
   /**
@@ -1047,7 +1156,29 @@ export class AdminService implements OnModuleInit {
     operation: AdminOperation,
   ): Promise<readonly FilterRule[]> {
     const decision = readDecision(await this.resourceAuth.authorize({ context, model, operation }))
-    if (!decision.allowed) throw new ForbiddenError()
+
+    if (!decision.allowed) {
+      /*
+       * A refused write is worth a line; a refused read is not.
+       *
+       * The interesting entries in an audit trail are the attempts that were
+       * turned away, and a write is always an attempt at something. Reads are
+       * refused constantly and structurally - every metadata check on every
+       * model this principal cannot see is one - so recording them would bury
+       * the writes under thousands of lines a day.
+       */
+      if (WRITE_OPERATIONS.has(operation)) {
+        this.trail?.record(context, {
+          action: 'denied',
+          model,
+          detail: `${operation} was refused by the policy.`,
+          outcome: 'refused',
+        })
+      }
+
+      throw new ForbiddenError()
+    }
+
     return decision.filters
   }
 
@@ -1118,10 +1249,51 @@ export class AdminService implements OnModuleInit {
     const before = this.hooks?.[model]?.beforeDelete
     if (before) await before({ context, model, id })
 
+    /*
+     * Read before removing, when something is recording.
+     *
+     * A soft delete keeps the row, so the entry needs only the marker to be
+     * undone - but it still needs the record's *name*, or the log reads "Deleted
+     * Post" forty times over. A hard delete keeps the record itself only where
+     * the application asked for it: that copy is every value of every row
+     * anybody ever deleted, kept for as long as the table is, which on a model
+     * holding personal data is a copy of exactly the thing somebody asked to
+     * have removed.
+     */
+    const metadata = this.trail === undefined ? undefined : await this.requireModel(model)
+    const kept =
+      metadata === undefined ? undefined : ((await this.adapter.findOne(model, id)) ?? undefined)
+
+    // One instant, used twice. Two `new Date()` calls are milliseconds apart,
+    // and the trail's freshness check compares the recorded value against the
+    // column - so a second one would mean no soft delete could ever be undone.
+    const markedAt = new Date()
+
     if (field === undefined) await this.adapter.delete(model, id)
-    else await this.adapter.update(model, id, { [field]: new Date() })
+    else await this.adapter.update(model, id, { [field]: markedAt })
 
     await this.runAfter(context, model, 'afterDelete', { id })
+
+    if (this.trail !== undefined && metadata !== undefined) {
+      const changes =
+        field !== undefined
+          ? // A soft delete is one column, and undoing it is clearing that
+            // column - which is exactly what Restore does.
+            { [field]: { from: null, to: markedAt.toISOString() } }
+          : this.trail.keepDeleted && kept !== undefined
+            ? this.trail.changesFor(metadata, undefined, kept)
+            : undefined
+
+      this.trail.record(context, {
+        action: 'delete',
+        model,
+        recordId: id,
+        recordLabel: this.trail.labelFor(metadata, kept),
+        ...(changes === undefined ? {} : { changes }),
+        ...(field === undefined ? { detail: 'Removed permanently.' } : {}),
+        outcome: 'ok',
+      })
+    }
   }
 
   /**
@@ -1216,6 +1388,37 @@ export class AdminService implements OnModuleInit {
    */
   async schema(): Promise<readonly ModelMetadata[]> {
     return this.exposedModels()
+  }
+
+  /**
+   * Would a write to this field be accepted?
+   *
+   * The same question `assertWritable` answers, asked in advance. The audit
+   * trail needs it: an entry may record a column a hook changed and the form
+   * would refuse, and an undo carrying that field would fail entirely rather
+   * than putting back the fields it could.
+   *
+   * `false` for a field this admin does not have, which is the safe direction:
+   * a name it cannot resolve is one it should not be writing.
+   */
+  async isWritable(model: string, field: string): Promise<boolean> {
+    const known = (await this.exposedModels()).find((candidate) => candidate.name === model)
+    const found = known?.fields.find((candidate) => candidate.name === field)
+    if (found === undefined) return false
+
+    return !isReadOnly(this.overrides, model, found)
+  }
+
+  /**
+   * The column that marks a record deleted on this model, if it has one.
+   *
+   * Public because the audit trail has to know: undoing a delete on a model
+   * that marks its rows is the Restore operation, and it cannot be an ordinary
+   * update - the marker is read-only precisely so that nothing can delete a
+   * record by editing a form.
+   */
+  softDeleteFieldOf(model: string): string | undefined {
+    return this.softDeleteField(model)
   }
 
   /** Throws `ForbiddenError` unless the policy allows it. Returns its row scope. */

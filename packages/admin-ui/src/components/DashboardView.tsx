@@ -21,9 +21,9 @@
  * its filter with it, and the number itself is the link target rather than a
  * "view" affordance tucked in a corner.
  */
-import { ArrowDownRight, ArrowRight, ArrowUpRight, TriangleAlert } from 'lucide-react'
+import { ArrowDownRight, ArrowRight, ArrowUpRight, History, TriangleAlert } from 'lucide-react'
 
-import { fetchDashboard } from '../api/client.js'
+import { fetchActivity, fetchDashboard } from '../api/client.js'
 import type {
   ChartData,
   CountData,
@@ -59,7 +59,12 @@ const SPAN: Readonly<Record<number, string>> = {
   4: 'sm:col-span-2 lg:col-span-4',
 }
 
-export function DashboardView() {
+export function DashboardView({
+  canViewAuditLog = false,
+}: {
+  /** Whether there is a history to read and this role may read it. */
+  readonly canViewAuditLog?: boolean
+} = {}) {
   const dashboard = useAsync(() => fetchDashboard(), [])
 
   return (
@@ -68,6 +73,8 @@ export function DashboardView() {
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-sm">An overview of your data.</p>
       </div>
+
+      {canViewAuditLog ? <Activity /> : null}
 
       {dashboard.loading ? (
         <DashboardSkeleton />
@@ -380,5 +387,89 @@ function DashboardSkeleton() {
       ))}
       <span className="sr-only">Loading dashboard…</span>
     </div>
+  )
+}
+
+/**
+ * What has been happening, above the numbers.
+ *
+ * Not a configured widget. Every other card on this page is something the
+ * application declared, and this is not about the application's data at all -
+ * it is about the admin. It appears wherever there is a history to read, which
+ * is what somebody asking "has anyone touched anything today" means.
+ *
+ * The count is the answer; the lines under it are why the answer is that. A
+ * number on its own would send everybody to the history screen to find out
+ * what it was made of.
+ */
+function Activity() {
+  const activity = useAsync(() => fetchActivity(), [])
+
+  // Silent on failure, deliberately. This is context beside the real
+  // dashboard, and an error banner about a card nobody asked for would be
+  // louder than the thing it interrupts.
+  if (activity.error !== undefined) return null
+
+  if (activity.loading && activity.data === undefined) {
+    return <Skeleton className="h-32 w-full rounded-xl" />
+  }
+
+  const data = activity.data
+  if (data === undefined) return null
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+        <div className="flex flex-col gap-1">
+          <CardTitle className="flex items-center gap-2">
+            <History className="text-muted-foreground size-4" aria-hidden="true" />
+            Activity
+          </CardTitle>
+          <CardDescription>
+            {formatNumber(data.count)} {data.count === 1 ? 'change' : 'changes'} in the last{' '}
+            {data.days} days.
+          </CardDescription>
+        </div>
+
+        <a
+          className="text-link inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
+          href={href({ kind: 'audit' })}
+        >
+          All of it
+          <ArrowRight className="size-3.5" aria-hidden="true" />
+        </a>
+      </CardHeader>
+
+      <CardContent>
+        {data.recent.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Nothing yet.</p>
+        ) : (
+          <ul className="divide-y text-sm">
+            {data.recent.map((entry) => (
+              <li key={entry.id} className="flex items-baseline gap-3 py-2 first:pt-0 last:pb-0">
+                <span className="text-muted-foreground w-32 shrink-0 truncate text-xs">
+                  {entry.actor}
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                  {entry.recordId === undefined || entry.model === '*' ? (
+                    entry.summary
+                  ) : (
+                    <a
+                      className="hover:text-link transition-colors"
+                      href={href({ kind: 'detail', model: entry.model, id: entry.recordId })}
+                    >
+                      {entry.summary}
+                    </a>
+                  )}
+                </span>
+                <span className="text-muted-foreground shrink-0 text-xs whitespace-nowrap tabular-nums">
+                  {new Date(entry.at).toLocaleString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   )
 }

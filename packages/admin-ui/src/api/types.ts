@@ -429,6 +429,69 @@ export interface Capabilities {
 
   /** Whether this role may download a model as a CSV or JSON file. */
   readonly exportData?: boolean
+
+  /**
+   * Whether there is a history to read and this role may read it.
+   *
+   * Three conditions the server does not distinguish and neither should this:
+   * no audit store, a store that only writes, and a role without the
+   * capability all mean the same thing here.
+   */
+  readonly viewAuditLog?: boolean
+}
+
+export interface AuditChange {
+  readonly field: string
+  readonly from: unknown
+  readonly to: unknown
+}
+
+/** One line of the trail, as the server prepared it. */
+export interface AuditEntry {
+  readonly id: string
+  readonly at: string
+  readonly actor: string
+  readonly actorEmail?: string
+  readonly action: string
+  readonly model: string
+  readonly recordId?: string
+  readonly recordLabel?: string
+  readonly outcome: string
+  readonly detail?: string
+  readonly undoOf?: string
+  readonly changes?: readonly AuditChange[]
+  /** One line for the table, so a row is readable without opening it. */
+  readonly summary: string
+  /**
+   * Whether this could be put back - structurally.
+   *
+   * It says nothing about whether this principal may, or whether the record has
+   * moved since. Both are decided when the undo is attempted, because both can
+   * change between drawing the button and pressing it.
+   */
+  readonly undoable: boolean
+  readonly undoableReason?: string
+}
+
+export interface AuditResult {
+  readonly entries: readonly AuditEntry[]
+  readonly meta: { readonly total: number; readonly page: number; readonly perPage: number }
+}
+
+/** The dashboard's card: a number, and the last few lines behind it. */
+export interface Activity {
+  readonly count: number
+  readonly days: number
+  readonly recent: readonly {
+    readonly id: string
+    readonly at: string
+    readonly actor: string
+    readonly action: string
+    readonly model: string
+    readonly recordId?: string
+    readonly recordLabel?: string
+    readonly summary: string
+  }[]
 }
 
 /* ------------------------------------------------------------ import/export */
