@@ -47,6 +47,9 @@ jobs:
       - name: Format
         run: pnpm format:check
 
+      - name: Lint
+        run: pnpm lint
+
       # Before typecheck: packages resolve each other's declarations from dist.
       - name: Build
         run: pnpm build

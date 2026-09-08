@@ -336,12 +336,12 @@ describe('theme', () => {
     const block = (scope: string) =>
       new RegExp(
         scope +
-          '\{--primary:(#[0-9a-f]{6});--primary-foreground:(#[0-9a-f]{6});--link:(#[0-9a-f]{6})\}',
+          '\\{--primary:(#[0-9a-f]{6});--primary-foreground:(#[0-9a-f]{6});--link:(#[0-9a-f]{6})\\}',
         'i',
       ).exec(shell)
 
     const light = block(':root')
-    const dark = block('\.dark')
+    const dark = block('\\.dark')
 
     expect(light).not.toBeNull()
     expect(dark).not.toBeNull()

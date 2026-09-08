@@ -12,6 +12,9 @@
  * Nothing here inspects a header, a cookie, or a token, and nothing here knows
  * what a user is.
  */
+// Referenced by `{@link}` below rather than in code. TypeScript counts that
+// as a use and reports the link when the import goes; ESLint does not see it.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ForbiddenError, UnauthorizedError } from '@nest-admin/core'
 import { Logger, type ExecutionContext } from '@nestjs/common'
 

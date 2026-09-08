@@ -197,7 +197,6 @@ describe('read-only fields', () => {
     const sent: unknown[] = []
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (isSessionProbe(url)) return NO_LOGIN_ROUTES
-      const path = String(url).replace('/admin', '')
       if (init?.method === 'POST') {
         sent.push(JSON.parse(String(init.body)))
         return { status: 201, json: async () => envelope({ id: 'u9' }) } as unknown as Response

@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { INestApplication } from '@nestjs/common'
 import request from 'supertest'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 
 import { createAdminApp } from './app.js'
 import { InMemoryAdapter } from './in-memory-adapter.js'

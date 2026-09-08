@@ -20,7 +20,7 @@ import { ArrowUpRight, Info, Link2, Unlink } from 'lucide-react'
 import { useState } from 'react'
 
 import { attachRelated, detachRelated, listRelated } from '../api/client.js'
-import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
+import type { FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { href } from '../hooks/use-route.js'
 import { fieldLabel, listColumns, modelLabel, recordId } from '../metadata/fields.js'

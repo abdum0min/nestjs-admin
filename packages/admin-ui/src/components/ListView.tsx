@@ -171,7 +171,10 @@ export function ListView({
     setOutcome(undefined)
     setDeleted('live')
     setTransfer(undefined)
-  }, [model.name, initialFilter])
+    // `model` as well as its name: the effect reads its configured sort, and a
+    // dependency list that names one and uses the other is how a reset stops
+    // resetting the day the models array is rebuilt.
+  }, [model, model.name, initialFilter])
 
   // Debounce the search box so typing does not fire a request per keystroke.
   useEffect(() => {

@@ -21,7 +21,6 @@
  */
 import { Logger, type Provider } from '@nestjs/common'
 
-import { ADMIN_DEV_TOOLS } from '../tokens.js'
 import type { DevToolsContribution, DevToolsOptions } from './contract.js'
 import { DevToolsController } from './controller.js'
 import { deploymentSignal } from './deployed.js'

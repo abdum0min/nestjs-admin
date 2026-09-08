@@ -86,7 +86,8 @@ describe('missing required values', () => {
   it('extracts the field from the argument phrase', () => {
     const failure = toConstraintError(
       validation(
-        'Invalid `prisma.user.create()` invocation in\nD:\app\node_modules\pkg\adapter.js:41:9\n\nArgument `email` is missing.',
+        'Invalid `prisma.user.create()` invocation in\n' +
+          'D:\\app\\node_modules\\pkg\\adapter.js:41:9\n\nArgument `email` is missing.',
       ),
       'User',
     )
@@ -98,7 +99,7 @@ describe('missing required values', () => {
   it('never forwards the error text, which renders the call site and the data', () => {
     const failure = toConstraintError(
       validation(
-        'Invalid invocation in D:\secret\app.js:1:1\n{ password: "hunter2" }\n\nArgument `email` is missing.',
+        'Invalid invocation in D:\\secret\\app.js:1:1\n{ password: "hunter2" }\n\nArgument `email` is missing.',
       ),
       'User',
     )
