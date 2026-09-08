@@ -11,12 +11,15 @@ breaking change is listed below with what to do about it.
 Published to npm as [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs)
 since `0.11.0`. See [docs/roadmap.md](docs/roadmap.md).
 
-**Not every version below reached npm.** `0.12.0`, `0.13.0` and `0.14.1` were
-finished and then folded into the patch that followed, because something worth
-fixing turned up before the release went out. They are documented as their own
-entries because that is where the work belongs; on npm their contents arrived in
-`0.12.1`, `0.13.1` and `0.14.2`. Released versions are
-`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2 · 0.14.3 · 0.15.0`.
+**Not every version below reached npm.** `0.12.0`, `0.13.0`, `0.14.1` and
+`0.15.0` were finished and then folded into the release that followed, because
+something worth fixing turned up before they went out. They are documented as
+their own entries because that is where the work belongs; on npm their contents
+arrived in `0.12.1`, `0.13.1`, `0.14.2` and `0.16.0`. Released versions are
+`0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2 · 0.14.3 · 0.16.0`.
+
+Checked against `npm view @nest-admin/nestjs versions` rather than remembered,
+because this note has been wrong before.
 
 ---
 

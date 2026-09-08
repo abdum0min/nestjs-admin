@@ -47,9 +47,9 @@ interface had stopped changing shape, and a second adapter had proved the
 **1300+ tests, 67/67 packed-consumer checks, published as
 [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs).**
 
-Three of the versions above never reached npm - `0.12.0`, `0.13.0` and `0.14.1`
-were folded into the patch that followed. See the note at the top of the
-changelog.
+Four of the versions above never reached npm - `0.12.0`, `0.13.0`, `0.14.1` and
+`0.15.0` were folded into the release that followed. See the note at the top of
+the changelog.
 
 Where the project stands in full, including risks and carried debt:
 [`project-state.md`](project-state.md).
