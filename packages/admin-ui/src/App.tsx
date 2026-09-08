@@ -180,7 +180,7 @@ function Admin({
       {...shellProps}
     >
       {route.kind === 'home' ? (
-        <DashboardView canViewAuditLog={metadata.data?.capabilities?.viewAuditLog === true} />
+        <DashboardView />
       ) : route.kind === 'dev' ? (
         <DevToolsView />
       ) : route.kind === 'schema' ? (

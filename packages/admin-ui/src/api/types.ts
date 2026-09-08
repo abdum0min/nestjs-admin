@@ -356,7 +356,7 @@ export type WidgetSpan = 1 | 2 | 3 | 4
 
 export interface WidgetDescriptor {
   readonly id: string
-  readonly kind: 'count' | 'list' | 'chart' | 'stat'
+  readonly kind: 'count' | 'list' | 'chart' | 'stat' | 'activity'
   readonly title: string
   readonly description?: string
   readonly span: WidgetSpan
@@ -478,8 +478,13 @@ export interface AuditResult {
   readonly meta: { readonly total: number; readonly page: number; readonly perPage: number }
 }
 
-/** The dashboard's card: a number, and the last few lines behind it. */
-export interface Activity {
+/**
+ * The dashboard's activity card: a number, and the last few lines behind it.
+ *
+ * Arrives inside the dashboard document like every other widget's data, so the
+ * page is one request.
+ */
+export interface ActivityData {
   readonly count: number
   readonly days: number
   readonly recent: readonly {

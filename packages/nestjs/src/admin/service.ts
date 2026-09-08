@@ -149,6 +149,8 @@ export interface AuditRecorder {
   readonly keepDeleted: boolean
   /** Whether the store can be read back, and so whether a screen is offered. */
   readonly readable: boolean
+  /** The dashboard's card. Scoped and authorized by the trail itself. */
+  activity(context: ExecutionContext, days: number, limit: number): Promise<unknown>
 }
 
 /** A record's own id, for an entry that has to name it. */
@@ -404,12 +406,27 @@ export class AdminService implements OnModuleInit {
       if (decision.filters.length > 0) scopes.set(model.name, decision.filters)
     }
 
+    // Captured once: `readable` is what says the store can answer at all, and
+    // the capability is checked by the trail when the closure runs.
+    const trail =
+      this.trail?.readable === true && this.can(context, 'viewAuditLog') ? this.trail : undefined
+
     return buildDashboard({
       adapter: this.adapter,
       models: permitted,
       declared: this.dashboard,
       context,
       scopes,
+      /*
+       * Only where there is a trail this principal may read.
+       *
+       * Passed as a closure rather than as a service: the dashboard module
+       * neither imports the audit trail nor knows what one is, and the absence
+       * of this function is how it learns there is nothing to show.
+       */
+      ...(trail === undefined
+        ? {}
+        : { activity: (days: number, limit: number) => trail.activity(context, days, limit) }),
       labels: Object.fromEntries(
         Object.entries(this.overrides ?? {}).map(([name, override]) => [name, override?.label]),
       ),

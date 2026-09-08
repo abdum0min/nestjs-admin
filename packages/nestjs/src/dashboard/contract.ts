@@ -106,7 +106,27 @@ export interface StatResult {
   readonly hint?: string
 }
 
-export type DashboardWidget = CountWidget | ListWidget | ChartWidget | StatWidget
+/**
+ * What has been happening in the admin lately.
+ *
+ * The one widget that is not about the application's data. It appears only
+ * where an audit trail is configured and this role may read it, and it is a
+ * widget rather than something the dashboard adds on its own so that **where**
+ * it sits is the application's decision like every other card here.
+ *
+ * Declare it nowhere and it is appended at the end at half width, which is a
+ * default rather than a placement: a history is context beside the numbers, not
+ * the headline above them.
+ */
+export interface ActivityWidget extends Common {
+  readonly kind: 'activity'
+  /** How far back the count reaches. Seven days by default. */
+  readonly days?: number
+  /** How many lines under the number. Five by default. */
+  readonly limit?: number
+}
+
+export type DashboardWidget = CountWidget | ListWidget | ChartWidget | StatWidget | ActivityWidget
 
 /**
  * The dashboard an application declares.
@@ -118,7 +138,9 @@ export type AdminDashboard = readonly DashboardWidget[]
 
 /** Which model a widget reads, when it reads one. Used to authorize it. */
 export function modelOf(widget: DashboardWidget): string | undefined {
-  return widget.kind === 'stat' ? undefined : widget.model
+  // Two read no model at all: a stat runs the application's own code, and
+  // activity is about the admin rather than about the data.
+  return widget.kind === 'stat' || widget.kind === 'activity' ? undefined : widget.model
 }
 
 /** How wide a widget is when it does not say. */
@@ -129,6 +151,10 @@ export function defaultSpan(widget: DashboardWidget): WidgetSpan {
     case 'chart':
       return 2
     case 'list':
+      return 2
+    // Half width: a handful of short lines under a number. Full width was the
+    // first thing anybody looking at it asked to change.
+    case 'activity':
       return 2
     default:
       return 1

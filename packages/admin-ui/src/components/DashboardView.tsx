@@ -21,10 +21,11 @@
  * its filter with it, and the number itself is the link target rather than a
  * "view" affordance tucked in a corner.
  */
-import { ArrowDownRight, ArrowRight, ArrowUpRight, History, TriangleAlert } from 'lucide-react'
+import { ArrowDownRight, ArrowRight, ArrowUpRight, TriangleAlert } from 'lucide-react'
 
-import { fetchActivity, fetchDashboard } from '../api/client.js'
+import { fetchDashboard } from '../api/client.js'
 import type {
+  ActivityData,
   ChartData,
   CountData,
   Dashboard,
@@ -59,12 +60,7 @@ const SPAN: Readonly<Record<number, string>> = {
   4: 'sm:col-span-2 lg:col-span-4',
 }
 
-export function DashboardView({
-  canViewAuditLog = false,
-}: {
-  /** Whether there is a history to read and this role may read it. */
-  readonly canViewAuditLog?: boolean
-} = {}) {
+export function DashboardView() {
   const dashboard = useAsync(() => fetchDashboard(), [])
 
   return (
@@ -73,8 +69,6 @@ export function DashboardView({
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-sm">An overview of your data.</p>
       </div>
-
-      {canViewAuditLog ? <Activity /> : null}
 
       {dashboard.loading ? (
         <DashboardSkeleton />
@@ -137,6 +131,8 @@ function Widget({ widget }: { readonly widget: WidgetDescriptor }) {
       return <ListWidget widget={widget} />
     case 'chart':
       return <ChartWidget widget={widget} />
+    case 'activity':
+      return <ActivityWidget widget={widget} />
     default:
       // A kind this build does not know. Newer server, older bundle - a real
       // deployment, since the interface ships inside the package and a page may
@@ -391,65 +387,40 @@ function DashboardSkeleton() {
 }
 
 /**
- * What has been happening, above the numbers.
+ * What has been happening, as one card among the others.
  *
- * Not a configured widget. Every other card on this page is something the
- * application declared, and this is not about the application's data at all -
- * it is about the admin. It appears wherever there is a history to read, which
- * is what somebody asking "has anyone touched anything today" means.
+ * It arrives with the rest of the dashboard rather than fetching for itself,
+ * so the page is still one request - and it is an ordinary widget, so where it
+ * sits and how wide it is are the application's decision like every other card
+ * here. It was full width and first, once. That was the first thing anybody
+ * looking at it asked to change.
  *
  * The count is the answer; the lines under it are why the answer is that. A
- * number on its own would send everybody to the history screen to find out
- * what it was made of.
+ * number alone sends everybody to the history screen to find out what it was
+ * made of.
  */
-function Activity() {
-  const activity = useAsync(() => fetchActivity(), [])
-
-  // Silent on failure, deliberately. This is context beside the real
-  // dashboard, and an error banner about a card nobody asked for would be
-  // louder than the thing it interrupts.
-  if (activity.error !== undefined) return null
-
-  if (activity.loading && activity.data === undefined) {
-    return <Skeleton className="h-32 w-full rounded-xl" />
-  }
-
-  const data = activity.data
+function ActivityWidget({ widget }: { readonly widget: WidgetDescriptor }) {
+  const data = widget.data as ActivityData | undefined
   if (data === undefined) return null
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <div className="flex flex-col gap-1">
-          <CardTitle className="flex items-center gap-2">
-            <History className="text-muted-foreground size-4" aria-hidden="true" />
-            Activity
-          </CardTitle>
-          <CardDescription>
-            {formatNumber(data.count)} {data.count === 1 ? 'change' : 'changes'} in the last{' '}
-            {data.days} days.
-          </CardDescription>
+    <WidgetCard widget={widget}>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-baseline gap-2">
+          <span className="text-3xl leading-none font-semibold tabular-nums">
+            {formatNumber(data.count)}
+          </span>
+          <span className="text-muted-foreground text-sm">
+            {data.count === 1 ? 'change' : 'changes'} in {data.days} days
+          </span>
         </div>
 
-        <a
-          className="text-link inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
-          href={href({ kind: 'audit' })}
-        >
-          All of it
-          <ArrowRight className="size-3.5" aria-hidden="true" />
-        </a>
-      </CardHeader>
-
-      <CardContent>
         {data.recent.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing yet.</p>
         ) : (
           <ul className="divide-y text-sm">
-            {data.recent.map((entry) => (
-              <li key={entry.id} className="flex items-baseline gap-3 py-2 first:pt-0 last:pb-0">
-                <span className="text-muted-foreground w-32 shrink-0 truncate text-xs">
-                  {entry.actor}
-                </span>
+            {data.recent.map((entry: ActivityData['recent'][number]) => (
+              <li key={entry.id} className="flex items-baseline gap-2 py-1.5 first:pt-0 last:pb-0">
                 <span className="min-w-0 flex-1 truncate">
                   {entry.recordId === undefined || entry.model === '*' ? (
                     entry.summary
@@ -462,14 +433,20 @@ function Activity() {
                     </a>
                   )}
                 </span>
-                <span className="text-muted-foreground shrink-0 text-xs whitespace-nowrap tabular-nums">
-                  {new Date(entry.at).toLocaleString()}
-                </span>
+                <span className="text-muted-foreground shrink-0 text-xs">{entry.actor}</span>
               </li>
             ))}
           </ul>
         )}
-      </CardContent>
-    </Card>
+
+        <a
+          className="text-link inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
+          href={href({ kind: 'audit' })}
+        >
+          All of it
+          <ArrowRight className="size-3.5" aria-hidden="true" />
+        </a>
+      </div>
+    </WidgetCard>
   )
 }

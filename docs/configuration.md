@@ -1230,9 +1230,29 @@ every permission in the admin.
 
 ### Where it appears
 
-A **History** entry in the sidebar, a **History** button on every record, and a
-card on the dashboard counting the last seven days. All three appear only where
-there is a history to read and this role may read it.
+A **History** entry in the sidebar, a **History** button on every record, and an
+**activity widget** on the dashboard. All three appear only where there is a
+history to read and this role may read it.
+
+The widget is an ordinary dashboard widget, so where it sits and how wide it is
+are yours:
+
+```ts
+dashboard: [
+  { kind: 'count', title: 'Customers', model: 'User' },
+  { kind: 'activity', title: 'Lately', days: 30, limit: 8, span: 2 },
+]
+```
+
+| Option  | Default        |
+| ------- | -------------- |
+| `days`  | 7              |
+| `limit` | 5              |
+| `span`  | 2 — half width |
+
+Declare none and one is **appended at the end** at half width. That is a
+default rather than a placement: a history is context beside the numbers, not
+the headline above them. Declare one anywhere and it takes over completely.
 
 ### A store of your own
 

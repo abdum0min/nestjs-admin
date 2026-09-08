@@ -44,7 +44,7 @@ const logger = new Logger('NestAdmin')
 /** A widget as it crosses the wire. */
 export interface WidgetDto {
   readonly id: string
-  readonly kind: 'count' | 'list' | 'chart' | 'stat'
+  readonly kind: 'count' | 'list' | 'chart' | 'stat' | 'activity'
   readonly title: string
   readonly description?: string
   readonly span: WidgetSpan
@@ -92,6 +92,15 @@ export interface DashboardInput {
   readonly declared: AdminDashboard | undefined
   readonly context: ExecutionContext
   /**
+   * What has been happening, when there is a trail and this role may read it.
+   *
+   * A function rather than a service, so this module stays ignorant of the
+   * audit trail entirely - it neither imports it nor knows what it is. Absent
+   * means no activity widget: a declared one is dropped rather than rendered as
+   * a card that failed, because "not part of this admin" is not a failure.
+   */
+  readonly activity?: (days: number, limit: number) => Promise<unknown>
+  /**
    * Row-level scopes, by model, for the principal this document is being built
    * for. A model absent from the map is unscoped.
    *
@@ -120,14 +129,30 @@ export async function buildDashboard(input: DashboardInput): Promise<DashboardDt
 
   const visible = new Set(input.models.map((model) => model.name))
 
+  /*
+   * Appended, not prepended, and only when nobody placed one.
+   *
+   * A history is context beside the numbers rather than the headline above
+   * them. Declaring an `activity` widget anywhere in `dashboard` takes this
+   * over completely - position, width, title and window.
+   */
+  const withActivity =
+    input.activity !== undefined && !widgets.some((widget) => widget.kind === 'activity')
+      ? [...widgets, { kind: 'activity' as const, title: 'Activity' }]
+      : widgets
+
   const resolved = await Promise.all(
-    widgets
+    withActivity
       // Dropped before anything is queried, so a dashboard cannot count rows
       // of a table this principal may not open.
       .filter((widget) => {
         const model = modelOf(widget)
         return model === undefined || visible.has(model)
       })
+      // A declared activity widget in an admin with no readable trail is not a
+      // failure to render - there is nothing for it to show, and a card saying
+      // so would be noise on every page load.
+      .filter((widget) => widget.kind !== 'activity' || input.activity !== undefined)
       .map((widget, index) => resolve(widget, index, input)),
   )
 
@@ -197,8 +222,10 @@ async function resolve(
     title: widget.title,
     span: widget.span ?? defaultSpan(widget),
     ...(widget.description !== undefined ? { description: widget.description } : {}),
-    ...(widget.kind !== 'stat' ? { model: widget.model } : {}),
-    ...(widget.kind !== 'stat' && widget.filter !== undefined ? { filter: widget.filter } : {}),
+    ...(widget.kind === 'stat' || widget.kind === 'activity' ? {} : { model: widget.model }),
+    ...(widget.kind === 'stat' || widget.kind === 'activity' || widget.filter === undefined
+      ? {}
+      : { filter: widget.filter }),
   } satisfies Omit<WidgetDto, 'data' | 'failed'>
 
   try {
@@ -222,6 +249,12 @@ async function dataFor(widget: DashboardWidget, input: DashboardInput): Promise<
       return listOf(widget, input)
     case 'chart':
       return chartOf(widget, input)
+    case 'activity':
+      // The trail decides what it will show; this only says how much.
+      return (input.activity as NonNullable<DashboardInput['activity']>)(
+        widget.days ?? 7,
+        widget.limit ?? 5,
+      )
   }
 }
 

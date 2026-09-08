@@ -46,6 +46,7 @@ import { Inject, Injectable, Logger, type ExecutionContext } from '@nestjs/commo
 
 import { AdminService } from '../admin/service.js'
 import type { AdminAuditConfig } from './contract.js'
+import { toActivity } from './dto.js'
 import { adminAccountOf } from '../auth/built-in.js'
 import type { AdminCapability } from '../auth/roles.js'
 import { ADMIN_AUDIT, ADMIN_CAPABILITIES, ADMIN_SERVICE } from '../tokens.js'
@@ -170,6 +171,23 @@ export class AuditService {
   async read(context: ExecutionContext, id: string): Promise<AuditEntry> {
     const entry = await this.entry(context, id)
     return entry
+  }
+
+  /**
+   * The dashboard's card: a count, and the last few lines behind it.
+   *
+   * Returns nothing where there is no readable trail or this role may not read
+   * it, so the dashboard can drop the widget rather than draw one that failed.
+   */
+  async activity(context: ExecutionContext, days: number, limit: number): Promise<unknown> {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+    const [count, page] = await Promise.all([
+      this.countSince(context, since),
+      this.list(context, { since, page: 1, perPage: limit }),
+    ])
+
+    return toActivity(count, days, page.data)
   }
 
   /** How many entries since a moment, for the dashboard. */

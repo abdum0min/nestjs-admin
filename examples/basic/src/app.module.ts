@@ -325,6 +325,22 @@ function dashboard(prisma: PrismaService) {
       model: 'Order',
       limit: 6,
     },
+    /*
+     * What has been happening in the admin, beside the latest orders.
+     *
+     * Declared, so its position and width are decided here rather than by the
+     * dashboard. Leaving it out entirely still shows it - appended at the end
+     * at half width - because a history is context beside the numbers rather
+     * than the headline above them.
+     */
+    {
+      kind: 'activity',
+      title: 'Activity',
+      description: 'Changes made through this admin.',
+      days: 7,
+      limit: 5,
+      span: 2,
+    },
   ] as const satisfies AdminDashboard
 }
 

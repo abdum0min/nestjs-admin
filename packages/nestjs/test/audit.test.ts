@@ -288,6 +288,53 @@ describe('reading it back', () => {
     expect(body.data.days).toBe(7)
     expect(body.data.recent[0].summary).toContain('Changed name')
   })
+
+  /*
+   * It is a widget rather than something the dashboard adds on its own, so an
+   * application can put it where it wants. Appended at half width when nobody
+   * places one, because a history is context beside the numbers.
+   */
+  it('appears on the dashboard as a widget, last and half width', async () => {
+    const http = await boot()
+
+    const { body } = await request(http).get('/admin/dashboard').expect(200)
+    const widgets = body.data.widgets as { kind: string; span: number }[]
+
+    expect(widgets.at(-1)?.kind).toBe('activity')
+    expect(widgets.at(-1)?.span).toBe(2)
+    expect(widgets.filter((widget) => widget.kind === 'activity')).toHaveLength(1)
+  })
+
+  it('goes where the application puts it, at the width it asks for', async () => {
+    const http = await boot({
+      dashboard: [
+        { kind: 'activity', title: 'Lately', span: 1 },
+        { kind: 'count', title: 'People', model: 'User' },
+      ],
+    })
+
+    const { body } = await request(http).get('/admin/dashboard').expect(200)
+    const widgets = body.data.widgets as { kind: string; span: number; title: string }[]
+
+    expect(widgets[0]?.kind).toBe('activity')
+    expect(widgets[0]?.title).toBe('Lately')
+    expect(widgets[0]?.span).toBe(1)
+    // Declared once means once - the default is not appended beside it.
+    expect(widgets.filter((widget) => widget.kind === 'activity')).toHaveLength(1)
+  })
+
+  it('is absent from the dashboard of a role that may not read it', async () => {
+    const http = await boot({
+      roles: { viewer: { models: { User: '*' } } },
+      roleOf: (() => 'viewer') as RoleResolver,
+      dashboard: [{ kind: 'activity', title: 'Lately' }],
+    })
+
+    const { body } = await request(http).get('/admin/dashboard').expect(200)
+    // Dropped rather than drawn as a card that failed: "not part of this
+    // admin" is not a failure.
+    expect(body.data.widgets).toHaveLength(0)
+  })
 })
 
 describe('undo', () => {

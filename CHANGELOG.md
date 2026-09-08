@@ -58,11 +58,16 @@ Who changed what, and the ability to put it back.
   restore by deleting again. An application action cannot be undone, and says
   so: it ran code this admin did not write.
 
-- **A History screen**, a **History button on every record**, and a card on the
-  dashboard counting the last seven days with the most recent lines behind it.
-  All three appear only where there is a history to read and the role may read
-  it. The Django admin and Jazzmin both put History on the record, and both are
-  right — "who touched this" is a question asked while standing on it.
+- **A History screen**, a **History button on every record**, and an
+  **`activity` dashboard widget** — a count of a window with the most recent
+  lines behind it. All three appear only where there is a history to read and
+  the role may read it. The Django admin and Jazzmin both put History on the
+  record, and both are right — "who touched this" is a question asked while
+  standing on it.
+
+  The widget is an ordinary widget, so `dashboard` decides where it sits and
+  how wide it is. Declare none and one is appended at the end at half width:
+  a history is context beside the numbers rather than the headline above them.
 
 - **`viewAuditLog`**, a new `AdminCapability`. **The trail is scoped to the
   models the reader can already see**: an entry carries the values of the record

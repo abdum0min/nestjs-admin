@@ -24,7 +24,6 @@ import type {
   ListResult,
   Metadata,
   SuccessEnvelope,
-  Activity,
   AuditEntry,
   AuditResult,
   ImportOutcome,
@@ -796,14 +795,6 @@ export async function fetchAudit(query: {
     entries: envelope.data,
     meta: envelope.meta ?? { total: envelope.data.length, page: 1, perPage: envelope.data.length },
   }
-}
-
-/** `GET /admin/audit/activity` - the number on the dashboard. */
-export async function fetchActivity(days?: number): Promise<Activity> {
-  const { data } = await request<Activity>(
-    `/audit/activity${days === undefined ? '' : `?days=${days}`}`,
-  )
-  return data
 }
 
 /**
