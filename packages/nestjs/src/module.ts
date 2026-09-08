@@ -44,6 +44,9 @@ import { adminAccountOf, builtInRuntimeOf } from './auth/built-in.js'
 import type { AdminStorage } from '@nest-admin/core'
 import { allowAllResources, type AdminResourceAuth } from './auth/resource.js'
 import { AdminAuditController } from './audit/controller.js'
+import { AdminPagesController } from './pages/controller.js'
+import { PagesService } from './pages/service.js'
+import type { AdminPages } from './pages/contract.js'
 import { AuditService } from './audit/service.js'
 import type { AdminAuditConfig } from './audit/contract.js'
 import { AdminFilesController, type FilesRuntime } from './files/controller.js'
@@ -89,6 +92,7 @@ import {
   ADMIN_MODELS,
   ADMIN_AUDIT,
   ADMIN_NAVIGATION,
+  ADMIN_PAGES,
   AUDIT_WIRING,
   ADMIN_MOUNT_PATH,
   ADMIN_OPTIONS,
@@ -267,6 +271,21 @@ export interface AdminModuleOptions {
    * A name matching no model fails at startup.
    */
   readonly navigation?: AdminNavigation
+
+  /**
+   * Pages this admin has beside the ones generated from the schema.
+   *
+   * A page is a path, a title, and one of three bodies: `widgets` for a screen
+   * of the dashboard's own cards, `module` for one your application writes in
+   * the browser, `url` for one that already exists elsewhere.
+   *
+   * They live at `#/~<path>`, cannot collide with a model, and change nothing
+   * about a generated screen. An admin with none behaves exactly as it did
+   * before pages existed.
+   *
+   * A bad path, a duplicate, or two bodies on one page fails at startup.
+   */
+  readonly pages?: AdminPages
 
   /**
    * Where to record what happens, and whether it can be put back.
@@ -593,6 +612,7 @@ function defineModule(
       AdminFilesController,
       AdminAuditController,
       AdminTransferController,
+      AdminPagesController,
       // Before the controller that owns `:model`, like every other literal.
       ...(devTools?.controllers ?? []),
       AdminController,
@@ -606,6 +626,7 @@ function defineModule(
       AdminService,
       TransferService,
       AuditService,
+      PagesService,
       /*
        * The two are introduced to each other here, once.
        *
@@ -633,7 +654,20 @@ function defineModule(
       AdminAuthGuard,
       AdminExceptionFilter,
     ],
-    exports: [AdminService, ADMIN_SERVICE],
+    /*
+     * `ADMIN_AUTH` is exported alongside the guard, and it has to be.
+     *
+     * `@UseGuards(AdminAuthGuard)` on a controller in another module does not
+     * borrow this module's instance - Nest constructs the guard in the module
+     * that declares the controller, and then needs its dependency resolvable
+     * there. Exporting the class alone gets as far as "AdminAuthGuard cannot
+     * resolve Symbol(nest-admin.auth)", which is a true statement about a
+     * confusing situation.
+     *
+     * The token carries the `AdminAuth` the consumer supplied in the first
+     * place, so this hands back only what they handed in.
+     */
+    exports: [AdminService, ADMIN_SERVICE, AdminAuthGuard, ADMIN_AUTH],
   }
 }
 
@@ -735,6 +769,7 @@ export class AdminModule {
         { provide: ADMIN_RESOURCES, useValue: options.resources },
         { provide: ADMIN_MODELS, useValue: options.models },
         { provide: ADMIN_NAVIGATION, useValue: options.navigation },
+        { provide: ADMIN_PAGES, useValue: options.pages },
         { provide: ADMIN_AUDIT, useValue: options.audit },
         { provide: ADMIN_HOOKS, useValue: options.hooks },
         { provide: ADMIN_ACTIONS, useValue: options.actions },
@@ -808,6 +843,7 @@ export class AdminModule {
         derive(ADMIN_RESOURCES, (resolved) => resolved.resources),
         derive(ADMIN_MODELS, (resolved) => resolved.models),
         derive(ADMIN_NAVIGATION, (resolved) => resolved.navigation),
+        derive(ADMIN_PAGES, (resolved) => resolved.pages),
         derive(ADMIN_AUDIT, (resolved) => resolved.audit),
         derive(ADMIN_HOOKS, (resolved) => resolved.hooks),
         derive(ADMIN_ACTIONS, (resolved) => resolved.actions),

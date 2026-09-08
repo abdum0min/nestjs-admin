@@ -19,6 +19,7 @@ the order you actually need it. This page is for looking things up.
 - [`hooks`](#hooks)
 - [`actions`](#actions)
 - [`navigation`](#navigation)
+- [`pages`](#pages)
 - [`audit`](#audit)
 - [`dashboard`](#dashboard)
 - [Import and export](#import-and-export)
@@ -1291,11 +1292,11 @@ navigation: [
 ]
 ```
 
-| Entry   | Keys                                  |
-| ------- | ------------------------------------- |
-| A group | `heading?`, `models`, `collapsed?`    |
-| A link  | `label`, `href`, `icon?`, `external?` |
-| A rule  | `divider: true`                       |
+| Entry   | Keys                                          |
+| ------- | --------------------------------------------- |
+| A group | `heading?`, `models?`, `pages?`, `collapsed?` |
+| A link  | `label`, `href`, `icon?`, `external?`         |
+| A rule  | `divider: true`                               |
 
 **Nothing disappears by being left out.** A model named in no group lands in a
 final group called Other. Adding a model to the schema and finding it missing
@@ -1318,6 +1319,154 @@ href is the reason, and the rule is a whitelist so there is nothing to keep up
 with. An absolute URL opens in a new tab unless you say otherwise.
 
 A model name matching nothing, or claimed by two groups, is a startup error.
+
+A group may also list [`pages`](#pages), which appear under the same heading
+after the models. The rule is the same one models have: a page named in no
+group lands in Other rather than disappearing.
+
+---
+
+## `pages`
+
+Screens this admin has beside the ones generated from your schema. A factory
+option, and absent by default.
+
+Every other screen here is derived — a model becomes a list, a column becomes a
+field. That covers a great deal and has one failure mode: the moment an
+application needs a screen its schema does not imply, the admin becomes
+something to replace rather than extend.
+
+A page is a **path**, a **title**, and one of three **bodies**.
+
+```ts
+pages: [
+  { path: 'health', title: 'Shop health', widgets: [...] },
+  { path: 'reconciliation', title: 'Reconciliation', module: '/admin-pages/recon.js' },
+  { path: 'runbook', title: 'Runbook', url: '/docs/runbook.html' },
+]
+```
+
+| Body      | You write          | Reach for it when                     |
+| --------- | ------------------ | ------------------------------------- |
+| `widgets` | configuration only | numbers and lists, like the dashboard |
+| `module`  | a browser module   | your own screen, against your own API |
+| `url`     | nothing here       | a page that already exists elsewhere  |
+
+They are three fillings of one shape rather than three features. Declaring more
+than one on a page is a type error.
+
+### What a page cannot do
+
+It lives at `#/~<path>`, in the same namespace as the History and Team screens.
+The tilde is not a legal first character for a model in any ORM this supports,
+so **a page can never shadow a resource**, however either is named.
+
+It cannot alter a generated screen, add a field, or change what a list shows.
+That is the point: the admin you already have must keep working exactly as it
+did for someone who adds ten pages.
+
+**A page that fails is contained.** A module that throws on import or on render
+is drawn as a failure in the content area; the navigation, the theme and every
+other screen are untouched.
+
+`path` is lowercase letters, digits and dashes. `team`, `dev`, `schema` and
+`audit` are taken. A duplicate, a reserved path, or a `module` pointing at
+another origin is a startup error.
+
+### `widgets`
+
+The dashboard's own vocabulary — `count`, `list`, `chart`, `stat`, `activity` —
+resolved by the same code and **authorized the same way**. A widget over a model
+this principal cannot see is absent here exactly as it is on the dashboard, so
+a page cannot become a way around a permission.
+
+"A second dashboard, about one thing" covers a surprising share of what people
+build an admin page for, and it needs no code at all.
+
+### `module`
+
+Your own component, written in the browser.
+
+`module` is a root-relative path to an ES module your application serves as a
+static file. It is imported when the route is opened — so a page nobody visits
+costs nothing — and its default export is rendered.
+
+**No build step.** The module is handed React, a fetch helper and a few
+components on `window.NestAdmin`:
+
+```js
+const { h, React, api, href, ui } = window.NestAdmin
+
+export default function Reconciliation() {
+  const [data, setData] = React.useState(null)
+  React.useEffect(() => {
+    api('/reports/summary').then((response) => setData(response.data))
+  }, [])
+
+  return h('p', null, data ? `${data.pending} awaiting payment` : 'Loading…')
+}
+```
+
+`h` is `React.createElement` — without a build step there is no JSX. It is the
+admin's own React instance, so hooks work. An application that already builds a
+frontend can bundle instead, marking React external.
+
+`api` is relative to the admin's mount point, so `'/reports/summary'` reaches
+`/admin/reports/summary` and carries the admin's session.
+
+An absolute URL for `module` is refused: it would run code from a host somebody
+else controls on a page holding a session that can write to every table. Serve
+the file from your own application.
+
+### The API behind it: `AdminAuthGuard`
+
+A custom page needs endpoints, and those need the protection the admin already
+has. The guard is exported:
+
+```ts
+import { AdminAuthGuard } from '@nest-admin/nestjs'
+
+@Controller('admin/reports')
+@UseGuards(AdminAuthGuard)
+export class ReportsController {
+  @Get('summary')
+  summary() { … }
+}
+```
+
+Declare the controller in the module that imports `AdminModule.forRoot(…)` so
+Nest can resolve it. It calls the same [`auth`](#auth) the admin was configured
+with — one session, one policy, one place to change either. Without this, adding
+a page would mean writing authentication a second time, and one of the two would
+be the weaker.
+
+### `url`
+
+A document, in a sandboxed frame inside the admin's chrome. The escape hatch for
+a reporting tool or a legacy screen that should not have to be rewritten to sit
+behind the same navigation.
+
+A same-origin page gets `allow-same-origin`; an `https` page from elsewhere does
+not, because a document given it could reach the admin's own page. A tool that
+needs its own session should be served from your origin.
+
+### `can`
+
+Who may open it:
+
+```ts
+{ path: 'runbook', title: 'Runbook', url: '/runbook.html',
+  can: (context) => builtInRoleOf()(context) !== 'editor' }
+```
+
+A function rather than a capability name, because a page is yours and so is the
+rule about who sees it — `capabilities` is a closed set this package owns.
+Omitted means everyone who can reach the admin, the same default a model without
+`resourceAuth` has.
+
+**It is checked on the request, not only on the sidebar.** A page left out of
+the navigation is still at a typeable URL, so the page route asks again. A `can`
+that throws is a refusal, never an allow.
 
 ---
 

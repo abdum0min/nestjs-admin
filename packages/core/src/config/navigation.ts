@@ -31,8 +31,22 @@ export interface NavigationGroup {
    */
   readonly heading?: string
 
-  /** Model names, in the order they should appear under the heading. */
-  readonly models: readonly string[]
+  /**
+   * Model names, in the order they should appear under the heading.
+   *
+   * Optional so a heading can hold only custom pages. A group with neither
+   * models nor pages is refused at startup rather than drawn empty.
+   */
+  readonly models?: readonly string[]
+
+  /**
+   * Custom page paths, listed after the models under the same heading.
+   *
+   * The same rule `models` has, deliberately: a page named in no group is not
+   * hidden, it lands with the leftovers. There is nothing new to learn here
+   * beyond the key's name.
+   */
+  readonly pages?: readonly string[]
 
   /** Start folded. The viewer's own choice, once made, wins over this. */
   readonly collapsed?: boolean
@@ -73,7 +87,7 @@ export type NavigationEntry = NavigationGroup | NavigationLink | NavigationDivid
 export type AdminNavigation = readonly NavigationEntry[]
 
 export function isNavigationGroup(entry: NavigationEntry): entry is NavigationGroup {
-  return 'models' in entry
+  return 'models' in entry || 'pages' in entry
 }
 
 export function isNavigationLink(entry: NavigationEntry): entry is NavigationLink {
@@ -91,15 +105,22 @@ const SAFE_LABEL = /^[^<>&"'`\\]{1,64}$/
  * At startup, with the model names checked against the schema: a heading whose
  * models were all misspelled would otherwise be an empty group, and an empty
  * group looks exactly like a permission working correctly.
+ *
+ * `pages` are the custom page paths this admin has, checked the same way and
+ * for the same reason - a heading pointing at a page that was renamed is a
+ * sidebar entry that quietly stopped existing.
  */
 export function unusableNavigation(
   navigation: AdminNavigation | undefined,
   models: readonly string[],
+  pages: readonly string[] = [],
 ): readonly string[] {
   if (!navigation) return []
 
   const known = new Set(models)
+  const knownPages = new Set(pages)
   const seen = new Set<string>()
+  const seenPages = new Set<string>()
   const problems: string[] = []
 
   for (const [index, entry] of navigation.entries()) {
@@ -129,7 +150,11 @@ export function unusableNavigation(
       problems.push(`${at}.heading must be plain text of at most 64 characters.`)
     }
 
-    for (const model of entry.models) {
+    if ((entry.models?.length ?? 0) === 0 && (entry.pages?.length ?? 0) === 0) {
+      problems.push(`${at} has neither \`models\` nor \`pages\`, so it would be an empty heading.`)
+    }
+
+    for (const model of entry.models ?? []) {
       if (!known.has(model)) {
         problems.push(
           `${at} lists "${model}", which is not a model this admin has. ` +
@@ -142,6 +167,21 @@ export function unusableNavigation(
       // twice, and clicking either would highlight both.
       if (seen.has(model)) problems.push(`${at} lists "${model}", which an earlier group claims.`)
       seen.add(model)
+    }
+
+    for (const page of entry.pages ?? []) {
+      if (!knownPages.has(page)) {
+        problems.push(
+          `${at}.pages lists "${page}", which is not a page this admin has. ` +
+            `Known pages: ${pages.length === 0 ? 'none' : pages.join(', ')}.`,
+        )
+        continue
+      }
+
+      if (seenPages.has(page)) {
+        problems.push(`${at}.pages lists "${page}", which an earlier group claims.`)
+      }
+      seenPages.add(page)
     }
   }
 

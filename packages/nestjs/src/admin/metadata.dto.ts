@@ -16,6 +16,7 @@
  * @experimental The HTTP contract is expected to change before 1.0.
  */
 import { toBytes } from '../files/sniff.js'
+import type { PageDto } from '../pages/dto.js'
 import {
   detachBlockedReason,
   displayFieldFor,
@@ -214,6 +215,8 @@ export type NavigationDto =
       readonly kind: 'group'
       readonly heading?: string
       readonly models: readonly string[]
+      /** Custom page paths under the same heading, drawn after the models. */
+      readonly pages?: readonly string[]
       readonly collapsed?: boolean
     }
   | {
@@ -366,6 +369,16 @@ export interface MetadataDto {
    * Absent means what it has always meant: one flat list, in model order.
    */
   readonly navigation?: readonly NavigationDto[]
+
+  /**
+   * Pages the application added, already filtered to the ones this principal
+   * may open.
+   *
+   * Absent means this admin has none, which is the default. Each carries only
+   * what drawing it needs - a `widgets` page's contents are fetched when it is
+   * opened, so ten pages cost ten titles here and nothing more.
+   */
+  readonly pages?: readonly PageDto[]
 }
 
 /**
@@ -520,15 +533,17 @@ export function toMetadataDto(
   uploadCeiling?: number,
   /** The navigation the application declared, if it did. */
   navigation?: AdminNavigation,
+  /** Custom pages, already filtered to the ones this principal may open. */
+  pages: readonly PageDto[] = [],
 ): MetadataDto {
   const present = new Set(models.map((model) => model.name))
   const ordered = byOrder(models, (model) => overrides?.[model.name]?.order)
+  const resolved = resolveNavigation(navigation, ordered, pages)
 
   return {
     capabilities,
-    ...(resolveNavigation(navigation, ordered) !== undefined
-      ? { navigation: resolveNavigation(navigation, ordered) }
-      : {}),
+    ...(resolved !== undefined ? { navigation: resolved } : {}),
+    ...(pages.length > 0 ? { pages } : {}),
     models: ordered.map((model) => ({
       name: model.name,
       primaryKey: [...model.primaryKey],
@@ -615,11 +630,14 @@ function detailOf(
 function resolveNavigation(
   navigation: AdminNavigation | undefined,
   models: readonly ModelMetadata[],
+  pages: readonly PageDto[] = [],
 ): readonly NavigationDto[] | undefined {
   if (navigation === undefined) return undefined
 
   const visible = new Set(models.map((model) => model.name))
+  const visiblePages = new Set(pages.map((page) => page.path))
   const claimed = new Set<string>()
+  const claimedPages = new Set<string>()
   const entries: NavigationDto[] = []
 
   for (const entry of navigation) {
@@ -644,24 +662,46 @@ function resolveNavigation(
 
     if (!isNavigationGroup(entry)) continue
 
-    const named = entry.models.filter((name) => {
+    const named = (entry.models ?? []).filter((name) => {
       if (!visible.has(name) || claimed.has(name)) return false
       claimed.add(name)
       return true
     })
 
-    if (named.length === 0) continue
+    const namedPages = (entry.pages ?? []).filter((path) => {
+      if (!visiblePages.has(path) || claimedPages.has(path)) return false
+      claimedPages.add(path)
+      return true
+    })
+
+    // A heading whose every model was denied and whose every page was refused
+    // is separating nothing, and drawing it would announce the existence of
+    // what the permission just hid.
+    if (named.length === 0 && namedPages.length === 0) continue
 
     entries.push({
       kind: 'group',
       ...(entry.heading !== undefined ? { heading: entry.heading } : {}),
       ...(entry.collapsed !== undefined ? { collapsed: entry.collapsed } : {}),
       models: named,
+      ...(namedPages.length > 0 ? { pages: namedPages } : {}),
     })
   }
 
   const rest = models.filter((model) => !claimed.has(model.name)).map((model) => model.name)
-  if (rest.length > 0) entries.push({ kind: 'group', heading: 'Other', models: rest })
+  const restPages = pages.filter((page) => !claimedPages.has(page.path)).map((page) => page.path)
+
+  // The same rule models have had since grouping existed: what nobody placed
+  // is collected rather than dropped. A page that vanished from the sidebar
+  // because a heading was edited is the bug this prevents.
+  if (rest.length > 0 || restPages.length > 0) {
+    entries.push({
+      kind: 'group',
+      heading: 'Other',
+      models: rest,
+      ...(restPages.length > 0 ? { pages: restPages } : {}),
+    })
+  }
 
   return tidyDividers(entries)
 }

@@ -140,6 +140,15 @@ export const ADMIN_ACTIONS = Symbol.for('nest-admin.actions')
  */
 export const ADMIN_DASHBOARD = Symbol.for('nest-admin.dashboard')
 
+/**
+ * Pages the application added beside the generated ones.
+ *
+ * Absent is the default and the common case. A page lives in the `~` route
+ * namespace and adds nothing to a generated screen, so an admin with none
+ * behaves exactly as it did before pages existed.
+ */
+export const ADMIN_PAGES = Symbol.for('nest-admin.pages')
+
 /** Branding the served page applies without a rebuild. */
 export const ADMIN_THEME = Symbol.for('nest-admin.theme')
 

@@ -176,6 +176,8 @@ export type NavigationEntry =
       readonly kind: 'group'
       readonly heading?: string
       readonly models: readonly string[]
+      /** Custom page paths under the same heading, drawn after the models. */
+      readonly pages?: readonly string[]
       readonly collapsed?: boolean
     }
   | {
@@ -241,7 +243,34 @@ export interface Metadata {
    * than this feature - which means one flat list, as it always was.
    */
   readonly navigation?: readonly NavigationEntry[]
+  /**
+   * Pages the application added, already filtered to the ones this principal
+   * may open.
+   *
+   * Absent from a server with none and from every server older than this
+   * feature, which are the same thing from here: an admin whose screens are
+   * all generated.
+   */
+  readonly pages?: readonly PageDescriptor[]
 }
+
+/**
+ * A custom page, as the metadata carries it.
+ *
+ * Only what drawing the sidebar entry and choosing a renderer needs. A widget
+ * page's contents are fetched when it is opened, so the document does not grow
+ * with the number of pages an admin has.
+ */
+export type PageDescriptor = {
+  readonly path: string
+  readonly title: string
+  readonly description?: string
+  readonly icon?: ModelIcon
+} & (
+  | { readonly kind: 'widgets' }
+  | { readonly kind: 'module'; readonly module: string }
+  | { readonly kind: 'embed'; readonly url: string }
+)
 
 /** A record as it crosses the wire. Values are whatever JSON allows. */
 export type AdminRecord = Record<string, unknown>

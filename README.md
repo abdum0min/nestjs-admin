@@ -2,12 +2,10 @@
 
 An admin panel for NestJS applications, generated from your ORM schema.
 
-> **Status: 0.17.0, published.** Everything described below works and is
-> tested against a real database, a real NestJS HTTP server and the built
-> interface. The API is not frozen — 0.x means it may still change, and 1.0.0
-> is planned once row-level authorization lands. See
-> [docs/project-state.md](docs/project-state.md) for what exists, what does
-> not, and the open risks.
+> **Status: 0.18.0.** Everything described below works and is tested against a
+> real database, a real NestJS HTTP server and the built interface. The API is
+> not frozen — 0.x means it may still change. What is left before 1.0.0 is in
+> [docs/roadmap.md](docs/roadmap.md).
 
 Add one module to an existing application and get list, create, read, update
 and delete screens for every model in your schema — with search, filters,
@@ -49,12 +47,14 @@ Open `/admin`.
 | **Authorization**         | Roles, per-model permissions and row-level scoping, enforced on the server; invisible resources absent from the API |
 | **Per-field control**     | Labels, widgets, ordering, hidden, read-only, write-only                                                            |
 | **Your own rules**        | Hooks around every write, and buttons the interface draws from configuration                                        |
+| **A history**             | Who changed what, field by field, with undo that refuses to overwrite a later edit                                  |
+| **Your own pages**        | A screen the schema does not imply: declared widgets, your own component, or a document you already serve           |
 | **Two ORMs**              | Prisma and Drizzle, behind one contract                                                                             |
 
 ## Installing
 
 ```bash
-npm install @nest-admin/nestjs        # not published yet
+npm install @nest-admin/nestjs
 ```
 
 One package. The adapter you use is a subpath of it:
@@ -72,14 +72,19 @@ An application that never imports one never loads its code. Requires Node
 Stated plainly, because the alternative is finding out later:
 
 - **Not a CMS.** It administers the schema you have; it does not define one.
-- **Not a page builder.** Widgets and actions are declared in configuration and
-  drawn by the interface. There is no way to ship your own React component into
-  it, and there deliberately never has been — that would mean every consumer
-  runs a front-end build.
+- **Not a page builder.** The generated screens are generated: you configure
+  them, you do not compose them. A page of your own is a separate screen at its
+  own route, and it cannot reach into a list or a record form.
+
+  You _can_ ship your own component — that is what a `module` page is — and it
+  still costs you no front-end build: React and a fetch helper are handed to a
+  plain `.js` file your application serves. What has not changed is the rule
+  that made this a constraint in the first place: **installing this package
+  never obliges you to run a bundler.**
+
 - **Not a permission store.** Roles and row-level scoping exist, but who holds
   which role is your application's to decide — the admin reads a role and never
   grants one.
-- **Not published.** See the status note above.
 
 ## How it fits together
 

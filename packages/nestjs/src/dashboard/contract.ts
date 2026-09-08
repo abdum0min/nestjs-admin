@@ -7,10 +7,12 @@
  * the interface has to know how to draw each one, so an open string would mean
  * rendering nothing and no way to notice.
  *
- * It is also the line this release does not cross. An arbitrary React component
- * would mean the consuming application builds and bundles one, which is exactly
- * the thing this package exists not to make people do - and the reason custom
- * pages have been out of scope since 0.6.0.
+ * Closed here on purpose, and it stayed closed when custom pages arrived. A
+ * page written by the application is a `pages` entry with a `module` body,
+ * loaded at its own route; the dashboard is still built from widgets this
+ * interface knows how to draw. Letting one widget be arbitrary code would have
+ * put a consumer's component inside a grid it does not control, on the one
+ * screen everybody sees first.
  *
  * ## Three of them are declarative on purpose
  *

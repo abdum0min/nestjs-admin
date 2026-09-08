@@ -48,6 +48,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type ExecutionContext,
   type OnModuleInit,
 } from '@nestjs/common'
@@ -55,6 +56,8 @@ import {
 import { builtInRuntimeOf } from '../auth/built-in.js'
 import { buildDashboard, type DashboardDto } from '../dashboard/service.js'
 import type { AdminDashboard } from '../dashboard/contract.js'
+import { unusablePages, type AdminPages } from '../pages/contract.js'
+import { visiblePages } from '../pages/visible.js'
 import type { AdminAuth } from '../auth/contract.js'
 import { readDecision, type AdminOperation, type AdminResourceAuth } from '../auth/resource.js'
 import type { AdminCapability } from '../auth/roles.js'
@@ -75,6 +78,7 @@ import {
   ADMIN_HOOKS,
   ADMIN_MODELS,
   ADMIN_NAVIGATION,
+  ADMIN_PAGES,
   ADMIN_RESOURCE_AUTH,
   ADMIN_RESOURCES,
 } from '../tokens.js'
@@ -191,6 +195,13 @@ export class AdminService implements OnModuleInit {
     @Inject(ADMIN_CONCURRENCY)
     private readonly concurrency: 'last-write-wins' | 'optimistic',
     @Inject(ADMIN_NAVIGATION) private readonly navigation: AdminNavigation | undefined,
+    // The declarations, not the resolved pages: which of them this principal
+    // may open is a question asked per request, in `getMetadata`.
+    //
+    // `@Optional` because an admin with no pages should not have to provide the
+    // token to say so, and because a wiring assembled before pages existed has
+    // to keep resolving. Absent and empty mean the same thing here.
+    @Optional() @Inject(ADMIN_PAGES) private readonly pages: AdminPages | undefined,
   ) {}
 
   /**
@@ -239,9 +250,18 @@ export class AdminService implements OnModuleInit {
       selectModels(schema, this.resources),
       this.overrides,
     )
+    // Before the navigation, because navigation can name a page: reporting
+    // "no page called reports" first, when the real mistake is the page's own
+    // path, would send the reader to the wrong line.
+    const brokenPages = unusablePages(this.pages)
+    if (brokenPages.length > 0) {
+      throw new Error(`AdminModule \`pages\` cannot be drawn:\n  ${brokenPages.join('\n  ')}`)
+    }
+
     const brokenNavigation = unusableNavigation(
       this.navigation,
       selectModels(schema, this.resources).map((model) => model.name),
+      (this.pages ?? []).map((page) => page.path),
     )
     if (brokenNavigation.length > 0) {
       throw new Error(
@@ -390,6 +410,25 @@ export class AdminService implements OnModuleInit {
    * code that answers it for the metadata document.
    */
   async getDashboard(context: ExecutionContext): Promise<DashboardDto> {
+    // The only caller that gets an activity card it did not ask for. That is
+    // the dashboard's rule, not a rule about widgets - see `appendActivity`.
+    return this.resolveWidgets(context, this.dashboard, true)
+  }
+
+  /**
+   * Declared widgets, resolved for this principal.
+   *
+   * The dashboard is one caller; a custom page built from `widgets` is the
+   * other. Shared rather than reimplemented so that a widget means exactly the
+   * same thing on both - same authorization, same scopes, same labels. A second
+   * resolver would be a second place for "which models may this person count"
+   * to drift, and that question has one right answer.
+   */
+  async resolveWidgets(
+    context: ExecutionContext,
+    declared: AdminDashboard | undefined,
+    appendActivity = false,
+  ): Promise<DashboardDto> {
     const models = await this.exposedModels()
     const permitted: ModelMetadata[] = []
     const scopes = new Map<string, readonly FilterRule[]>()
@@ -414,7 +453,8 @@ export class AdminService implements OnModuleInit {
     return buildDashboard({
       adapter: this.adapter,
       models: permitted,
-      declared: this.dashboard,
+      declared,
+      appendActivity,
       context,
       scopes,
       /*
@@ -476,6 +516,9 @@ export class AdminService implements OnModuleInit {
       (model) => (this.concurrency === 'optimistic' ? updatedFieldFor(model) : undefined),
       (this.files as { maxSize?: number } | undefined)?.maxSize,
       this.navigation,
+      // Filtered here rather than in the interface: a page this principal may
+      // not open is absent from the document, the same way a hidden model is.
+      await visiblePages(this.pages, context),
     )
   }
 

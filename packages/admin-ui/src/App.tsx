@@ -19,11 +19,17 @@ import {
 import { useEffect, useState, type ComponentType } from 'react'
 
 import { devDoctor, fetchMetadata, fetchSession, onUnauthorized } from './api/client.js'
-import type { AdminAccountSummary, ModelDescriptor, NavigationEntry } from './api/types.js'
+import type {
+  AdminAccountSummary,
+  ModelDescriptor,
+  NavigationEntry,
+  PageDescriptor,
+} from './api/types.js'
 import { CommandPalette, useCommandPalette } from './components/CommandPalette.jsx'
 import { DashboardView } from './components/DashboardView.jsx'
 import { AuditView } from './components/AuditView.jsx'
 import { DevToolsView } from './components/DevToolsView.jsx'
+import { PageView } from './components/PageView.jsx'
 import { SchemaView } from './components/SchemaView.jsx'
 import { TeamView } from './components/TeamView.jsx'
 import { ListView } from './components/ListView.jsx'
@@ -142,11 +148,16 @@ function Admin({
   }
 
   const models = metadata.data?.models ?? []
+  const pages = metadata.data?.pages ?? []
 
   // An empty model list is a valid, authorized response - the server returns
   // 200 with no models when resource authorization hides everything. Treating
   // it as an error would misreport a working system.
-  if (models.length === 0) {
+  //
+  // Pages are checked too, because a page is not a resource: a role that can
+  // see no table but has one screen built for it would otherwise be told this
+  // admin has nothing in it, with the screen it exists for not even drawn.
+  if (models.length === 0 && pages.length === 0) {
     return (
       <Shell {...shellProps}>
         <Empty>
@@ -161,15 +172,24 @@ function Admin({
     route.kind === 'team' ||
     route.kind === 'dev' ||
     route.kind === 'schema' ||
-    route.kind === 'audit'
+    route.kind === 'audit' ||
+    route.kind === 'page'
       ? undefined
       : models.find((m) => m.name === route.model)
+
+  // The hash names a page; the metadata says whether there is one. A path with
+  // no page is not distinguishable here from one this principal may not open,
+  // and must not be - see the resource case below, which has the same shape.
+  const openPage =
+    route.kind === 'page' ? pages.find((page) => page.path === route.path) : undefined
 
   return (
     <Shell
       models={models}
       {...(metadata.data?.navigation ? { navigation: metadata.data.navigation } : {})}
+      pages={pages}
       activeModel={active?.name}
+      {...(openPage === undefined ? {} : { activePage: openPage.path })}
       canManageTeam={metadata.data?.capabilities?.manageTeam === true}
       canUseDevTools={canUseDevTools}
       brokenCount={broken}
@@ -191,6 +211,20 @@ function Admin({
           {...(route.model === undefined ? {} : { model: route.model })}
           {...(route.record === undefined ? {} : { record: route.record })}
         />
+      ) : route.kind === 'page' ? (
+        openPage === undefined ? (
+          // Same wording and same reason as an unavailable resource: the page
+          // may not exist or may be closed to this principal, and the interface
+          // cannot tell the two apart. Guessing would leak which it is.
+          <Empty>
+            <p className="text-foreground font-medium">Page not available</p>
+            <p>“{route.path}” is not one of the pages you can open.</p>
+          </Empty>
+        ) : (
+          // Keyed by path so the error boundary inside resets when the reader
+          // moves from a page that threw to one that works.
+          <PageView key={openPage.path} page={openPage} />
+        )
       ) : route.kind === 'team' ? (
         // Rendered only when the metadata says so. Reaching the URL without the
         // capability still gets a page - one whose first request is refused,
@@ -279,7 +313,9 @@ const SIDEBAR_KEY = 'nest-admin.sidebar'
 function Shell({
   models = [],
   navigation,
+  pages = [],
   activeModel,
+  activePage,
   account,
   onSignedOut,
   canManageTeam = false,
@@ -295,7 +331,11 @@ function Shell({
   readonly models?: readonly ModelDescriptor[]
   /** How to group them, when the application said. Resolved by the server. */
   readonly navigation?: readonly NavigationEntry[]
+  /** Pages the application added, already filtered by the server. */
+  readonly pages?: readonly PageDescriptor[]
   readonly activeModel?: string
+  /** The open page, when one is. */
+  readonly activePage?: string
   /** Absent when the application brought its own authentication. */
   readonly account?: AdminAccountSummary | undefined
   /** Whether to offer the team screen. Decided by the server, not here. */
@@ -455,7 +495,9 @@ function Shell({
             <ResourceNav
               models={models}
               {...(navigation ? { navigation } : {})}
+              pages={pages}
               activeModel={activeModel}
+              activePage={activePage}
               collapsed={collapsed}
               activeHome={activeHome}
               canUseDevTools={canUseDevTools}
@@ -503,7 +545,9 @@ function Shell({
               <ResourceNav
                 models={models}
                 {...(navigation ? { navigation } : {})}
+                pages={pages}
                 activeModel={activeModel}
+                activePage={activePage}
                 collapsed={false}
                 activeHome={activeHome}
                 canUseDevTools={canUseDevTools}
@@ -536,7 +580,9 @@ function Shell({
 function ResourceNav({
   models,
   navigation,
+  pages = [],
   activeModel,
+  activePage,
   collapsed,
   canUseDevTools = false,
   canViewAuditLog = false,
@@ -555,7 +601,10 @@ function ResourceNav({
    * there is no filtering to do and no risk of drawing an empty heading.
    */
   readonly navigation?: readonly NavigationEntry[]
+  /** Pages the application added, already filtered by the server. */
+  readonly pages?: readonly PageDescriptor[]
   readonly activeModel?: string
+  readonly activePage?: string
   readonly collapsed: boolean
   readonly canUseDevTools?: boolean
   readonly canViewAuditLog?: boolean
@@ -586,14 +635,27 @@ function ResourceNav({
         />
       </li>
       {navigation === undefined
-        ? models.map((model) => (
-            <ModelLink
-              key={model.name}
-              model={model}
-              activeModel={activeModel}
-              collapsed={collapsed}
-            />
-          ))
+        ? [
+            ...models.map((model) => (
+              <ModelLink
+                key={`model:${model.name}`}
+                model={model}
+                activeModel={activeModel}
+                collapsed={collapsed}
+              />
+            )),
+            // With no navigation declared, pages follow the models in the order
+            // they were configured - the same flat list the resources have
+            // always been, with the added screens at the end of it.
+            ...pages.map((page) => (
+              <PageLink
+                key={`page:${page.path}`}
+                page={page}
+                activePage={activePage}
+                collapsed={collapsed}
+              />
+            )),
+          ]
         : navigation.map((entry, index) => (
             <NavigationEntryItem
               // Position, because nothing else identifies a divider and two
@@ -601,7 +663,9 @@ function ResourceNav({
               key={index}
               entry={entry}
               models={models}
+              pages={pages}
               activeModel={activeModel}
+              activePage={activePage}
               collapsed={collapsed}
             />
           ))}
@@ -708,6 +772,35 @@ function ModelLink({
 }
 
 /**
+ * A page the application added.
+ *
+ * Drawn exactly like a model, because from the sidebar's side of things it is
+ * one: a name, an icon, and somewhere it goes. A page that announced itself as
+ * different would be asking the reader to care about how the admin is built.
+ */
+function PageLink({
+  page,
+  activePage,
+  collapsed,
+}: {
+  readonly page: PageDescriptor
+  readonly activePage?: string
+  readonly collapsed: boolean
+}) {
+  return (
+    <li>
+      <NavLink
+        href={href({ kind: 'page', path: page.path })}
+        label={page.title}
+        icon={modelIcon(page.icon)}
+        current={page.path === activePage}
+        collapsed={collapsed}
+      />
+    </li>
+  )
+}
+
+/**
  * A group, a link, or a rule.
  *
  * A group with a heading folds, and remembers whether it was folded - by
@@ -722,12 +815,16 @@ function ModelLink({
 function NavigationEntryItem({
   entry,
   models,
+  pages = [],
   activeModel,
+  activePage,
   collapsed,
 }: {
   readonly entry: NavigationEntry
   readonly models: readonly ModelDescriptor[]
+  readonly pages?: readonly PageDescriptor[]
   readonly activeModel?: string
+  readonly activePage?: string
   readonly collapsed: boolean
 }) {
   const heading = entry.kind === 'group' ? entry.heading : undefined
@@ -756,7 +853,13 @@ function NavigationEntryItem({
     .map((name) => models.find((model) => model.name === name))
     .filter((model): model is ModelDescriptor => model !== undefined)
 
-  const holdsActive = activeModel !== undefined && entry.models.includes(activeModel)
+  const shownPages = (entry.pages ?? [])
+    .map((path) => pages.find((page) => page.path === path))
+    .filter((page): page is PageDescriptor => page !== undefined)
+
+  const holdsActive =
+    (activeModel !== undefined && entry.models.includes(activeModel)) ||
+    (activePage !== undefined && (entry.pages ?? []).includes(activePage))
   // A rail has no room for a heading, so a collapsed sidebar shows the icons
   // in group order and nothing else. Folding there would hide them for good.
   const open = collapsed || holdsActive || !folded
@@ -788,6 +891,13 @@ function NavigationEntryItem({
               activeModel={activeModel}
               collapsed={collapsed}
             />
+          ))
+        : null}
+
+      {/* After the models, which is where the server put them. */}
+      {open
+        ? shownPages.map((page) => (
+            <PageLink key={page.path} page={page} activePage={activePage} collapsed={collapsed} />
           ))
         : null}
     </>

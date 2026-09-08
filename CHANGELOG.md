@@ -17,9 +17,100 @@ something worth fixing turned up before they went out. They are documented as
 their own entries because that is where the work belongs; on npm their contents
 arrived in `0.12.1`, `0.13.1`, `0.14.2` and `0.16.0`. Released versions are
 `0.11.0 · 0.11.1 · 0.12.1 · 0.13.1 · 0.13.2 · 0.14.0 · 0.14.2 · 0.14.3 · 0.16.0 · 0.17.0`.
+(`0.17.0` is confirmed on npm as of this release.)
 
 Checked against `npm view @nest-admin/nestjs versions` rather than remembered,
 because this note has been wrong before.
+
+---
+
+## 0.18.0
+
+Screens the schema does not imply.
+
+### Added
+
+- **`pages`** — screens this admin has beside the generated ones. Every other
+  screen here is derived from a model, which covers a great deal and has one
+  failure mode: the moment an application needs a page its schema does not
+  imply, the admin becomes something to replace rather than extend.
+
+  A page is a **path**, a **title**, and one of three **bodies**:
+
+  | Body      | You write          | Reach for it when                     |
+  | --------- | ------------------ | ------------------------------------- |
+  | `widgets` | configuration only | numbers and lists, like the dashboard |
+  | `module`  | a browser module   | your own screen, your own API         |
+  | `url`     | nothing here       | a page that already exists elsewhere  |
+
+  Three fillings of one shape rather than three features, so a reader who has
+  understood the first already knows where the second goes. Declaring more than
+  one body on a page is a type error.
+
+  **A page cannot disturb what was already there.** It lives at `#/~<path>`, in
+  the namespace the History and Team screens already use — the tilde is not a
+  legal first character for a model in any ORM this supports, so a page can
+  never shadow a resource however either is named. It cannot alter a generated
+  screen, add a field, or change what a list shows. An admin that declares no
+  pages behaves exactly as it did before they existed.
+
+  **A page that fails is contained.** A module that throws on import or on
+  render is drawn as a failure in the content area; the navigation, the theme
+  and every other screen are untouched. An extension mechanism that can take the
+  host down with it is one nobody can afford to use.
+
+- **`module` pages need no build step.** The rule that has held since 0.1.0 does
+  not bend: the module is handed React, a fetch helper carrying the admin's
+  session, and a few components on `window.NestAdmin`. No bundler, no React
+  install, no copy of this package. An application that already builds a
+  frontend can bundle instead, with React marked external.
+
+  An absolute URL for `module` is refused at startup. It would run code from a
+  host somebody else controls on a page holding a session that can write to
+  every table — a supply chain nobody chose by writing one line of config.
+
+- **`AdminAuthGuard` and `AdminExceptionFilter` are exported**, so a page's API
+  sits behind the admin's own session and answers in the admin's own envelope.
+  Without them, adding a page would mean writing authentication a second time,
+  and one of the two would be the weaker.
+
+  ```ts
+  @Controller('admin/reports')
+  @UseGuards(AdminAuthGuard)
+  @UseFilters(AdminExceptionFilter)
+  export class ReportsController {}
+  ```
+
+  Declare the controller in the module that imports `AdminModule.forRoot(…)`.
+
+- **`can` on a page** decides who may open it — a function, because a page is
+  the application's and so is the rule about who sees it. Checked when the page
+  is requested, not only when the sidebar is drawn: withholding a link has never
+  stopped anyone typing a URL.
+
+- **`navigation` groups accept `pages`**, listed after the models under the same
+  heading, with the rule models already have — a page named in no group lands in
+  Other rather than disappearing. `models` is now optional, so a heading can hold
+  only pages.
+
+### Fixed
+
+- **A widget page drew a card it had not declared.** Sharing the dashboard's
+  resolver handed a page the dashboard's rule about appending an activity card,
+  so a page declaring four widgets rendered five. That rule is the dashboard's
+  alone: a declared page must be the page its author declared. Found by running
+  the example, not by a test — and the test written for it was rewritten once,
+  because the first version could not fail.
+
+- **The exported guard could not be constructed outside this module.** Nest
+  builds a guard in the module declaring the controller, so `ADMIN_AUTH` had to
+  be exported alongside the class. Without it, a consumer's first custom
+  controller failed at startup.
+
+- **An unauthenticated request to a guarded consumer route answered 500.** The
+  guard refuses with this package's `UnauthorizedError`, which is not one of
+  Nest's exceptions, so without `AdminExceptionFilter` the client could not tell
+  a sign-in problem from a crash. Both are exported and documented together.
 
 ---
 

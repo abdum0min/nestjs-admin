@@ -45,9 +45,49 @@ export {
 } from './module.js'
 export type { AdminFonts, AdminPalette, AdminTheme } from './ui/theme.js'
 
-// The authentication boundary the consuming application implements. The guard
-// that calls it is internal - a consumer supplies the decision, not the wiring.
+// The authentication boundary the consuming application implements. A consumer
+// supplies the decision; the guard below is how they reuse it.
 export { unsafeAllowAllRequests, type AdminAuth } from './auth/contract.js'
+
+/**
+ * The guard the admin's own routes run behind, for your controllers too.
+ *
+ * A custom page needs an API, and that API needs the same protection the admin
+ * has - otherwise adding a page means reimplementing authentication, and one
+ * of the two implementations will be the weaker.
+ *
+ * ```ts
+ * @Controller('admin/reports')
+ * @UseGuards(AdminAuthGuard)
+ * @UseFilters(AdminExceptionFilter)
+ * export class ReportsController { … }
+ * ```
+ *
+ * Declare the controller in the module that imports `AdminModule.forRoot(…)`,
+ * so Nest can resolve the guard's dependencies. It calls the same `AdminAuth`
+ * the admin was configured with, which means one session, one policy, and one
+ * place to change either.
+ *
+ * **Use the filter with it.** The guard refuses by throwing this package's
+ * `UnauthorizedError`, which is not one of Nest's exceptions - without the
+ * filter to map it, an unauthenticated request to your endpoint answers 500
+ * instead of 401, and the admin's own client cannot tell it is a sign-in
+ * problem. With it, your route answers in the same envelope as every other
+ * route in the admin.
+ */
+export { AdminAuthGuard } from './auth/guard.js'
+
+/**
+ * The admin's error mapping, for controllers of your own.
+ *
+ * Turns this package's errors into the admin's `{ success, error }` envelope
+ * with the right status. Pair it with `AdminAuthGuard`; see the note there.
+ * Nest's own `HttpException`s pass through untouched, so throwing
+ * `NotFoundException` from your route still behaves as it always did.
+ */
+export { AdminExceptionFilter } from './http/exception.filter.js'
+
+export type { AdminPage, AdminPages, EmbedPage, ModulePage, WidgetPage } from './pages/contract.js'
 
 // An implementation of that boundary, for applications that do not have an
 // identity system of their own. The contract above is unchanged and is still

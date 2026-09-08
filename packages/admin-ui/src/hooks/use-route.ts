@@ -14,6 +14,14 @@
  *   #/:model/new            create
  *   #/:model/:id            record detail
  *   #/:model/:id/edit       edit
+ *   #/~team #/~dev #/~schema #/~audit   screens this package owns
+ *   #/~:path                a page the application added
+ *
+ * The tilde prefix is what lets the last two coexist. It is not a legal first
+ * character for a model in any ORM this supports, so a screen can never be
+ * shadowed by a table however either is named - and the four reserved names
+ * are matched before the page rule, or a page called `audit` would take the
+ * history screen's route.
  */
 import { useEffect, useState } from 'react'
 
@@ -41,6 +49,15 @@ export type Route =
    * linked to and survives a reload.
    */
   | { readonly kind: 'audit'; readonly model?: string; readonly record?: string }
+  /**
+   * A page the application added, at its own path in the same tilde space.
+   *
+   * The tilde is what makes custom pages safe to add: a page called
+   * `reports` cannot shadow a model called `Reports`, whatever anybody names
+   * either, so adding pages can never change which screen an existing link
+   * opens.
+   */
+  | { readonly kind: 'page'; readonly path: string }
   | {
       readonly kind: 'list'
       readonly model: string
@@ -92,6 +109,12 @@ export function parseHash(hash: string): Route {
       ...(parameters.get('record') ? { record: parameters.get('record') as string } : {}),
     }
   }
+  // Every other tilde route is a custom page, and this has to come after the
+  // four above or it would swallow them. Whether the page exists is not
+  // decided here: only the metadata knows, and this cannot see it.
+  if (model.startsWith('~') && model.length > 1) {
+    return { kind: 'page', path: model.slice(1) }
+  }
   if (second === undefined) return { kind: 'list', model, ...(filter ? { filter } : {}) }
   if (second === 'new') return { kind: 'create', model, ...(from ? { from } : {}) }
   if (third === 'edit') return { kind: 'edit', model, id: second }
@@ -108,6 +131,8 @@ export function href(route: Route): string {
       return '#/~dev'
     case 'schema':
       return '#/~schema'
+    case 'page':
+      return `#/~${encodeURIComponent(route.path)}`
     case 'audit': {
       const params = new URLSearchParams()
       if (route.model !== undefined) params.set('model', route.model)

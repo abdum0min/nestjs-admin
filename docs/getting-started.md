@@ -362,6 +362,50 @@ is never queried. `stat` runs your code, so your rules apply to it — and if it
 throws, that one card says it could not load while the rest of the page still
 answers.
 
+## 7. Add a screen the schema does not imply
+
+Everything so far is derived from your models. Sooner or later something is not
+a table — reconciliation, a runbook, one screen support actually wants — and
+that is what `pages` is for.
+
+```ts
+pages: [
+  // Configuration only: the dashboard's widgets, about one thing.
+  {
+    path: 'shop-health',
+    title: 'Shop health',
+    widgets: [
+      { kind: 'count', title: 'Awaiting payment', model: 'Order', filter: 'status:eq:PENDING' },
+    ],
+  },
+
+  // Your own screen, calling your own API. No build step.
+  { path: 'reconciliation', title: 'Reconciliation', module: '/admin-pages/recon.js' },
+
+  // A document you already serve.
+  { path: 'runbook', title: 'Runbook', url: '/docs/runbook.html' },
+]
+```
+
+A page lives at `#/~<path>`, where a model can never reach, so **adding pages
+changes nothing about the screens you already have**. One that fails is drawn as
+a failure in the content area, with the rest of the admin untouched.
+
+For a `module` page, put the API behind the same session the admin uses:
+
+```ts
+import { AdminAuthGuard, AdminExceptionFilter } from '@nest-admin/nestjs'
+
+@Controller('admin/reports')
+@UseGuards(AdminAuthGuard)
+@UseFilters(AdminExceptionFilter)
+export class ReportsController {}
+```
+
+The full shape — what is on `window.NestAdmin`, how `can` works, and why an
+absolute `module` URL is refused — is in
+[configuration.md](configuration.md#pages).
+
 ## Using Drizzle instead
 
 Same module, same everything above. Only the adapter changes:

@@ -96,7 +96,14 @@ function isEnvelope(value: unknown): value is SuccessEnvelope<unknown> | ErrorEn
   return typeof value === 'object' && value !== null && 'success' in value
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<SuccessEnvelope<T>> {
+/**
+ * Exported for the custom-page runtime, which hands it to a page module as
+ * `NestAdmin.api` - so a page reaches its own endpoints through the same
+ * session handling, the same envelope and the same errors every built-in
+ * screen uses, rather than through a bare `fetch` that has to relearn all of
+ * it.
+ */
+export async function request<T>(path: string, init?: RequestInit): Promise<SuccessEnvelope<T>> {
   let response: Response
   try {
     response = await fetch(`${API_BASE}${path}`, {
@@ -209,6 +216,18 @@ export function onUnauthorized(listener: () => void): () => void {
 /** `GET /admin/dashboard` - the widgets the landing page draws. */
 export async function fetchDashboard(): Promise<Dashboard> {
   const { data } = await request<Dashboard>('/dashboard')
+  return data
+}
+
+/**
+ * `GET /admin/pages/:path` - the widgets on one custom page.
+ *
+ * Only for a `widgets` page. A `module` page calls the application's own API,
+ * and an `embed` page is a document this admin never reads - neither has a
+ * body here to ask for.
+ */
+export async function fetchPage(path: string): Promise<Dashboard> {
+  const { data } = await request<Dashboard>(`/pages/${encodeURIComponent(path)}`)
   return data
 }
 

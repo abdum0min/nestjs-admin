@@ -13,6 +13,7 @@ import { devTools } from '@nest-admin/nestjs/dev-tools'
 import { PrismaAdapter, prismaAccountStore, prismaAuditStore } from '@nest-admin/nestjs/prisma'
 
 import { PrismaService } from './prisma.service.js'
+import { ReportsController } from './reports.controller.js'
 
 /**
  * The reference consumer.
@@ -431,6 +432,11 @@ class DatabaseModule {}
 
 @Module({
   imports: [
+    // The controller below needs the Prisma client, so the module providing it
+    // is imported here too. `AdminModule` imports it as well, for the factory -
+    // the two are independent, and neither implies the other.
+    DatabaseModule,
+
     // `forRootAsync` rather than `forRoot`, because the client is a provider
     // rather than a module-level value. That is the normal case: the client
     // usually needs configuration, and configuration usually arrives through
@@ -541,13 +547,81 @@ class DatabaseModule {}
          */
         navigation: [
           { heading: 'Publishing', models: ['Post', 'Comment', 'Category', 'Tag'] },
-          { heading: 'Shop', models: ['Product', 'Order', 'OrderItem', 'Review'] },
+          // A page placed among the models it is about, rather than left to
+          // collect at the bottom. `pages` follows `models` under one heading.
+          {
+            heading: 'Shop',
+            models: ['Product', 'Order', 'OrderItem', 'Review'],
+            pages: ['reconciliation', 'shop-health'],
+          },
           { heading: 'People', models: ['User', 'Profile'] },
           { divider: true },
           {
             label: 'Documentation',
             href: 'https://github.com/abdum0min/nestjs-admin',
             icon: 'file-text',
+          },
+        ],
+
+        /*
+         * Three pages, one of each kind, to show what each is for.
+         *
+         * None of them changes a generated screen: they live at `#/~<path>`,
+         * where a model can never reach.
+         */
+        pages: [
+          /*
+           * Configuration only. The dashboard's own widgets, about one thing.
+           *
+           * The body most pages want: no code, and every widget authorized the
+           * same way it is on the dashboard - a role that cannot see `Order`
+           * gets this page without the order cards rather than not at all.
+           */
+          {
+            path: 'shop-health',
+            title: 'Shop health',
+            description: 'The numbers worth looking at before opening the orders list.',
+            icon: 'chart-bar',
+            widgets: [
+              {
+                kind: 'count',
+                title: 'Awaiting payment',
+                model: 'Order',
+                filter: 'status:eq:PENDING',
+              },
+              { kind: 'count', title: 'Products', model: 'Product' },
+              { kind: 'count', title: 'Reviews', model: 'Review' },
+              { kind: 'list', title: 'Newest orders', model: 'Order', limit: 5 },
+            ],
+          },
+
+          /*
+           * The application's own screen, calling its own API.
+           *
+           * Both halves are in `reports.controller.ts`: the endpoint, guarded
+           * with the exported `AdminAuthGuard`, and the module itself. No build
+           * step is involved in either.
+           */
+          {
+            path: 'reconciliation',
+            title: 'Reconciliation',
+            description: 'Written by this application, running inside the admin.',
+            icon: 'activity',
+            module: '/admin-pages/reconciliation.js',
+          },
+
+          /*
+           * A document that already exists.
+           *
+           * Restricted here to show `can` working: support sees the runbook,
+           * and an editor has no reason to.
+           */
+          {
+            path: 'runbook',
+            title: 'Runbook',
+            icon: 'file-text',
+            url: '/admin-pages/notes.html',
+            can: (context) => builtInRoleOf()(context) !== 'editor',
           },
         ],
         roleOf: builtInRoleOf(),
@@ -707,6 +781,10 @@ class DatabaseModule {}
       }),
     }),
   ],
+  // Declared here, in the module that imports `AdminModule`, so Nest can
+  // resolve the `AdminAuthGuard` it uses. That guard is what puts this
+  // application's own endpoint behind the admin's own session.
+  controllers: [ReportsController],
 })
 export class AppModule {}
 

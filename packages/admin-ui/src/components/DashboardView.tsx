@@ -86,16 +86,29 @@ export function DashboardView() {
 function Loaded({ dashboard }: { readonly dashboard: Dashboard }) {
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {dashboard.widgets.map((widget) => (
-          <div key={widget.id} className={SPAN[widget.span] ?? SPAN[1]}>
-            <Widget widget={widget} />
-          </div>
-        ))}
-      </div>
-
+      <WidgetGrid widgets={dashboard.widgets} />
       {dashboard.generated ? <GeneratedNote /> : null}
     </>
+  )
+}
+
+/**
+ * The four-column grid, on its own.
+ *
+ * Exported because a custom page built from `widgets` is the same grid with a
+ * different heading above it. Sharing it is what makes the two look like one
+ * product rather than two screens that happen to show cards - and it means a
+ * widget added here appears on both without anybody remembering to.
+ */
+export function WidgetGrid({ widgets }: { readonly widgets: Dashboard['widgets'] }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {widgets.map((widget) => (
+        <div key={widget.id} className={SPAN[widget.span] ?? SPAN[1]}>
+          <Widget widget={widget} />
+        </div>
+      ))}
+    </div>
   )
 }
 

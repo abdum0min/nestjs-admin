@@ -19,6 +19,7 @@ import {
   type AdminAuth,
   type AdminDashboard,
   type AdminHooksByModel,
+  type AdminPages,
   type AdminResourceAuth,
   type AdminRoles,
   type RoleResolver,
@@ -189,6 +190,24 @@ const dashboard = [
   },
 ] as const satisfies AdminDashboard
 
+/* getting-started.md and configuration.md - custom pages */
+const pages = [
+  {
+    path: 'shop-health',
+    title: 'Shop health',
+    widgets: [
+      { kind: 'count', title: 'Awaiting payment', model: 'Order', filter: 'status:eq:PENDING' },
+    ],
+  },
+  { path: 'reconciliation', title: 'Reconciliation', module: '/admin-pages/recon.js' },
+  {
+    path: 'runbook',
+    title: 'Runbook',
+    url: '/docs/runbook.html',
+    can: (context) => builtInRoleOf()(context) !== 'editor',
+  },
+] as const satisfies AdminPages
+
 /* Referenced so nothing above is dropped as unused. */
 export const documented = {
   roles,
@@ -202,4 +221,5 @@ export const documented = {
   hooks,
   actions,
   dashboard,
+  pages,
 }

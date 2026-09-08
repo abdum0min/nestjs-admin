@@ -100,6 +100,16 @@ export interface DashboardInput {
    * a card that failed, because "not part of this admin" is not a failure.
    */
   readonly activity?: (days: number, limit: number) => Promise<unknown>
+
+  /**
+   * Whether an activity card should be added when nobody declared one.
+   *
+   * True for the dashboard, and false everywhere else. The rule is the
+   * dashboard's alone: a custom page built from four widgets must draw four,
+   * not five. Adding one there would mean the page its author declared is not
+   * the page they get - which is the whole of what a declared page is for.
+   */
+  readonly appendActivity?: boolean
   /**
    * Row-level scopes, by model, for the principal this document is being built
    * for. A model absent from the map is unscoped.
@@ -137,7 +147,9 @@ export async function buildDashboard(input: DashboardInput): Promise<DashboardDt
    * over completely - position, width, title and window.
    */
   const withActivity =
-    input.activity !== undefined && !widgets.some((widget) => widget.kind === 'activity')
+    input.appendActivity === true &&
+    input.activity !== undefined &&
+    !widgets.some((widget) => widget.kind === 'activity')
       ? [...widgets, { kind: 'activity' as const, title: 'Activity' }]
       : widgets
 
