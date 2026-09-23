@@ -10,11 +10,13 @@
  * own `AdminAuth` signs people out through its own interface, and a button here
  * that cannot do it would be a lie.
  */
-import { LogOut, User, Users } from 'lucide-react'
+import { ExternalLink, LogOut, User, Users } from 'lucide-react'
 import { useState } from 'react'
 
 import { signOut } from '../api/client.js'
 import type { AdminAccountSummary } from '../api/types.js'
+import { modelIcon } from '../metadata/icons.jsx'
+import { theme } from '../metadata/theme.js'
 import { Badge } from './ui/badge.jsx'
 import { Button } from './ui/button.jsx'
 import {
@@ -96,6 +98,29 @@ export function UserMenu({
             </a>
           </DropdownMenuItem>
         ) : null}
+
+        {/*
+          The application's own entries, above Sign out.
+
+          Above it deliberately: Sign out is destructive in the small way that
+          matters - it ends what you were doing - and a destructive item belongs
+          last, where nothing lands on it by accident.
+        */}
+        {(theme.userLinks ?? []).map((link) => {
+          const Icon = modelIcon(link.icon)
+          const external = link.external ?? /^https?:/.test(link.href)
+
+          return (
+            <DropdownMenuItem key={link.href} asChild>
+              <a href={link.href} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}>
+                {Icon ? <Icon /> : <ExternalLink />}
+                {link.label}
+              </a>
+            </DropdownMenuItem>
+          )
+        })}
+
+        <DropdownMenuSeparator />
 
         <DropdownMenuItem disabled={busy} onSelect={() => void leave()}>
           <LogOut />

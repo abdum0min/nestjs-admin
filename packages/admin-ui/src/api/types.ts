@@ -91,8 +91,28 @@ export interface FieldDescriptor {
   /** Literal default to pre-fill on create, when the schema declares one. */
   readonly defaultValue?: unknown
   readonly enumValues?: readonly string[]
+  /**
+   * How the column lines up in a table.
+   *
+   * Absent means the interface decides, and it decides on one rule: a number
+   * goes right so its place values stack, everything else goes left.
+   */
+  readonly align?: 'left' | 'center' | 'right'
+  /** A width hint for the column, as a CSS length. */
+  readonly width?: string
+  /**
+   * Tones the application corrected, or `false` for plain text.
+   *
+   * Only the corrections travel. The rest are worked out here from the value's
+   * own name, which keeps the metadata document from carrying a map of every
+   * value of every enum in the schema.
+   */
+  readonly badge?: Readonly<Record<string, ValueTone>> | false
   readonly relation?: RelationDescriptor
 }
+
+/** The five tones a value can carry. Mirrors `ValueTone` on the server. */
+export type ValueTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
 /**
  * Icons a model may be given in the navigation.
@@ -385,7 +405,7 @@ export type WidgetSpan = 1 | 2 | 3 | 4
 
 export interface WidgetDescriptor {
   readonly id: string
-  readonly kind: 'count' | 'list' | 'chart' | 'stat' | 'activity'
+  readonly kind: 'count' | 'list' | 'chart' | 'breakdown' | 'progress' | 'stat' | 'activity'
   readonly title: string
   readonly description?: string
   readonly span: WidgetSpan
@@ -397,7 +417,17 @@ export interface WidgetDescriptor {
   readonly data?: unknown
   /** This one could not be loaded. The others on the page still were. */
   readonly failed?: boolean
+  /** The accent it carries, when the application chose one. */
+  readonly color?: WidgetColor
+  /** The icon beside the title. */
+  readonly icon?: ModelIcon
+  /** Where it goes when followed, and what that link says. */
+  readonly href?: string
+  readonly hrefLabel?: string
 }
+
+/** The five accents a widget may carry. Mirrors `WidgetColor` on the server. */
+export type WidgetColor = 'primary' | 'success' | 'warning' | 'danger' | 'neutral'
 
 export interface Dashboard {
   readonly widgets: readonly WidgetDescriptor[]
@@ -418,13 +448,40 @@ export interface StatData {
 }
 
 export interface ListData {
-  readonly records: readonly { readonly id: string; readonly label: string }[]
+  readonly records: readonly {
+    readonly id: string
+    readonly label: string
+    /** One entry per named column, when the widget named any. */
+    readonly values?: Readonly<Record<string, unknown>>
+  }[]
   readonly total: number
+  /** Columns to draw as a small table. Absent means one name per row. */
+  readonly columns?: readonly string[]
 }
 
 export interface ChartData {
   readonly points: readonly { readonly at: string; readonly value: number }[]
   readonly total: number
+  /** How the series is drawn. The server decides; the interface obeys. */
+  readonly display: 'area' | 'line' | 'bar'
+}
+
+export interface BreakdownData {
+  readonly slices: readonly {
+    readonly value: string
+    readonly label: string
+    readonly count: number
+    readonly tone?: ValueTone
+  }[]
+  readonly total: number
+  /** The column divided on, so a slice can link to that column filtered. */
+  readonly field: string
+}
+
+export interface ProgressData {
+  readonly value: number
+  readonly target: number
+  readonly hint?: string
 }
 
 /** One account that can sign in to the admin. Never carries a password hash. */

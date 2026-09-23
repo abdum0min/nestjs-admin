@@ -23,10 +23,14 @@
 import {
   createdFieldFor,
   displayFieldFor,
+  toneOf,
+  type FieldMetadata,
   type FilterRule,
+  type ModelIcon,
   type ModelMetadata,
   type OrmAdapter,
   type RecordData,
+  type ValueTone,
 } from '@nest-admin/core'
 import { Logger, type ExecutionContext } from '@nestjs/common'
 
@@ -36,6 +40,7 @@ import {
   modelOf,
   type AdminDashboard,
   type DashboardWidget,
+  type WidgetColor,
   type WidgetSpan,
 } from './contract.js'
 
@@ -44,7 +49,7 @@ const logger = new Logger('NestAdmin')
 /** A widget as it crosses the wire. */
 export interface WidgetDto {
   readonly id: string
-  readonly kind: 'count' | 'list' | 'chart' | 'stat' | 'activity'
+  readonly kind: 'count' | 'list' | 'chart' | 'breakdown' | 'progress' | 'stat' | 'activity'
   readonly title: string
   readonly description?: string
   readonly span: WidgetSpan
@@ -56,6 +61,13 @@ export interface WidgetDto {
   readonly data?: unknown
   /** Set instead of `data` when this one failed. Never carries a cause. */
   readonly failed?: boolean
+  /** The accent this card carries, when the application chose one. */
+  readonly color?: WidgetColor
+  /** The icon beside it, from the closed set the models use. */
+  readonly icon?: ModelIcon
+  /** Where the card goes when followed, and what that link says. */
+  readonly href?: string
+  readonly hrefLabel?: string
 }
 
 export interface DashboardDto {
@@ -71,13 +83,49 @@ export interface CountData {
 }
 
 export interface ListData {
-  readonly records: readonly { readonly id: string; readonly label: string }[]
+  readonly records: readonly {
+    readonly id: string
+    readonly label: string
+    /** One entry per named column, when the widget named any. */
+    readonly values?: Readonly<Record<string, unknown>>
+  }[]
   readonly total: number
+  /**
+   * The columns to draw, already checked against the model.
+   *
+   * Absent means one name per row, which is what this card has always been.
+   * Present, the interface renders them with the same code the list screen
+   * uses - so a badge is a badge and a number is right-aligned here too.
+   */
+  readonly columns?: readonly string[]
 }
 
 export interface ChartData {
   readonly points: readonly { readonly at: string; readonly value: number }[]
   readonly total: number
+  /** How the interface should draw the series. See `ChartWidget.display`. */
+  readonly display: 'area' | 'line' | 'bar'
+}
+
+export interface BreakdownData {
+  readonly slices: readonly {
+    /** The raw value, so the interface can link to the filtered list. */
+    readonly value: string
+    /** What to call it. A boolean reads better as Yes and No than true/false. */
+    readonly label: string
+    readonly count: number
+    /** Whether to draw the value tone. Off where the values are categories. */
+    readonly tone?: ValueTone
+  }[]
+  readonly total: number
+  /** The column divided on, so a slice can link to that column filtered. */
+  readonly field: string
+}
+
+export interface ProgressData {
+  readonly value: number
+  readonly target: number
+  readonly hint?: string
 }
 
 /** Ninety buckets is already a wide chart; see `chartOf` for why it is capped. */
@@ -238,6 +286,10 @@ async function resolve(
     ...(widget.kind === 'stat' || widget.kind === 'activity' || widget.filter === undefined
       ? {}
       : { filter: widget.filter }),
+    ...(widget.color !== undefined ? { color: widget.color } : {}),
+    ...(widget.icon !== undefined ? { icon: widget.icon } : {}),
+    ...(widget.href !== undefined ? { href: widget.href } : {}),
+    ...(widget.hrefLabel !== undefined ? { hrefLabel: widget.hrefLabel } : {}),
   } satisfies Omit<WidgetDto, 'data' | 'failed'>
 
   try {
@@ -261,6 +313,10 @@ async function dataFor(widget: DashboardWidget, input: DashboardInput): Promise<
       return listOf(widget, input)
     case 'chart':
       return chartOf(widget, input)
+    case 'breakdown':
+      return breakdownOf(widget, input)
+    case 'progress':
+      return progressOf(widget, input)
     case 'activity':
       // The trail decides what it will show; this only says how much.
       return (input.activity as NonNullable<DashboardInput['activity']>)(
@@ -332,11 +388,30 @@ async function listOf(
     ...(declared.length > 0 ? { filters: declared } : {}),
   })
 
+  /*
+   * Checked against the model, and silently narrowed rather than refused.
+   *
+   * A column that was renamed or hidden should cost this card that column, not
+   * the whole card - the other three still answer the question. The same
+   * reasoning the list screen uses for a stale saved view.
+   *
+   * Capped at four because this is a card. A fifth column is a table that has
+   * been squeezed into a quarter of the screen, which reads worse than no
+   * table at all.
+   */
+  const columns = (widget.columns ?? [])
+    .filter((name) => model.fields.some((field) => field.name === name))
+    .slice(0, 4)
+
   return {
     total: page.total,
+    ...(columns.length > 0 ? { columns } : {}),
     records: page.data.map((record: RecordData) => ({
       id: String(record[key] ?? ''),
       label: readable(record[label]) ?? String(record[key] ?? ''),
+      ...(columns.length > 0
+        ? { values: Object.fromEntries(columns.map((name) => [name, record[name]])) }
+        : {}),
     })),
   }
 }
@@ -387,7 +462,144 @@ async function chartOf(
     }),
   )
 
-  return { points, total: points.reduce((sum, point) => sum + point.value, 0) }
+  return {
+    points,
+    total: points.reduce((sum, point) => sum + point.value, 0),
+    display: widget.display ?? 'area',
+  }
+}
+
+/**
+ * How the records divide across one column's values.
+ *
+ * One count per value, run concurrently - the same shape `chartOf` has, and
+ * chosen for the same reason: `OrmAdapter` has no `groupBy`, and adding one
+ * before the 1.0 freeze would put it in every adapter anybody ever writes.
+ *
+ * **The column has to have a known set of values**, and that is what makes the
+ * arrangement viable rather than a compromise. An enum has ten at most and a
+ * boolean has two, so the query count is bounded by the schema. A free text
+ * column has as many values as it has rows, and the same code over one would
+ * be a query per distinct customer name - so it is refused rather than
+ * attempted.
+ *
+ * Empty values are kept. "Nine orders are `PENDING` and none are `FAILED`" is
+ * a different statement from "nine orders are `PENDING`", and dropping the zero
+ * makes the second one look like the first.
+ */
+async function breakdownOf(
+  widget: Extract<DashboardWidget, { kind: 'breakdown' }>,
+  input: DashboardInput,
+): Promise<BreakdownData> {
+  const model = modelFor(widget.model, input)
+  const field = model.fields.find((candidate) => candidate.name === widget.field)
+
+  if (field === undefined) {
+    throw new Error(`${widget.model} has no field "${widget.field}".`)
+  }
+
+  const values = valuesOf(field)
+  if (values === undefined) {
+    throw new Error(
+      `${widget.model}.${widget.field} is a ${field.kind} column, which has no fixed set of ` +
+        `values to divide by. A breakdown needs an enum or a boolean.`,
+    )
+  }
+
+  const declared = scopedFilters(widget.filter, model, input)
+  const tones = widget.tones !== false
+
+  const slices = await Promise.all(
+    values.map(async (entry) => {
+      const page = await input.adapter.list(widget.model, {
+        perPage: 1,
+        filters: [...declared, { field: widget.field, operator: 'eq', value: entry.value }],
+      })
+
+      return {
+        value: String(entry.value),
+        label: entry.label,
+        count: page.total,
+        // A boolean is not a state that went well or badly, so it carries no
+        // tone even when tones are on: "true" is not success.
+        ...(tones && field.kind === 'enum' ? { tone: toneOf(entry.label) } : {}),
+      }
+    }),
+  )
+
+  return {
+    slices,
+    total: slices.reduce((sum, slice) => sum + slice.count, 0),
+    field: widget.field,
+  }
+}
+
+/**
+ * The values a column can hold, when that is a question with an answer.
+ *
+ * `undefined` where it is not, which is every column that is not an enum or a
+ * boolean. The caller turns that into a message naming the column rather than
+ * an empty chart.
+ */
+function valuesOf(
+  field: FieldMetadata,
+): readonly { readonly value: string | boolean; readonly label: string }[] | undefined {
+  if (field.kind === 'enum') {
+    return (field.enumValues ?? []).map((value) => ({ value, label: value }))
+  }
+
+  if (field.kind === 'boolean') {
+    // Labelled the way the rest of the admin labels a boolean. "true" is a
+    // value in a database; "Yes" is what the column means.
+    return [
+      { value: true, label: 'Yes' },
+      { value: false, label: 'No' },
+    ]
+  }
+
+  return undefined
+}
+
+/**
+ * How far a number has got toward one somebody chose.
+ *
+ * Two sources, and they are the same two every other number here has: a count
+ * of a model, or the application's own code. `load` wins where both are given,
+ * because code that ran is a stronger statement than configuration that did
+ * not.
+ */
+async function progressOf(
+  widget: Extract<DashboardWidget, { kind: 'progress' }>,
+  input: DashboardInput,
+): Promise<ProgressData> {
+  if (widget.load !== undefined) {
+    const result = await widget.load({ context: input.context })
+    return {
+      value: result.value,
+      target: result.target,
+      ...(result.hint !== undefined ? { hint: result.hint } : {}),
+    }
+  }
+
+  if (widget.model === undefined || widget.target === undefined) {
+    throw new Error(
+      `A progress widget needs either \`load\`, or a \`model\` and a \`target\` to count toward.`,
+    )
+  }
+
+  const model = modelFor(widget.model, input)
+  const declared = scopedFilters(widget.filter, model, input)
+
+  const page = await input.adapter.list(widget.model, {
+    perPage: 1,
+    ...(declared.length > 0 ? { filters: declared } : {}),
+  })
+
+  return {
+    value: page.total,
+    target: widget.target,
+    ...(widget.hint !== undefined ? { hint: widget.hint } : {}),
+  }
 }
 
 /**

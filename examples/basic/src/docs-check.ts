@@ -20,6 +20,7 @@ import {
   type AdminDashboard,
   type AdminHooksByModel,
   type AdminPages,
+  type AdminTheme,
   type AdminResourceAuth,
   type AdminRoles,
   type RoleResolver,
@@ -188,7 +189,32 @@ const dashboard = [
     description: 'Paid and shipped orders.',
     load: async () => ({ value: '$12,400', delta: 8, hint: 'vs last month' }),
   },
+  {
+    kind: 'breakdown',
+    title: 'Orders by status',
+    model: 'Order',
+    field: 'status',
+    icon: 'chart-bar',
+  },
+  { kind: 'progress', title: 'Published', model: 'Post', target: 60, color: 'success' },
+  {
+    kind: 'count',
+    title: 'Awaiting payment',
+    model: 'Order',
+    filter: 'status:eq:PENDING',
+    icon: 'receipt',
+    color: 'warning',
+  },
 ] as const satisfies AdminDashboard
+
+/* configuration.md - the header and the account menu */
+const themeLinks = {
+  links: [
+    { label: 'Live site', href: 'https://acme.com', icon: 'globe' },
+    { label: 'Docs', href: '/docs', icon: 'file-text' },
+  ],
+  userLinks: [{ label: 'My profile', href: '#/User/me' }],
+} as const satisfies AdminTheme
 
 /* getting-started.md and configuration.md - custom pages */
 const pages = [
@@ -222,4 +248,5 @@ export const documented = {
   actions,
   dashboard,
   pages,
+  themeLinks,
 }

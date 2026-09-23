@@ -362,6 +362,33 @@ is never queried. `stat` runs your code, so your rules apply to it — and if it
 throws, that one card says it could not load while the rest of the page still
 answers.
 
+Three more kinds answer the questions those cannot:
+
+```ts
+// How do they divide? A time series cannot say.
+{ kind: 'breakdown', title: 'Orders by status', model: 'Order', field: 'status' },
+
+// Is the number good? 310 means nothing until you know the target was 400.
+{ kind: 'progress', title: 'Published', model: 'Post', target: 60 },
+
+// What has been happening in the admin. Needs `audit`.
+{ kind: 'activity', title: 'Activity', days: 7 },
+```
+
+`breakdown` works over an **enum or a boolean only** — the counts are one query
+per value, so a column with no fixed set of them has no bounded number.
+
+### Make one card louder than the others
+
+```ts
+{ kind: 'count', title: 'Awaiting payment', model: 'Order',
+  filter: 'status:eq:PENDING', icon: 'receipt', color: 'warning' }
+```
+
+An accent and an icon, so the eye lands somewhere before it reads anything.
+**Give two or three cards a colour, not all of them** — a page where everything
+is coloured has no emphasis, it just has more colours.
+
 ## 7. Add a screen the schema does not imply
 
 Everything so far is derived from your models. Sooner or later something is not

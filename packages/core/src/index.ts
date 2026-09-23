@@ -92,6 +92,8 @@ export type {
   DetailSection,
   ModelOverrides,
 } from './config/overrides.js'
+export type { ColumnAlign, ValueTone } from './config/tone.js'
+export { toneOf } from './config/tone.js'
 export type { DeletedView } from './config/soft-delete.js'
 export {
   isSoftDeleteField,

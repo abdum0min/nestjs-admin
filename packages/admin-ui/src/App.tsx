@@ -47,7 +47,7 @@ import { href, useRoute } from './hooks/use-route.js'
 import { cn } from './lib/utils.js'
 import { modelLabel } from './metadata/fields.js'
 import { modelIcon } from './metadata/icons.jsx'
-import { theme } from './metadata/theme.js'
+import { theme, type HeaderLink } from './metadata/theme.js'
 
 /**
  * The gate in front of everything.
@@ -200,7 +200,7 @@ function Admin({
       {...shellProps}
     >
       {route.kind === 'home' ? (
-        <DashboardView />
+        <DashboardView models={models} />
       ) : route.kind === 'dev' ? (
         <DevToolsView />
       ) : route.kind === 'schema' ? (
@@ -223,7 +223,7 @@ function Admin({
         ) : (
           // Keyed by path so the error boundary inside resets when the reader
           // moves from a page that threw to one that works.
-          <PageView key={openPage.path} page={openPage} />
+          <PageView key={openPage.path} page={openPage} models={models} />
         )
       ) : route.kind === 'team' ? (
         // Rendered only when the metadata says so. Reaching the URL without the
@@ -452,6 +452,20 @@ function Shell({
             <span className="truncate">{theme.title ?? 'Admin'}</span>
           </a>
 
+          {/*
+            Beside the name, because that is where "somewhere else in this
+            product" belongs - the right-hand cluster is controls for this page.
+            Hidden below a tablet, where they would push the search button off
+            the edge; the drawer carries them there instead, so nothing is lost.
+          */}
+          {(theme.links ?? []).length === 0 ? null : (
+            <nav aria-label="Shortcuts" className="hidden items-center gap-0.5 lg:flex">
+              {(theme.links ?? []).map((link) => (
+                <HeaderLinkItem key={link.href} link={link} />
+              ))}
+            </nav>
+          )}
+
           <div className="ml-auto flex items-center gap-1">
             <Button
               variant="outline"
@@ -558,6 +572,17 @@ function Shell({
                 activeAudit={activeAudit}
               />
             </nav>
+
+            {/* Where the header's shortcuts go on a phone. They are separated
+                by a rule rather than mixed in, because they leave the admin
+                and the entries above them do not. */}
+            {(theme.links ?? []).length === 0 ? null : (
+              <nav aria-label="Shortcuts" className="mt-1 flex flex-col gap-0.5 border-t pt-2">
+                {(theme.links ?? []).map((link) => (
+                  <HeaderLinkItem key={link.href} link={link} />
+                ))}
+              </nav>
+            )}
           </DialogContent>
         </Dialog>
 
@@ -614,8 +639,51 @@ function ResourceNav({
   readonly activeSchema?: boolean
   readonly activeAudit?: boolean
 }) {
+  const [filter, setFilter] = useState('')
+  const query = filter.trim().toLowerCase()
+
+  /*
+   * Offered only where the list is long enough to be worth searching.
+   *
+   * A filter box above six entries is a control that costs a line of the
+   * sidebar and saves nothing - the eye is faster. Above about a dozen that
+   * reverses, and a real schema is usually well past it.
+   *
+   * Never on the collapsed rail, where there is no room and no labels to match
+   * against anyway.
+   */
+  const searchable = !collapsed && models.length + pages.length >= 12
+
+  /*
+   * While filtering, the groups are set aside.
+   *
+   * Somebody typing is looking for one thing, not browsing a structure, and
+   * keeping the headings would mean the match they want can still be hidden
+   * inside a folded group. So it becomes a flat list of what matches, and
+   * emptying the box puts the structure back.
+   */
+  const matching =
+    query === ''
+      ? undefined
+      : {
+          models: models.filter((model) => modelLabel(model).toLowerCase().includes(query)),
+          pages: pages.filter((page) => page.title.toLowerCase().includes(query)),
+        }
+
   return (
     <ul className="flex flex-col gap-0.5">
+      {searchable ? (
+        <li className="mb-1">
+          <input
+            type="search"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Filter resources…"
+            aria-label="Filter resources"
+            className="border-input bg-background focus-visible:ring-ring h-8 w-full rounded-md border px-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
+          />
+        </li>
+      ) : null}
       {/*
        * Above the resources, and separated from them.
        *
@@ -634,9 +702,12 @@ function ResourceNav({
           collapsed={collapsed}
         />
       </li>
-      {navigation === undefined
-        ? [
-            ...models.map((model) => (
+      {matching !== undefined ? (
+        matching.models.length + matching.pages.length === 0 ? (
+          <li className="text-muted-foreground px-2.5 py-2 text-sm">Nothing matches.</li>
+        ) : (
+          [
+            ...matching.models.map((model) => (
               <ModelLink
                 key={`model:${model.name}`}
                 model={model}
@@ -644,10 +715,7 @@ function ResourceNav({
                 collapsed={collapsed}
               />
             )),
-            // With no navigation declared, pages follow the models in the order
-            // they were configured - the same flat list the resources have
-            // always been, with the added screens at the end of it.
-            ...pages.map((page) => (
+            ...matching.pages.map((page) => (
               <PageLink
                 key={`page:${page.path}`}
                 page={page}
@@ -656,19 +724,44 @@ function ResourceNav({
               />
             )),
           ]
-        : navigation.map((entry, index) => (
-            <NavigationEntryItem
-              // Position, because nothing else identifies a divider and two
-              // groups may legitimately share a heading of none.
-              key={index}
-              entry={entry}
-              models={models}
-              pages={pages}
+        )
+      ) : navigation === undefined ? (
+        [
+          ...models.map((model) => (
+            <ModelLink
+              key={`model:${model.name}`}
+              model={model}
               activeModel={activeModel}
+              collapsed={collapsed}
+            />
+          )),
+          // With no navigation declared, pages follow the models in the order
+          // they were configured - the same flat list the resources have
+          // always been, with the added screens at the end of it.
+          ...pages.map((page) => (
+            <PageLink
+              key={`page:${page.path}`}
+              page={page}
               activePage={activePage}
               collapsed={collapsed}
             />
-          ))}
+          )),
+        ]
+      ) : (
+        navigation.map((entry, index) => (
+          <NavigationEntryItem
+            // Position, because nothing else identifies a divider and two
+            // groups may legitimately share a heading of none.
+            key={index}
+            entry={entry}
+            models={models}
+            pages={pages}
+            activeModel={activeModel}
+            activePage={activePage}
+            collapsed={collapsed}
+          />
+        ))
+      )}
 
       {/*
        * Below the resources, and above the developer tools.
@@ -768,6 +861,32 @@ function ModelLink({
         collapsed={collapsed}
       />
     </li>
+  )
+}
+
+/**
+ * One header shortcut.
+ *
+ * `external` defaults to whether the href leaves this application, which is
+ * the answer almost every configuration wants and the one nobody remembers to
+ * write. Setting it explicitly wins either way.
+ *
+ * `rel="noreferrer"` on a new tab, because `window.opener` on the far side is
+ * a handle on a page holding an admin session.
+ */
+function HeaderLinkItem({ link }: { readonly link: HeaderLink }) {
+  const Icon = modelIcon(link.icon)
+  const external = link.external ?? /^https?:/.test(link.href)
+
+  return (
+    <a
+      href={link.href}
+      className="text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors"
+      {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}
+    >
+      {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
+      {link.label}
+    </a>
   )
 }
 

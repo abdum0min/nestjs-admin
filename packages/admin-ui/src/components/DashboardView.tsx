@@ -1,11 +1,19 @@
 /**
  * The landing page.
  *
- * Four widget kinds, drawn from data. The interface knows how to render a
- * number, a list, a chart and an application-supplied statistic, and knows
- * nothing else about any of them - no widget name, no model name, no special
- * case. Adding a widget to an application is a line of configuration, not a
- * change here, which is the whole reason the contract is a closed set of four.
+ * Seven widget kinds, drawn from data. The interface knows how to render a
+ * number, a list, a time series, a division, a target, an application-supplied
+ * statistic and the admin's own history - and knows nothing else about any of
+ * them. No widget name, no model name, no special case. Adding a widget to an
+ * application is a line of configuration, not a change here, which is the whole
+ * reason the contract is a closed set.
+ *
+ * ## Colour is emphasis, and emphasis is rationed
+ *
+ * A card may carry an accent and an icon. Both are opt-in and most cards should
+ * have neither: a page where every card is coloured has no emphasis at all, it
+ * just has more colours. See `ACCENT` for why the accent is an edge and a tile
+ * rather than a filled panel.
  *
  * ## One request, several answers
  *
@@ -26,19 +34,29 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, TriangleAlert } from 'lucide-
 import { fetchDashboard } from '../api/client.js'
 import type {
   ActivityData,
+  BreakdownData,
   ChartData,
   CountData,
   Dashboard,
+  FieldDescriptor,
   ListData,
+  ModelDescriptor,
+  ProgressData,
   StatData,
+  WidgetColor,
   WidgetDescriptor,
 } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { formatNumber } from '../lib/locale.js'
 import { href } from '../hooks/use-route.js'
 import { cn } from '../lib/utils.js'
+import { columnAlign } from '../metadata/tone.js'
+import { modelIcon } from '../metadata/icons.jsx'
+import { ALIGN, Value } from './Cell.jsx'
 import { ErrorState } from './States.jsx'
 import { BarChart } from './ui/bar-chart.jsx'
+import { SeriesChart } from './ui/series-chart.jsx'
+import { ValueBadge } from './ui/value-badge.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card.jsx'
 import { Skeleton } from './ui/skeleton.jsx'
 
@@ -60,7 +78,7 @@ const SPAN: Readonly<Record<number, string>> = {
   4: 'sm:col-span-2 lg:col-span-4',
 }
 
-export function DashboardView() {
+export function DashboardView({ models = [] }: { readonly models?: readonly ModelDescriptor[] }) {
   const dashboard = useAsync(() => fetchDashboard(), [])
 
   return (
@@ -77,16 +95,22 @@ export function DashboardView() {
       ) : dashboard.data === undefined || dashboard.data.widgets.length === 0 ? (
         <p className="text-muted-foreground text-sm">Nothing to show yet.</p>
       ) : (
-        <Loaded dashboard={dashboard.data} />
+        <Loaded dashboard={dashboard.data} models={models} />
       )}
     </div>
   )
 }
 
-function Loaded({ dashboard }: { readonly dashboard: Dashboard }) {
+function Loaded({
+  dashboard,
+  models,
+}: {
+  readonly dashboard: Dashboard
+  readonly models: readonly ModelDescriptor[]
+}) {
   return (
     <>
-      <WidgetGrid widgets={dashboard.widgets} />
+      <WidgetGrid widgets={dashboard.widgets} models={models} />
       {dashboard.generated ? <GeneratedNote /> : null}
     </>
   )
@@ -100,12 +124,25 @@ function Loaded({ dashboard }: { readonly dashboard: Dashboard }) {
  * product rather than two screens that happen to show cards - and it means a
  * widget added here appears on both without anybody remembering to.
  */
-export function WidgetGrid({ widgets }: { readonly widgets: Dashboard['widgets'] }) {
+export function WidgetGrid({
+  widgets,
+  models = [],
+}: {
+  readonly widgets: Dashboard['widgets']
+  /**
+   * Every model, so a `list` widget that names columns can draw them.
+   *
+   * A cell is rendered from its field - an enum becomes its badge, a number
+   * goes right - and that needs the schema. Passing it here rather than having
+   * the widget fetch it keeps the dashboard at one request.
+   */
+  readonly models?: readonly ModelDescriptor[]
+}) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {widgets.map((widget) => (
         <div key={widget.id} className={SPAN[widget.span] ?? SPAN[1]}>
-          <Widget widget={widget} />
+          <Widget widget={widget} models={models} />
         </div>
       ))}
     </div>
@@ -133,7 +170,13 @@ function Code({ children }: { readonly children: React.ReactNode }) {
   return <code className="bg-muted text-foreground rounded px-1 py-0.5 font-mono">{children}</code>
 }
 
-function Widget({ widget }: { readonly widget: WidgetDescriptor }) {
+function Widget({
+  widget,
+  models,
+}: {
+  readonly widget: WidgetDescriptor
+  readonly models: readonly ModelDescriptor[]
+}) {
   if (widget.failed) return <FailedWidget widget={widget} />
 
   switch (widget.kind) {
@@ -141,9 +184,13 @@ function Widget({ widget }: { readonly widget: WidgetDescriptor }) {
     case 'stat':
       return <NumberWidget widget={widget} />
     case 'list':
-      return <ListWidget widget={widget} />
+      return <ListWidget widget={widget} models={models} />
     case 'chart':
       return <ChartWidget widget={widget} />
+    case 'breakdown':
+      return <BreakdownWidget widget={widget} />
+    case 'progress':
+      return <ProgressWidget widget={widget} />
     case 'activity':
       return <ActivityWidget widget={widget} />
     default:
@@ -170,6 +217,33 @@ function listHref(widget: WidgetDescriptor): string | undefined {
   })
 }
 
+/**
+ * What a widget's colour does to it.
+ *
+ * **An accent, not a fill.** A hairline down the leading edge and a tint behind
+ * the icon; the card keeps the surface every other card has.
+ *
+ * The obvious alternative is the one every Bootstrap admin template uses - a
+ * solid saturated panel per card - and it fails twice. Nothing stands out when
+ * six cards are all shouting, and a dark palette has nowhere to put six fully
+ * saturated blocks that does not look like a toy. Emphasis only works if most
+ * of the page is quiet.
+ *
+ * Written out rather than interpolated, because Tailwind generates the classes
+ * it finds written in source and nothing else.
+ */
+const ACCENT: Readonly<Record<WidgetColor, { edge: string; tile: string; ink: string }>> = {
+  primary: { edge: 'border-l-primary', tile: 'bg-primary/10', ink: 'text-primary' },
+  success: { edge: 'border-l-success', tile: 'bg-success/12', ink: 'text-success' },
+  warning: { edge: 'border-l-warning', tile: 'bg-warning/15', ink: 'text-warning' },
+  danger: { edge: 'border-l-destructive', tile: 'bg-destructive/12', ink: 'text-destructive' },
+  neutral: {
+    edge: 'border-l-muted-foreground/40',
+    tile: 'bg-muted',
+    ink: 'text-muted-foreground',
+  },
+}
+
 function WidgetCard({
   widget,
   children,
@@ -177,18 +251,57 @@ function WidgetCard({
   readonly widget: WidgetDescriptor
   readonly children: React.ReactNode
 }) {
+  const accent = widget.color ? ACCENT[widget.color] : undefined
+  const Icon = modelIcon(widget.icon)
+
   return (
     // Named, so a test - and anyone reading the DOM - can tell where one
     // widget ends and the next begins. Cards elsewhere are not addressed this
     // way; a grid of them is the one place it matters.
-    <Card data-slot="widget" className="flex h-full flex-col">
-      <CardHeader className="px-4 pt-4 pb-2">
-        <CardTitle className="text-muted-foreground text-sm font-medium">{widget.title}</CardTitle>
-        {widget.description ? (
-          <CardDescription className="text-xs">{widget.description}</CardDescription>
+    <Card
+      data-slot="widget"
+      className={cn('flex h-full flex-col', accent && `border-l-2 ${accent.edge}`)}
+    >
+      <CardHeader className="flex flex-row items-start gap-3 px-4 pt-4 pb-2">
+        {Icon ? (
+          // The thing the eye lands on before it reads. A dashboard is scanned
+          // for the card you want, and a shape is found faster than a word.
+          <span
+            className={cn(
+              'flex size-9 shrink-0 items-center justify-center rounded-lg',
+              accent?.tile ?? 'bg-muted',
+              accent?.ink ?? 'text-muted-foreground',
+            )}
+            aria-hidden="true"
+          >
+            <Icon className="size-4.5" />
+          </span>
         ) : null}
+
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <CardTitle className="text-muted-foreground text-sm font-medium">
+            {widget.title}
+          </CardTitle>
+          {widget.description ? (
+            <CardDescription className="text-xs">{widget.description}</CardDescription>
+          ) : null}
+        </span>
       </CardHeader>
-      <CardContent className="px-4 pb-4">{children}</CardContent>
+
+      <CardContent className="flex flex-1 flex-col px-4 pb-4">{children}</CardContent>
+
+      {/* A footer the application asked for, under a rule so it reads as a
+          way out of the card rather than as more of its content. */}
+      {widget.href === undefined ? null : (
+        <a
+          href={widget.href}
+          className="text-muted-foreground hover:text-link flex items-center gap-1 border-t px-4 py-2 text-xs font-medium transition-colors"
+          {...(/^https?:/.test(widget.href) ? { target: '_blank', rel: 'noreferrer' } : {})}
+        >
+          {widget.hrefLabel ?? 'More'}
+          <ArrowRight className="size-3" aria-hidden="true" />
+        </a>
+      )}
     </Card>
   )
 }
@@ -258,11 +371,81 @@ function Delta({ value }: { readonly value: number }) {
   )
 }
 
-function ListWidget({ widget }: { readonly widget: WidgetDescriptor }) {
+function ListWidget({
+  widget,
+  models,
+}: {
+  readonly widget: WidgetDescriptor
+  readonly models: readonly ModelDescriptor[]
+}) {
   const data = widget.data as ListData | undefined
   const records = data?.records ?? []
   const link = listHref(widget)
   const model = widget.model
+
+  /*
+   * The columns, only where the schema is here to draw them with.
+   *
+   * A named column whose field cannot be resolved is dropped rather than
+   * printed raw: a cell drawn without its field would lose the badge, the
+   * alignment and the date formatting, which is most of the reason to name
+   * columns at all. Losing all of them falls back to the list of names, which
+   * is what this card has always been.
+   */
+  const descriptor = models.find((candidate) => candidate.name === model)
+  const columns = (data?.columns ?? [])
+    .map((name) => descriptor?.fields.find((field) => field.name === name))
+    .filter((field): field is FieldDescriptor => field !== undefined)
+
+  if (columns.length > 0 && model !== undefined && records.length > 0) {
+    return (
+      <WidgetCard widget={widget}>
+        <div className="-mx-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-muted-foreground border-b text-xs">
+                {columns.map((column) => (
+                  <th
+                    key={column.name}
+                    scope="col"
+                    className={cn('px-4 pb-1.5 font-medium', ALIGN[columnAlign(column)])}
+                  >
+                    {column.label ?? column.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((record) => (
+                <tr key={record.id} className="hover:bg-accent/50 border-b last:border-0">
+                  {columns.map((column, index) => (
+                    <td key={column.name} className={cn('px-4 py-1.5', ALIGN[columnAlign(column)])}>
+                      {/* The first cell carries the link, so the row has one
+                          way in rather than a link per cell. */}
+                      {index === 0 ? (
+                        <a
+                          href={href({ kind: 'detail', model, id: record.id })}
+                          className="hover:text-link block truncate transition-colors"
+                        >
+                          <Value field={column} value={record.values?.[column.name]} />
+                        </a>
+                      ) : (
+                        <Value field={column} value={record.values?.[column.name]} />
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {link && data && data.total > records.length ? (
+          <MoreLink href={link}>View all {formatNumber(data.total)}</MoreLink>
+        ) : null}
+      </WidgetCard>
+    )
+  }
 
   return (
     <WidgetCard widget={widget}>
@@ -318,13 +501,168 @@ function ChartWidget({ widget }: { readonly widget: WidgetDescriptor }) {
 
       {points.length === 0 ? (
         <p className="text-muted-foreground text-sm">No data in this period.</p>
-      ) : (
+      ) : data?.display === 'bar' ? (
         <BarChart points={points} />
+      ) : (
+        <SeriesChart points={points} fill={data?.display !== 'line'} />
       )}
 
       {link ? <MoreLink href={link}>View records</MoreLink> : null}
     </WidgetCard>
   )
+}
+
+/**
+ * How the records divide, as a row of labelled bars.
+ *
+ * Bars rather than a pie. A pie asks the eye to compare angles, which it is bad
+ * at, and it needs a legend because the labels do not fit inside the slices -
+ * so reading one is a lookup. Bars share a baseline, which is the comparison
+ * people are actually good at, and the label sits beside its own bar.
+ *
+ * Each row links to that value filtered on the list screen, because "nine are
+ * pending" is a question whose answer is those nine.
+ */
+function BreakdownWidget({ widget }: { readonly widget: WidgetDescriptor }) {
+  const data = widget.data as BreakdownData | undefined
+  const slices = data?.slices ?? []
+  const model = widget.model
+
+  // Shares are of the largest slice, not of the total. Against the total a
+  // realistic distribution - one value holding most of the rows - leaves every
+  // other bar a stub, and the comparison between the small ones is lost.
+  const peak = Math.max(1, ...slices.map((slice) => slice.count))
+  const total = data?.total ?? 0
+
+  if (slices.length === 0) {
+    return (
+      <WidgetCard widget={widget}>
+        <p className="text-muted-foreground py-2 text-sm">Nothing to divide.</p>
+      </WidgetCard>
+    )
+  }
+
+  return (
+    <WidgetCard widget={widget}>
+      <ul className="flex flex-col gap-2">
+        {slices.map((slice) => {
+          const row = (
+            <>
+              <span className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="truncate">
+                  {slice.tone ? (
+                    <ValueBadge tone={slice.tone}>{slice.label}</ValueBadge>
+                  ) : (
+                    slice.label
+                  )}
+                </span>
+                <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                  {formatNumber(slice.count)}
+                  {total > 0 ? ` · ${Math.round((slice.count / total) * 100)}%` : ''}
+                </span>
+              </span>
+              <span className="bg-muted mt-1 block h-1.5 overflow-hidden rounded-full">
+                <span
+                  className={cn('block h-full rounded-full', TONE_BAR[slice.tone ?? 'neutral'])}
+                  style={{
+                    width: `${Math.max((slice.count / peak) * 100, slice.count > 0 ? 2 : 0)}%`,
+                  }}
+                />
+              </span>
+            </>
+          )
+
+          return (
+            <li key={slice.value}>
+              {model === undefined || data === undefined ? (
+                <div>{row}</div>
+              ) : (
+                <a
+                  href={href({
+                    kind: 'list',
+                    model,
+                    filter: `${data.field}:eq:${slice.value}`,
+                  })}
+                  className="block rounded-sm"
+                >
+                  {row}
+                </a>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </WidgetCard>
+  )
+}
+
+/** The bar's fill, by tone. Written out for Tailwind's scanner, like `ACCENT`. */
+const TONE_BAR: Readonly<Record<string, string>> = {
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-destructive',
+  info: 'bg-primary',
+  neutral: 'bg-primary/60',
+}
+
+/**
+ * How far a number has got toward one somebody chose.
+ *
+ * The bar is capped at the target and the figure is not. Past 100% the bar has
+ * nothing left to say, and stretching it would make "we beat the goal" look
+ * identical to "we met it" - so the overshoot is stated in words instead.
+ */
+function ProgressWidget({ widget }: { readonly widget: WidgetDescriptor }) {
+  const data = widget.data as ProgressData | undefined
+  const value = data?.value ?? 0
+  const target = data?.target ?? 0
+  const share = target > 0 ? Math.min(value / target, 1) : 0
+  const percent = target > 0 ? Math.round((value / target) * 100) : 0
+
+  return (
+    <WidgetCard widget={widget}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-3xl font-semibold tracking-tight tabular-nums">
+          {formatNumber(value)}
+        </span>
+        <span className="text-muted-foreground text-xs tabular-nums">
+          of {formatNumber(target)}
+        </span>
+      </div>
+
+      <div
+        className="bg-muted mt-2 h-2 overflow-hidden rounded-full"
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={widget.title}
+      >
+        <div
+          className={cn(
+            'h-full rounded-full transition-[width]',
+            TONE_BAR[widget.color === undefined ? 'neutral' : BAR_TONE[widget.color]] ??
+              'bg-primary',
+          )}
+          style={{ width: `${share * 100}%` }}
+        />
+      </div>
+
+      <p className="text-muted-foreground mt-1.5 text-xs">
+        {percent}%{value > target && target > 0 ? ' — past the target' : ''}
+        {data?.hint ? ` · ${data.hint}` : ''}
+      </p>
+    </WidgetCard>
+  )
+}
+
+/** A widget colour, as the tone its bar should take. */
+const BAR_TONE: Readonly<Record<WidgetColor, string>> = {
+  primary: 'info',
+  success: 'success',
+  warning: 'warning',
+  danger: 'danger',
+  neutral: 'neutral',
 }
 
 function MoreLink({

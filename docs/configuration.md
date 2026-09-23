@@ -567,6 +567,45 @@ content, which is where the row used to be.
 | `widget`      | client      | How to render it                                                 |
 | `placeholder` | client      | The picture to draw when a file field has none of its own        |
 | `order`       | client      | Position in forms and tables                                     |
+| `align`       | client      | How the column lines up. Guessed from the kind when unset        |
+| `width`       | client      | A width hint for the column, as a CSS length                     |
+| `badge`       | client      | The tone of each enum value, where the guess is wrong            |
+
+### What the table draws without being told
+
+Three kinds of value carry meaning the schema already knows, and since 0.19.0
+they are drawn as such rather than printed:
+
+|               |                                                |
+| ------------- | ---------------------------------------------- |
+| An **enum**   | a badge, tinted by what the value means        |
+| A **boolean** | a tick or a dash, not the words "Yes" and "No" |
+| A **number**  | right-aligned, so place values stack           |
+
+The tone is inferred from the value's own name — `PAID` and `PUBLISHED` are
+good, `PENDING` and `DRAFT` are waiting, `FAILED` and `CANCELLED` are wrong,
+and anything unrecognised is neutral. Matching is on whole words, so `UNPAID`
+is not read as paid.
+
+**Guessed rather than configured**, because nobody is going to enumerate the
+tone of every value of every enum in a thirty-model schema — and an admin that
+needed them to would be one where this feature does not exist in practice.
+
+Correct it where a word means different things in different businesses:
+
+```ts
+fields: {
+  // `CLOSED` is good news on a support ticket and bad news on a shop.
+  status: { badge: { CLOSED: 'success', ON_HOLD: 'warning' } },
+
+  // A category is not a state. Colouring a size means nothing.
+  size: { badge: false },
+}
+```
+
+Alignment is guessed too: numbers right, everything else left — except a
+numeric **id**, which is a label rather than a quantity. `align` corrects both
+cases.
 
 That division is the thing to remember: the first five are security, the rest
 are presentation. Treating one of the first as one of the last would be a hole
@@ -1039,32 +1078,88 @@ hook's refusal is.
 
 ## `dashboard`
 
-What the landing page shows. Four kinds, closed for the same reason `widget` is.
+What the landing page shows. A closed set of kinds, for the same reason
+`widget` is one.
 
 ```ts
 dashboard: [
-  { kind: 'count', title: 'Customers', model: 'User', filter?, compareDays? },
-  { kind: 'list',  title: 'Latest',    model: 'Order', filter?, limit? },
-  { kind: 'chart', title: 'Signups',   model: 'User', filter?, bucket?, buckets? },
-  { kind: 'stat',  title: 'Revenue',   load: async ({ context }) => ({ value, delta?, hint? }) },
+  { kind: 'count',     title: 'Customers', model: 'User',  filter?, compareDays? },
+  { kind: 'list',      title: 'Latest',    model: 'Order', filter?, limit?, columns? },
+  { kind: 'chart',     title: 'Signups',   model: 'User',  filter?, bucket?, buckets?, display? },
+  { kind: 'breakdown', title: 'By status', model: 'Order', field: 'status', filter?, tones? },
+  { kind: 'progress',  title: 'This week', model: 'Post',  target: 60, filter?, hint? },
+  { kind: 'stat',      title: 'Revenue',   load: async ({ context }) => ({ value, delta?, hint? }) },
+  { kind: 'activity',  title: 'Activity',  days?, limit? },
 ]
 ```
 
-Common to all four: `title`, `description?`, `span?` (1–4 columns; sensible per
-kind when omitted).
+Common to all: `title`, `description?`, `span?` (1–4 columns; sensible per kind
+when omitted), and the three emphasis options below.
 
-| Option        | Kind               | Notes                                                                                            |
-| ------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
-| `filter`      | count, list, chart | `field:operator:value`, parsed exactly as the list screen's URL is                               |
-| `compareDays` | count              | Adds a change against that period. Needs a creation timestamp; silently omitted without one      |
-| `limit`       | list               | 5 by default, 10 at most — more belongs on the list screen                                       |
-| `bucket`      | chart              | `day` (default), `week`, `month`                                                                 |
-| `buckets`     | chart              | 30 by default, 90 at most — each bucket is one query                                             |
-| `load`        | stat               | Your code. Whatever it returns is shown; whatever it throws makes one card say it could not load |
+| Option        | Kind                                    | Notes                                                                                            |
+| ------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `filter`      | count, list, chart, breakdown, progress | `field:operator:value`, parsed exactly as the list screen's URL is                               |
+| `compareDays` | count                                   | Adds a change against that period. Needs a creation timestamp; silently omitted without one      |
+| `limit`       | list                                    | 5 by default, 10 at most — more belongs on the list screen                                       |
+| `columns`     | list                                    | Draw it as a small table. At most 4; a column the model lacks is dropped                         |
+| `bucket`      | chart                                   | `day` (default), `week`, `month`                                                                 |
+| `buckets`     | chart                                   | 30 by default, 90 at most — each bucket is one query                                             |
+| `display`     | chart                                   | `area` (default), `line`, `bar`                                                                  |
+| `field`       | breakdown                               | The enum or boolean column to divide by. **Required**                                            |
+| `tones`       | breakdown                               | Colour each value by what it means. On by default                                                |
+| `target`      | progress                                | What counts as done. With `model`, or supply `load` instead                                      |
+| `load`        | stat, progress                          | Your code. Whatever it returns is shown; whatever it throws makes one card say it could not load |
 
-The first three name a model, which is what makes them **authorizable**: a
-widget over a resource this person cannot list is absent from the document and
-its model is never queried.
+Everything but `stat` and `activity` names a model, which is what makes them
+**authorizable**: a widget over a resource this person cannot list is absent
+from the document and its model is never queried.
+
+### Emphasis: `color`, `icon`, `href`
+
+```ts
+{ kind: 'count', title: 'Awaiting payment', model: 'Order',
+  filter: 'status:eq:PENDING', icon: 'receipt', color: 'warning' }
+```
+
+`color` is one of `primary`, `success`, `warning`, `danger`, `neutral` — names,
+not hex, so a card coloured `success` is green in whichever palette the viewer
+has and an application that rebrands does not have to find every colour it
+wrote down.
+
+**It is an accent, not a fill.** The icon sits in a tinted square and a hairline
+runs down the leading edge; the card keeps the surface every other card has. A
+wall of saturated panels fails twice over — nothing stands out when everything
+is shouting, and a dark palette has nowhere to put six saturated blocks.
+
+**Most cards should have neither.** A page where every card is coloured has no
+emphasis, it just has more colours. Two or three is the right number.
+
+`href` and `hrefLabel` add a footer link, for cards that cannot work out where
+to send you — a `stat` over three tables, a `progress` toward a target. A
+`count` or `list` already links to its own model.
+
+### `breakdown`
+
+"Orders by status", "users by role" — the question a time series cannot answer.
+It draws as labelled bars, each linking to that value filtered on the list
+screen, with the tone inferred from the value's own name.
+
+**Only over an enum or a boolean**, and that is what makes it possible rather
+than a simplification: the counts are one query per value, and a column whose
+values are not known in advance has no bounded number of them. Naming a free
+text column is a card that says it could not load.
+
+A value with no records is kept. "None are failed" is a different statement
+from not mentioning failures.
+
+### `progress`
+
+A number against a target, which a count cannot be: 310 means nothing until you
+know somebody was aiming at 400. Count a model with `model` + `target`, or
+supply `load` returning `{ value, target, hint? }`.
+
+The bar caps at the target and the figure does not — past 100% it says so in
+words, because a stretched bar makes "we beat the goal" look like "we met it".
 
 Omit the option entirely and a dashboard is generated from the schema: a count
 per model, plus recent records and a month of activity for models that record
@@ -1591,6 +1686,35 @@ theme: {
   appearance: 'system',        // 'system' | 'light' | 'dark'
 }
 ```
+
+### `links` and `userLinks`
+
+The handful of places an administrator needs that are not part of the admin.
+
+```ts
+theme: {
+  links: [
+    { label: 'Live site', href: 'https://acme.com', icon: 'globe' },
+    { label: 'Docs', href: '/docs', icon: 'file-text' },
+  ],
+  userLinks: [{ label: 'My profile', href: '#/User/me' }],
+}
+```
+
+`links` sit beside the admin's name; `userLinks` sit in the account menu above
+Sign out, and only where the admin owns the login. Both take the same shape a
+navigation link does — `label`, `href`, `icon?`, `external?` — and the same
+whitelist on `href`: an `http(s)` URL, a path starting with `/`, or a hash route
+starting with `#/`. Anything else is a startup error. An absolute URL opens in a
+new tab unless you say otherwise.
+
+**They are not a permission.** The header is rendered from structural
+configuration, before any principal exists, so every link here is visible to
+everyone who can open the admin. A link only some people should follow belongs
+in [`navigation`](#navigation), which is resolved per principal.
+
+Below a tablet there is no room for them, so they move to the foot of the
+navigation drawer rather than disappearing.
 
 ### One value, or all of them
 

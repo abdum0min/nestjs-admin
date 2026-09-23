@@ -24,6 +24,93 @@ because this note has been wrong before.
 
 ---
 
+## 0.19.0
+
+Everything rendered at one weight, so nothing was scannable.
+
+That was the finding behind this release. A status was text, a flag was the
+word "Yes", a total was text. Nothing was emphasised, which meant reading a
+table instead of looking at it — and a dashboard where the eye had nowhere to
+land first.
+
+### Added
+
+- **The table draws what the schema already knows.** An enum becomes a badge
+  tinted by what its value means, a boolean becomes a tick or a dash, and a
+  number is right-aligned so place values stack.
+
+  **The tone is guessed, not configured.** `PAID` is good, `PENDING` is
+  waiting, `FAILED` is wrong; anything unrecognised is neutral, which most
+  enums are. Nobody is going to enumerate the tone of every value of every enum
+  in a thirty-model schema, and an admin that needed them to would be one where
+  this feature does not exist in practice.
+
+  Matching is on whole words, so `UNPAID` is not read as paid — the bug a
+  substring match gets exactly backwards. Correct the guess per field with
+  `badge: { CLOSED: 'success' }`, or turn it off with `badge: false` where the
+  values are categories rather than states.
+
+- **`breakdown`**, a widget answering the question a time series cannot: how
+  the records divide across one column. Labelled bars, each linking to that
+  value filtered on the list screen.
+
+  **Only over an enum or a boolean**, and that constraint is what makes it
+  possible rather than a simplification. The counts are one query per value, so
+  a column whose values are not known in advance has no bounded number of them
+  — the same trade `chart` has made since it existed, and the reason neither
+  needs a `groupBy` on `OrmAdapter` before the 1.0 freeze.
+
+  A value with no records is kept: "none are failed" is a different statement
+  from not mentioning failures.
+
+- **`progress`**, a number against a target — which a count cannot be, because
+  310 means nothing until you know somebody was aiming at 400. Counts a model,
+  or takes the application's own number. The bar caps at the target and the
+  figure does not: a stretched bar would make "we beat the goal" look like "we
+  met it".
+
+- **`color`, `icon` and `href` on every widget.** An accent, not a fill: the
+  icon sits in a tinted square and a hairline runs down the leading edge, and
+  the card keeps the surface every other card has. A wall of saturated panels
+  fails twice — nothing stands out when everything is shouting, and a dark
+  palette has nowhere to put six saturated blocks.
+
+  Colours are names from a closed set of five, mapped to theme tokens, so a
+  card coloured `success` is green in whichever palette the viewer has.
+
+- **`display` on a chart**: `area` (new default), `line` or `bar`. The default
+  changed and it was a correction rather than a preference — thirty daily bars
+  are thirty separate shapes the eye has to assemble into a trend, and a filled
+  line hands the trend over directly. `bar` is still right for twelve months or
+  seven weekdays, where each column is a thing rather than a sample.
+
+- **`columns` on a list widget**, turning it from a column of names into the
+  three or four facts somebody wants at a glance. Drawn by the same code the
+  list screen uses, so a status arrives as its badge here too.
+
+- **`theme.links` and `theme.userLinks`** — the handful of places an
+  administrator needs that are not part of the admin. The same shape and the
+  same `href` whitelist a navigation link has. Below a tablet they move to the
+  foot of the navigation drawer rather than disappearing.
+
+  They are **not a permission**: the header is rendered before any principal
+  exists, so everything here is visible to everyone who can open the admin. A
+  link only some people should follow belongs in `navigation`.
+
+- **A filter box in the sidebar**, once there are a dozen entries to search.
+  Below that it costs a line and saves nothing — the eye is faster. Typing sets
+  the groups aside, because somebody searching is looking for one thing and a
+  folded heading could still hide it.
+
+### Notes
+
+The tone rule lives in two places — `@nest-admin/core` and the browser bundle —
+and that is deliberate. The alternative is a metadata document carrying a map
+of every value of every enum in the schema on every page load, for a derivation
+that is twenty lines and cannot fail.
+
+---
+
 ## 0.18.0
 
 Screens the schema does not imply.

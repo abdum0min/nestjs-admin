@@ -31,6 +31,8 @@
  * Each value is validated to a shape that cannot carry markup, and rejected at
  * startup if it does not fit.
  */
+import type { ModelIcon } from '@nest-admin/core'
+
 import { readableInk, visibleOn } from './colour.js'
 
 /**
@@ -109,6 +111,28 @@ export interface AdminPalette {
   readonly sidebarAccentForeground?: string
 }
 
+/**
+ * A link in the header or the account menu.
+ *
+ * Deliberately the same shape as a navigation link, because it is the same
+ * idea in a different place - and a consumer who has written one already knows
+ * how to write the other.
+ */
+export interface AdminHeaderLink {
+  readonly label: string
+
+  /**
+   * An http(s) URL, a root-relative path, or a hash route inside the admin.
+   * Anything else is refused at startup; see {@link AdminTheme.links}.
+   */
+  readonly href: string
+
+  readonly icon?: ModelIcon
+
+  /** Open in a new tab. Implied for an absolute URL, and settable either way. */
+  readonly external?: boolean
+}
+
 export interface AdminFonts {
   /** The body stack, e.g. `"Inter", system-ui, sans-serif`. */
   readonly body?: string
@@ -159,6 +183,48 @@ export interface AdminTheme {
 
   /** A line in the footer. Plain text. */
   readonly copyright?: string
+
+  /**
+   * Links in the header, beside the admin's name.
+   *
+   * Where "back to the site", "our documentation" and "the status page" go -
+   * the handful of places somebody administering a system needs to reach that
+   * are not part of the admin. Django's admin has had this since the beginning
+   * and every admin theme copies it, because an administrator's job does not
+   * end at the edge of the admin.
+   *
+   * ```ts
+   * links: [
+   *   { label: 'Live site', href: 'https://acme.com', icon: 'globe' },
+   *   { label: 'Docs', href: '/docs', icon: 'file-text' },
+   * ]
+   * ```
+   *
+   * The same shape a navigation link already has, and the same whitelist on
+   * `href` - an http(s) URL, a root-relative path, or a hash route inside the
+   * admin. An absolute URL opens in a new tab unless `external` says otherwise.
+   *
+   * **They are not a permission.** The header is drawn from structural
+   * configuration, before any principal exists, so every link here is visible
+   * to everyone who can open the admin. A link only some people should follow
+   * belongs in `navigation`, which is resolved per principal.
+   *
+   * Below a tablet there is no room for them, so they move to the foot of the
+   * navigation drawer rather than disappearing.
+   */
+  readonly links?: readonly AdminHeaderLink[]
+
+  /**
+   * Links inside the account menu, above Sign out.
+   *
+   * The same shape and the same rules as {@link links}. This is where "my
+   * profile" and "keyboard shortcuts" go - things about the person rather than
+   * about the system.
+   *
+   * Only drawn where the admin owns the login, because an admin whose host
+   * application handles identity has no account menu to put them in.
+   */
+  readonly userLinks?: readonly AdminHeaderLink[]
 
   /**
    * Which appearance to start from, before anyone chooses.
@@ -234,8 +300,46 @@ const SAFE_LINE = /^[^<>&"'`\\]{1,200}$/
 
 const SAFE_URL = /^(?:https?:\/\/[^\s<>"'`\\]+|data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+)$/
 
+/**
+ * Where a header link may point.
+ *
+ * The same whitelist a navigation link has, and a whitelist for the same
+ * reason: `javascript:` in an href is the attack, and enumerating what is
+ * allowed leaves nothing to keep up with.
+ */
+const SAFE_LINK_HREF = /^(?:https?:\/\/[^\s<>"'`\\]+|\/[^\s<>"'`\\]*|#\/[^\s<>"'`\\]*)$/
+
 /** A stylesheet may only be fetched over https. See {@link AdminFonts.stylesheet}. */
 const SAFE_STYLESHEET = /^https:\/\/[^\s<>"'`\\]+$/
+
+/**
+ * Refuse links that cannot be drawn, naming the one that is wrong.
+ *
+ * At startup, like every other theme check. A link with a bad href would
+ * otherwise be a dead entry in the header of every page, and the header is the
+ * one part of the admin nobody can navigate away from.
+ */
+function assertUsableLinks(
+  links: readonly AdminHeaderLink[] | undefined,
+  name: 'links' | 'userLinks',
+): void {
+  if (links === undefined) return
+
+  for (const [index, link] of links.entries()) {
+    const at = `${option(name)}[${index}]`
+
+    if (typeof link.label !== 'string' || !SAFE_TEXT.test(link.label)) {
+      throw new Error(`${at}.label must be plain text of at most 64 characters.`)
+    }
+
+    if (typeof link.href !== 'string' || !SAFE_LINK_HREF.test(link.href)) {
+      throw new Error(
+        `${at}.href must be an http(s) URL, a path starting with "/", or a hash route ` +
+          `starting with "#/", received ${JSON.stringify(link.href)}.`,
+      )
+    }
+  }
+}
 
 /**
  * A font stack.
@@ -261,6 +365,8 @@ const THEME_KEYS: ReadonlySet<string> = new Set([
   'faviconUrl',
   'welcome',
   'copyright',
+  'links',
+  'userLinks',
   'appearance',
   'radius',
   'density',
@@ -354,6 +460,9 @@ export function assertUsableTheme(theme: AdminTheme | undefined): void {
       )
     }
   }
+
+  assertUsableLinks(theme.links, 'links')
+  assertUsableLinks(theme.userLinks, 'userLinks')
 
   if (theme.appearance !== undefined && !APPEARANCES.has(theme.appearance)) {
     throw new Error(
@@ -505,6 +614,19 @@ export function renderTheme(theme: AdminTheme | undefined): string {
     ...(theme.copyright !== undefined ? { copyright: theme.copyright } : {}),
     ...(theme.appearance !== undefined ? { appearance: theme.appearance } : {}),
     ...(theme.density !== undefined ? { density: theme.density } : {}),
+    /*
+     * These land inside a `<script>` element, where `JSON.stringify` is not by
+     * itself enough: it escapes quotes but leaves `</script>` intact, and a
+     * label carrying that would close the element and start running whatever
+     * came next.
+     *
+     * It cannot. `SAFE_TEXT` and `SAFE_LINK_HREF` both refuse `<` and `>`
+     * outright, so the sequence has no way to be written in the first place -
+     * which is the reason those checks exist and why they run at startup
+     * rather than here.
+     */
+    ...(theme.links !== undefined ? { links: theme.links } : {}),
+    ...(theme.userLinks !== undefined ? { userLinks: theme.userLinks } : {}),
   })
 
   if (globals !== '{}') head.push(`<script>window.__NEST_ADMIN_THEME__ = ${globals}</script>`)

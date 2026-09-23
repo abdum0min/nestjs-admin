@@ -24,6 +24,7 @@
  */
 import type { FieldMetadata, ModelMetadata } from '../metadata/model.js'
 import { isSoftDeleteField } from './soft-delete.js'
+import type { ColumnAlign, ValueTone } from './tone.js'
 
 /**
  * How a field should be edited, when its type does not say enough.
@@ -137,6 +138,47 @@ export interface FieldOverride {
 
   /** Where it sits among the others. Lower comes first; unset comes last. */
   readonly order?: number
+
+  /**
+   * How this column's values line up in the table.
+   *
+   * Guessed when unset, and the guess is only ever about numbers: a column of
+   * digits is right-aligned so place values sit above each other, and
+   * everything else is left-aligned. Set it where the guess is wrong - an
+   * identifier that happens to be numeric reads as text, not as a quantity.
+   */
+  readonly align?: ColumnAlign
+
+  /**
+   * How wide the column is, as a CSS length.
+   *
+   * A hint, not a rule: the table still shares out what is left. It exists for
+   * the two cases the browser gets wrong on its own - a short code given a
+   * third of the screen, and a long description squeezed into nothing.
+   */
+  readonly width?: string
+
+  /**
+   * What tone each value of an enum carries, where the guess is wrong.
+   *
+   * Enum values are drawn as badges and their tone is inferred from the value's
+   * own name - `PAID` is good, `FAILED` is bad, `PENDING` is waiting. See
+   * {@link toneOf} for why that is guessed rather than configured: nobody is
+   * going to enumerate every value of every enum in a real schema.
+   *
+   * The guess is wrong exactly where a word means different things in different
+   * businesses. `CLOSED` is good news on a support ticket and bad news on a
+   * shop, and only the application knows which this is:
+   *
+   * ```ts
+   * fields: { status: { badge: { CLOSED: 'success', ON_HOLD: 'warning' } } }
+   * ```
+   *
+   * `false` draws the values as plain text instead. A category - `SMALL`,
+   * `MEDIUM`, `LARGE` - is not a state, and colouring one is decoration that
+   * means nothing.
+   */
+  readonly badge?: Readonly<Record<string, ValueTone>> | false
 }
 
 /**

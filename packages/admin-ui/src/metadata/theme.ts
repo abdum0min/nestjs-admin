@@ -5,6 +5,8 @@
  * runs and cannot change while the page is open. Absent when the application
  * configured nothing, which is the common case.
  */
+import type { ModelIcon } from '../api/types.js'
+
 declare global {
   interface Window {
     __NEST_ADMIN_THEME__?: {
@@ -27,8 +29,25 @@ declare global {
        * specific surfaces rather than about a value - see index.css.
        */
       density?: 'comfortable' | 'compact'
+      /**
+       * Links in the header, and in the account menu.
+       *
+       * Structural, like everything else here: written into the shell before
+       * any principal exists, so they are the same for everyone who can open
+       * the admin. A link only some people should see belongs in `navigation`,
+       * which the server resolves per principal.
+       */
+      links?: readonly HeaderLink[]
+      userLinks?: readonly HeaderLink[]
     }
   }
+}
+
+export interface HeaderLink {
+  readonly label: string
+  readonly href: string
+  readonly icon?: ModelIcon
+  readonly external?: boolean
 }
 
 export const theme: NonNullable<Window['__NEST_ADMIN_THEME__']> =

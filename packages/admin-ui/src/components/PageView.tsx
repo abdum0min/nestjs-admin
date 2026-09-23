@@ -14,13 +14,20 @@
 import * as React from 'react'
 
 import { fetchPage } from '../api/client.js'
-import type { PageDescriptor } from '../api/types.js'
+import type { ModelDescriptor, PageDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
 import { installPageRuntime, type AdminPageComponent } from '../pages/runtime.js'
 import { WidgetGrid } from './DashboardView.js'
 import { Empty, ErrorState, Loading } from './States.js'
 
-export function PageView({ page }: { readonly page: PageDescriptor }) {
+export function PageView({
+  page,
+  models = [],
+}: {
+  readonly page: PageDescriptor
+  /** Every model, so a widget page can draw a `list` widget's columns. */
+  readonly models?: readonly ModelDescriptor[]
+}) {
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -32,7 +39,7 @@ export function PageView({ page }: { readonly page: PageDescriptor }) {
 
       <PageBoundary path={page.path}>
         {page.kind === 'widgets' ? (
-          <WidgetPage path={page.path} />
+          <WidgetPage path={page.path} models={models} />
         ) : page.kind === 'module' ? (
           <ModulePage source={page.module} />
         ) : (
@@ -50,7 +57,13 @@ export function PageView({ page }: { readonly page: PageDescriptor }) {
  * an admin with twenty pages does not query twenty pages' worth of counts to
  * draw its sidebar.
  */
-function WidgetPage({ path }: { readonly path: string }) {
+function WidgetPage({
+  path,
+  models,
+}: {
+  readonly path: string
+  readonly models: readonly ModelDescriptor[]
+}) {
   const page = useAsync(() => fetchPage(path), [path])
 
   if (page.loading) return <Loading label="Loading…" />
@@ -63,7 +76,7 @@ function WidgetPage({ path }: { readonly path: string }) {
     )
   }
 
-  return <WidgetGrid widgets={page.data.widgets} />
+  return <WidgetGrid widgets={page.data.widgets} models={models} />
 }
 
 /**

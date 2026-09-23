@@ -269,6 +269,11 @@ function dashboard(prisma: PrismaService) {
       kind: 'count',
       title: 'Customers',
       model: 'User',
+      // An accent and an icon, so the eye can pick this card out of six without
+      // reading any of them. Deliberately not on every card: a page where
+      // everything is coloured has no emphasis, it just has more colours.
+      icon: 'users',
+      color: 'primary',
       // Needs `createdAt`, which this schema has. Without it the comparison is
       // dropped and the count is still shown.
       compareDays: 30,
@@ -277,6 +282,8 @@ function dashboard(prisma: PrismaService) {
       kind: 'count',
       title: 'Orders awaiting payment',
       model: 'Order',
+      icon: 'receipt',
+      color: 'warning',
       // The same `field:operator:value` the list screen's URL uses, parsed by
       // the same code - so the widget links straight to those rows.
       filter: 'status:eq:PENDING',
@@ -285,12 +292,15 @@ function dashboard(prisma: PrismaService) {
       kind: 'count',
       title: 'Published posts',
       model: 'Post',
+      icon: 'file-text',
+      color: 'success',
       filter: 'status:eq:PUBLISHED',
     },
     {
       kind: 'stat',
       title: 'Revenue',
       description: 'Paid and shipped orders.',
+      icon: 'credit-card',
       // No model, because no single table answers it. Whatever this throws
       // becomes one widget saying it could not load, not a broken page.
       load: async () => {
@@ -319,12 +329,56 @@ function dashboard(prisma: PrismaService) {
       model: 'User',
       bucket: 'day',
       buckets: 30,
+      // The default. Thirty daily bars are thirty shapes the eye has to
+      // assemble into a trend; a filled line hands the trend over directly.
+      // 'bar' is still right for twelve months or seven weekdays.
+      display: 'area',
+      icon: 'activity',
     },
+    /*
+     * The other question a dashboard is asked, and the one a time series
+     * cannot answer: not "how many over time" but "how do they divide".
+     *
+     * One count per enum value - which is only possible because an enum has a
+     * known, small set of them. The tones are inferred from the value names,
+     * so PAID is green and CANCELLED is red without anybody saying so.
+     */
+    {
+      kind: 'breakdown',
+      title: 'Orders by status',
+      model: 'Order',
+      field: 'status',
+      icon: 'chart-bar',
+    },
+
+    /*
+     * A number against a target, which a count cannot be: 42 means nothing
+     * until you know somebody was aiming at 60.
+     */
+    {
+      kind: 'progress',
+      title: 'Published this quarter',
+      model: 'Post',
+      filter: 'status:eq:PUBLISHED',
+      target: 60,
+      hint: 'target for Q3',
+      icon: 'file-text',
+      color: 'success',
+    },
+
+    /*
+     * Named columns turn this from "what happened recently" into the three
+     * facts somebody wants at a glance. They are drawn by the same code the
+     * list screen uses, so the status arrives as its badge and the total is
+     * right-aligned here too.
+     */
     {
       kind: 'list',
       title: 'Latest orders',
       model: 'Order',
       limit: 6,
+      columns: ['reference', 'status', 'userId'],
+      icon: 'shopping-cart',
     },
     /*
      * What has been happening in the admin, beside the latest orders.
@@ -464,6 +518,27 @@ class DatabaseModule {}
         welcome: 'Sign in to the example application.',
         copyright: '© 2026 Nest Admin. An example, not a product.',
         radius: '0.5rem',
+
+        /*
+         * The handful of places an administrator needs that are not part of
+         * the admin. Structural, so they are the same for everyone who can
+         * open it - a link only some people should follow belongs in
+         * `navigation`, which is resolved per principal.
+         *
+         * Below a tablet they move to the foot of the navigation drawer.
+         */
+        links: [
+          { label: 'Documentation', href: '/docs', icon: 'file-text' },
+          {
+            label: 'Repository',
+            href: 'https://github.com/abdum0min/nestjs-admin',
+            icon: 'link',
+          },
+        ],
+
+        // In the account menu, above Sign out. Things about the person rather
+        // than about the system.
+        userLinks: [{ label: 'Runbook', href: '#/~runbook', icon: 'bookmark' }],
 
         // A sidebar that is faintly its own surface rather than the page in a
         // different grey - the smallest change that makes an admin look like

@@ -49,8 +49,8 @@ import {
   recordId,
   sortableFields,
 } from '../metadata/fields.js'
-import { formatCell } from '../metadata/format.js'
-import { relationForForeignKey, relationLink } from '../metadata/relations.js'
+import { relationForForeignKey } from '../metadata/relations.js'
+import { columnAlign } from '../metadata/tone.js'
 import { Actions } from './Actions.jsx'
 import { ExportDialog } from './ExportDialog.jsx'
 import { ImportDialog } from './ImportDialog.jsx'
@@ -68,7 +68,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu.jsx'
 import { Input } from './ui/input.jsx'
-import { MediaCell } from './ui/media.jsx'
+import { ALIGN, Cell } from './Cell.jsx'
 import { Pagination } from './ui/pagination.jsx'
 import { NONE, SimpleSelect } from './ui/select.jsx'
 import {
@@ -508,7 +508,12 @@ export function ListView({
                       </TableHead>
                     ) : null}
                     {columns.map((column) => (
-                      <TableHead key={column.name} scope="col">
+                      <TableHead
+                        key={column.name}
+                        scope="col"
+                        className={ALIGN[columnAlign(column)]}
+                        {...(column.width === undefined ? {} : { style: { width: column.width } })}
+                      >
                         {columnLabel(model, column)}
                       </TableHead>
                     ))}
@@ -547,7 +552,7 @@ export function ListView({
                           </TableCell>
                         ) : null}
                         {columns.map((column) => (
-                          <TableCell key={column.name}>
+                          <TableCell key={column.name} className={ALIGN[columnAlign(column)]}>
                             <Cell model={model} models={models} column={column} record={record} />
                           </TableCell>
                         ))}
@@ -1074,48 +1079,6 @@ function FilterControl({
       ) : null}
     </div>
   )
-}
-
-/**
- * One table cell.
- *
- * A foreign key is rendered as the related record's name, linking to it -
- * `authorId` says `cmtf50g…`, which is true and unusable. The raw value stays
- * available on the detail page.
- */
-function Cell({
-  model,
-  models,
-  column,
-  record,
-}: {
-  readonly model: ModelDescriptor
-  readonly models: readonly ModelDescriptor[]
-  readonly column: FieldDescriptor
-  readonly record: AdminRecord
-}) {
-  const relationField = relationForForeignKey(model, column.name)
-  const link = relationField ? relationLink(relationField, models, record) : undefined
-
-  // Before the relation check would be wrong - a foreign key is a key whatever
-  // widget it was given - but after it, a file column is drawn rather than
-  // printed. A column of `2026/09/abc123-ada.png` is the bug this closes.
-  if (column.widget === 'image' || column.widget === 'file') {
-    return <MediaCell field={column} value={record[column.name]} />
-  }
-
-  if (link) {
-    return (
-      <a
-        className="text-link underline-offset-4 hover:underline"
-        href={href({ kind: 'detail', model: link.model, id: link.id })}
-      >
-        {link.label}
-      </a>
-    )
-  }
-
-  return <>{formatCell(column, record[column.name])}</>
 }
 
 /**

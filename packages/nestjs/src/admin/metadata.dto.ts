@@ -33,6 +33,8 @@ import {
   type FieldMetadata,
   type ModelMetadata,
   type ModelOverrides,
+  type ColumnAlign,
+  type ValueTone,
 } from '@nest-admin/core'
 
 /** Mirrors Core's `FieldKind`, restated so the wire format is self-contained. */
@@ -159,6 +161,29 @@ export interface FieldDto {
    * different thing entirely.
    */
   readonly writeOnly?: boolean
+
+  /**
+   * How this column lines up in a table, when the application said.
+   *
+   * Absent means the interface decides, and it decides on one rule: numbers
+   * right, everything else left. Sent rather than derived here because the
+   * override has to reach the client somehow and the guess costs it nothing.
+   */
+  readonly align?: ColumnAlign
+
+  /** A width hint for the column, as a CSS length. */
+  readonly width?: string
+
+  /**
+   * What tone each enum value carries.
+   *
+   * Only the ones the application corrected - the rest are inferred from the
+   * value's own name in the browser, which keeps this document from carrying a
+   * map of every value of every enum in the schema.
+   *
+   * `false` means draw them as plain text: a category is not a state.
+   */
+  readonly badge?: Readonly<Record<string, ValueTone>> | false
 
   /** Present when `kind` is `relation`. */
   readonly relation?: RelationDto
@@ -477,6 +502,9 @@ function toFieldDto(
       ? { maxSize: maxSizeFor(override, uploadCeiling) }
       : {}),
     ...(override?.placeholder !== undefined ? { placeholder: override.placeholder } : {}),
+    ...(override?.align !== undefined ? { align: override.align } : {}),
+    ...(override?.width !== undefined ? { width: override.width } : {}),
+    ...(override?.badge !== undefined ? { badge: override.badge } : {}),
     ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
     ...(field.enumValues ? { enumValues: [...field.enumValues] } : {}),
     ...(field.relation
