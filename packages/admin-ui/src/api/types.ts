@@ -47,6 +47,10 @@ export type FieldWidget =
   | 'image'
   /** Formatted text on a string column, stored as HTML. */
   | 'richtext'
+  /** A boolean, as a toggle rather than a tick. */
+  | 'switch'
+  /** An enum, with every option on screen at once. */
+  | 'radio'
 
 /** An application-defined button. */
 export interface ActionDescriptor {
@@ -88,6 +92,13 @@ export interface FieldDescriptor {
   readonly maxSize?: number
   /** A picture to draw when a file field is empty or its value will not load. */
   readonly placeholder?: string
+  /**
+   * A line under the control, saying what the schema cannot.
+   *
+   * Describes the field rather than naming it, so it belongs in
+   * `aria-describedby` and not in the label.
+   */
+  readonly help?: string
   /** Literal default to pre-fill on create, when the schema declares one. */
   readonly defaultValue?: unknown
   readonly enumValues?: readonly string[]
@@ -180,7 +191,7 @@ export interface DetailSection {
 }
 
 export interface DetailPresentation {
-  readonly layout: 'sections' | 'tabs'
+  readonly layout: 'sections' | 'tabs' | 'accordion'
   readonly sections: readonly DetailSection[]
 }
 

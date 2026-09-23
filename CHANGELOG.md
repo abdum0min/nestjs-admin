@@ -24,6 +24,89 @@ because this note has been wrong before.
 
 ---
 
+## 0.20.0
+
+The form was the weakest screen left, and the worst of it was not a control.
+
+Twelve fields typed, a click on the sidebar to check something, and all of it
+gone with no warning and no way back. Every hand-built admin grows a guard
+against that eventually; a generated one has to arrive with it.
+
+### Added
+
+- **Nothing half-typed is lost.** Following a link inside the admin with
+  unsaved changes asks first. Closing the tab or reloading gets the browser's
+  own dialog, whose text cannot be set by a page and is not tried.
+
+  **Dirty is computed, not latched.** Typing a character and deleting it again
+  leaves the form clean, because the values are compared against what the form
+  opened with rather than a flag being set on first keystroke. A question asked
+  every time is one people learn to dismiss without reading, which is a guard
+  that has stopped working.
+
+  In-admin links are caught in the capture phase, before anything has moved.
+  Letting the hash change and putting it back flickers the address bar to a
+  route that was refused and leaves a step in the back button that goes
+  nowhere.
+
+- **Ctrl+S saves**, Cmd+S on a Mac. Bound to the document rather than the form:
+  somebody who has just scrolled has focus nowhere in particular, and a
+  shortcut that works only while a box is focused fails exactly when it is
+  reached for. It calls `requestSubmit`, not `submit`, so required fields are
+  still checked.
+
+- **The first box has focus on a create form**, and only there. Moving focus on
+  load is usually wrong - it skips the heading and drops a screen reader user
+  into the middle of a page. A single-purpose form is the accepted exception
+  and "New Post" is one; an edit form is not, because people arrive at those to
+  look as often as to change.
+
+- **`help` on a field** - a line under the control saying what the schema
+  cannot. "Printed on the packing slip." "Leave blank and one is generated from
+  the title." A column's name and type say what it _is_; this is the only place
+  to say what it is _for_, and having nowhere to put that is why generated
+  admins get a reputation for being guessable rather than usable.
+
+  It describes rather than names, so it reaches the control as
+  `aria-describedby`. A validation message takes over the announcement while
+  one is showing: two descriptions are read one after the other, and the one
+  that matters is the refusal.
+
+- **`widget: 'switch'`** for a boolean. **The checkbox stays the default**,
+  which is the opposite of most admin themes and deliberate: a switch is the
+  vocabulary of a setting that applies the moment it moves, and these forms
+  have a Save button. A control that says "done" while the change is unsaved is
+  a control that lies.
+
+  It is a real `<input type="checkbox">` with `role="switch"`, not a
+  `<button>`. Focus, Space, labelling and form submission already worked; the
+  role changes only whether a screen reader says "on" or "checked".
+
+- **`widget: 'radio'`** for an enum, with every option on screen. Right for
+  three or four values, wrong for twelve. Not chosen automatically from the
+  count: two models with five and six options would then draw differently for
+  no reason a reader could see.
+
+- **`layout: 'accordion'`** on the record screen - `sections` arriving folded
+  with the first open, for a record with more groups than a row of tabs fits.
+
+  Resolved on the server, so `collapsed` means one thing everywhere and the
+  interface needs no second rendering path. **Not one-open-at-a-time**, which
+  is what the word usually implies: on a form that would close a group somebody
+  had just typed into.
+
+### Notes
+
+The form was already two columns on a wide screen; that did not need adding.
+
+A multiselect for to-many relations was considered and deferred. Those are
+written through their own attach and detach routes rather than in the record
+body, so a multiselect on a create form would be a record write followed by N
+attaches - and a partial failure there leaves the form saying "Saved" while
+three tags did not attach. It needs a design, not a control.
+
+---
+
 ## 0.19.0
 
 Everything rendered at one weight, so nothing was scannable.

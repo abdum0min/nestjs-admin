@@ -26,7 +26,7 @@
  * do nothing.
  */
 import { ChevronRight, Wand2 } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import {
   AdminApiError,
@@ -37,6 +37,7 @@ import {
 } from '../api/client.js'
 import type { AdminRecord, FieldDescriptor, ModelDescriptor } from '../api/types.js'
 import { useAsync } from '../hooks/use-async.js'
+import { useSaveShortcut, useUnsavedGuard } from '../hooks/use-unsaved.js'
 import { href, navigate } from '../hooks/use-route.js'
 import {
   fieldLabel,
@@ -54,7 +55,10 @@ import { RelationPicker } from './RelationPicker.jsx'
 import { ErrorState, FormSkeleton } from './States.jsx'
 import { Breadcrumb } from './ui/breadcrumb.jsx'
 import { Card, CardContent } from './ui/card.jsx'
+import { useConfirm } from './ui/confirm.jsx'
 import { Checkbox } from './ui/checkbox.jsx'
+import { RadioGroup } from './ui/radio-group.jsx'
+import { Switch } from './ui/switch.jsx'
 import { FileField } from './ui/file-field.jsx'
 import { DatePicker } from './ui/date-picker.jsx'
 import { Input } from './ui/input.jsx'
@@ -209,6 +213,61 @@ function Form({
   const [error, setError] = useState<unknown>(undefined)
 
   /**
+   * What the form held when it opened, for telling edited from untouched.
+   *
+   * A ref rather than state: it is compared against, never rendered from, and
+   * putting it in state would re-render the whole form every time the
+   * baseline moved after a save.
+   *
+   * Seeded from the same `useState` initialiser the values are, so the two
+   * cannot disagree about what "unchanged" was. The component is remounted
+   * when the record arrives - see the `key` on `<Form>` - so this is set once
+   * per record rather than needing to follow one.
+   */
+  const opened = useRef<FormValues>(values)
+
+  /*
+   * Whether anything would be lost.
+   *
+   * Compared by value across every editable field rather than by tracking a
+   * flag on change, so typing a character and deleting it again leaves the
+   * form clean. A dirty flag that latched would ask about abandoning a form
+   * nobody actually changed, and a question people learn to dismiss is a
+   * question that stops working.
+   */
+  const dirty = editable.some((field) => values[field.name] !== opened.current[field.name])
+
+  const confirm = useConfirm()
+
+  /*
+   * The form element, so the shortcut can submit it the way the button does.
+   *
+   * `requestSubmit` rather than `submit`: the second skips validation and the
+   * `submit` event entirely, so required fields would be bypassed and this
+   * component's own handler would never run.
+   */
+  const form = useRef<HTMLFormElement>(null)
+
+  useSaveShortcut(() => {
+    if (submitting) return
+    form.current?.requestSubmit()
+  })
+
+  useUnsavedGuard({
+    // Never while a save is in flight: the values are about to become the
+    // stored ones, and interrupting that with a question is nonsense.
+    when: dirty && !submitting,
+    ask: () =>
+      confirm({
+        title: 'Leave without saving?',
+        description: 'The changes on this form have not been saved yet.',
+        confirmLabel: 'Leave',
+        cancelLabel: 'Stay',
+        destructive: true,
+      }),
+  })
+
+  /**
    * Fill every box with believable values.
    *
    * The generator's dry run - the same code path that writes records, asked for
@@ -316,11 +375,15 @@ function Form({
 
       if (stay && savedId !== undefined) {
         setBaseline(saved)
-        setValues(() => {
-          const next: FormValues = {}
-          for (const field of editable) next[field.name] = toFormValue(field, saved[field.name])
-          return next
-        })
+
+        const stored: FormValues = {}
+        for (const field of editable) stored[field.name] = toFormValue(field, saved[field.name])
+
+        // What was stored is the new "unchanged". Without this the form stays
+        // dirty against the values it opened with, and the next click on the
+        // sidebar asks about abandoning a form that has just been saved.
+        opened.current = stored
+        setValues(stored)
         setSubmitting(false)
         // A create that stays becomes an edit of what it created, so the next
         // save updates that record rather than making a second one.
@@ -408,7 +471,12 @@ function Form({
 
         {banner !== undefined ? <ErrorState error={banner} /> : null}
 
-        <form id={FORM_ID} className="contents" onSubmit={(event) => void onSubmit(event)}>
+        <form
+          ref={form}
+          id={FORM_ID}
+          className="contents"
+          onSubmit={(event) => void onSubmit(event)}
+        >
           {editable.length === 0 ? (
             <Card>
               <CardContent className="pt-5">
@@ -470,6 +538,22 @@ function FormFields({
 }) {
   const { layout, groups } = fieldGroups(model, editable)
 
+  /*
+   * The first box, focused on arrival - but only when creating.
+   *
+   * Moving focus on load is usually wrong: it skips the heading, and a screen
+   * reader user is dropped into the middle of a page they have not been told
+   * the shape of. A single-purpose form is the accepted exception, and "New
+   * Post" is exactly that - nobody opens it to read it.
+   *
+   * An edit form is not: people arrive at one to look at a record as often as
+   * to change it, and a cursor in the first box invites a change nobody meant.
+   *
+   * Only the first group. React applies `autoFocus` on mount, so switching to
+   * another tab later does not steal focus back.
+   */
+  const focusFirst = editing ? undefined : groups[0]?.fields[0]?.name
+
   const errors: Record<string, string> = {}
   for (const field of editable) {
     const message = errorFor(field.name)
@@ -491,6 +575,7 @@ function FormFields({
           field={field}
           model={model}
           models={models}
+          autoFocus={field.name === focusFirst}
           value={values[field.name] ?? ''}
           error={errorFor(field.name)}
           editing={editing}
@@ -581,6 +666,7 @@ function FieldInput({
   value,
   error,
   editing,
+  autoFocus = false,
   onChange,
 }: {
   readonly field: FieldDescriptor
@@ -591,6 +677,8 @@ function FieldInput({
   readonly error?: string
   /** Editing an existing record rather than creating one. */
   readonly editing: boolean
+  /** The first box on a create form. See `focusFirst`. */
+  readonly autoFocus?: boolean
   readonly onChange: (next: string | boolean) => void
 }) {
   const label = `${fieldLabel(field)}${field.isRequired ? ' *' : ''}`
@@ -608,8 +696,27 @@ function FieldInput({
    * name it was supposed to be reading. Naming and describing are different
    * jobs; `for` and `aria-describedby` are how they stay separate.
    */
-  const described =
-    error === undefined ? { id } : { id, 'aria-invalid': true, 'aria-describedby': errorId }
+  const helpId = `${id}-help`
+
+  /*
+   * One description at a time, and the refusal wins.
+   *
+   * Both would be announced, one after the other, and the second is the one
+   * that matters: somebody who has just been told the value is wrong does not
+   * need the sentence explaining what the field is for read to them first.
+   *
+   * The help text stays on screen either way - it is only the *announcement*
+   * that narrows, because a screen reader reads a description in full and two
+   * of them is a wall.
+   */
+  const describedBy = error !== undefined ? errorId : field.help !== undefined ? helpId : undefined
+
+  const described = {
+    id,
+    ...(autoFocus ? { autoFocus: true } : {}),
+    ...(error === undefined ? {} : { 'aria-invalid': true as const }),
+    ...(describedBy === undefined ? {} : { 'aria-describedby': describedBy }),
+  }
 
   // A foreign key is a string field whose values are ids. Offer the records by
   // name; the picker still submits the key, so the request is unchanged.
@@ -631,6 +738,18 @@ function FieldInput({
         value={String(value)}
         required={field.isRequired}
         inputProps={described}
+        onChange={onChange}
+      />
+    )
+  } else if (field.widget === 'radio' && field.enumValues) {
+    control = (
+      <RadioGroup
+        name={id}
+        value={String(value)}
+        options={field.enumValues.map((option) => ({ value: option, label: option }))}
+        labelledBy={labelId}
+        invalid={error !== undefined}
+        {...(describedBy === undefined ? {} : { describedBy })}
         onChange={onChange}
       />
     )
@@ -725,13 +844,20 @@ function FieldInput({
     )
   } else if (field.kind === 'boolean') {
     inline = true
-    control = (
-      <Checkbox
-        {...described}
-        checked={value === true}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-    )
+    control =
+      field.widget === 'switch' ? (
+        <Switch
+          {...described}
+          checked={value === true}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+      ) : (
+        <Checkbox
+          {...described}
+          checked={value === true}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+      )
   } else {
     control = (
       <Input
@@ -760,6 +886,24 @@ function FieldInput({
     >
       {inline ? control : text}
       {inline ? text : control}
+
+      {/*
+        Under the control, not under the label.
+
+        Above it, the sentence sits between the name and the box it names, and
+        the eye has to step over it on the way to typing. Under, it is there
+        for anyone who stopped - which is who it is for.
+
+        It stays on screen while an error is showing. The announcement narrows
+        to the refusal (see `describedBy`), but the sentence explaining what the
+        field is for is still the thing that helps somebody fix the value.
+      */}
+      {field.help === undefined ? null : (
+        <span className={cn('text-muted-foreground text-xs', inline && 'w-full')} id={helpId}>
+          {field.help}
+        </span>
+      )}
+
       {error === undefined ? null : (
         <span
           className={inline ? 'text-destructive w-full text-sm' : 'text-destructive text-sm'}

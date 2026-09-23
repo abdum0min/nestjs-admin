@@ -508,7 +508,7 @@ A column or sort field the model does not have is a startup error.
 models: {
   Post: {
     detail: {
-      layout: 'tabs',                       // or 'sections'
+      layout: 'tabs',                       // or 'sections' | 'accordion'
       sections: [
         { heading: 'Content', description: 'What readers see.',
           fields: ['title', 'slug', 'body'] },
@@ -527,7 +527,16 @@ or changing it.
 
 `'tabs'` is better when the groups are unrelated and one of them is the one
 people actually want. `'sections'` is better when somebody reads down the whole
-record. Neither hides anything the other shows.
+record. `'accordion'` is `'sections'` arriving folded with the first open, for
+a record with more groups than a row of tabs fits. None of them hides anything
+the others show.
+
+**An accordion is not one-open-at-a-time**, which is what the word usually
+implies. On a form that would be actively wrong: it would close a group
+somebody had just typed into, and people legitimately want two open to compare.
+What it is for here is seeing the whole structure at once, which is entirely
+about the starting state - so a section that names `collapsed` keeps what it
+said, including the first.
 
 **A section never hides a field.** Anything left out of every section is
 collected into a final group, so adding a column to the schema puts it on the
@@ -541,6 +550,26 @@ open whatever `collapsed` says, the tab holding the first one is selected, and
 every tab carries a count of what is wrong inside it.
 
 A field a section names that the model does not have is a startup error.
+
+### What the form does without being configured
+
+Three things arrived in 0.20.0 and none of them has an option, because none of
+them is a decision an application should have to make:
+
+**Nothing half-typed is lost.** Following a link inside the admin with unsaved
+changes asks first; closing the tab or reloading gets the browser's own
+warning. Comparing values rather than latching a flag means typing a character
+and deleting it again leaves the form clean — a question asked every time is
+one people learn to dismiss without reading.
+
+**Ctrl+S saves**, or Cmd+S on a Mac. It takes the shortcut away from "save this
+page as HTML", which nobody has ever wanted while filling in an admin form.
+
+**The first box has focus on a create form**, and only there. Moving focus on
+load is usually wrong — it skips the heading and drops a screen reader user
+into the middle of a page. A single-purpose form is the accepted exception, and
+"New Post" is one. An edit form is not: people arrive at those to look as often
+as to change, and a cursor in the first box invites an edit nobody meant.
 
 ### The actions are beside the record, not above it
 
@@ -567,6 +596,7 @@ content, which is where the row used to be.
 | `widget`      | client      | How to render it                                                 |
 | `placeholder` | client      | The picture to draw when a file field has none of its own        |
 | `order`       | client      | Position in forms and tables                                     |
+| `help`        | client      | A line under the control, saying what the schema cannot          |
 | `align`       | client      | How the column lines up. Guessed from the kind when unset        |
 | `width`       | client      | A width hint for the column, as a CSS length                     |
 | `badge`       | client      | The tone of each enum value, where the guess is wrong            |
@@ -614,9 +644,41 @@ with a reassuring name.
 ### `widget`
 
 `widget` accepts `textarea`, `password`, `email`, `url`, `color`, `json`,
-`file`, `image`, `richtext`. Anything else is inferred from the field's kind — a
-date gets a date picker, an enum a select, a boolean a checkbox, a relation a
-picker.
+`file`, `image`, `richtext`, `switch`, `radio`. Anything else is inferred from
+the field's kind — a date gets a date picker, an enum a select, a boolean a
+checkbox, a relation a picker.
+
+`switch` draws a boolean as a toggle. **The checkbox stays the default**, which
+is the opposite of most admin themes and deliberate: a switch is the vocabulary
+of a setting that applies the moment it moves, and these forms have a Save
+button. Reach for it where the field really is a setting.
+
+`radio` puts every value of an enum on screen at once. Right for three or four,
+wrong for twelve — the whole gain is not having to open anything, and a column
+of twelve radios is longer than the menu it replaced. Not chosen automatically
+from the number of values: two models with five and six options would then draw
+differently for no reason a reader could see.
+
+### `help`
+
+A line under the control, saying what the schema cannot:
+
+```ts
+fields: {
+  sku: { label: 'SKU', help: 'Printed on the packing slip. Must be unique.' },
+  slug: { help: 'Leave blank and one is generated from the title.' },
+}
+```
+
+A column's name and type say what it **is**; this is the only place to say what
+it is **for**, and having nowhere to put that is why generated admins get a
+reputation for being guessable rather than usable.
+
+It describes the field rather than naming it, so it reaches the control as
+`aria-describedby` and is read after the label instead of becoming part of it.
+A validation message takes over the announcement while one is showing — two
+descriptions are read one after the other, and the one that matters is the
+refusal.
 
 ### `richtext`
 

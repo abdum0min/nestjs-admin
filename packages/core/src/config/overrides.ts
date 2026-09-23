@@ -61,6 +61,27 @@ export type FieldWidget =
    * pays nothing for it.
    */
   | 'richtext'
+  /**
+   * A boolean, as a toggle rather than a tick.
+   *
+   * Opt-in, and the checkbox stays the default - which is the opposite of what
+   * most admin themes do, on purpose. A switch is the vocabulary of a setting
+   * that applies the moment it moves; these forms have a Save button, and a
+   * control that says "done" while the change is still unsaved is a control
+   * that lies. Reach for it where the field really is a setting - a feature
+   * flag, a visibility toggle - and the surrounding screen makes that clear.
+   */
+  | 'switch'
+  /**
+   * An enum, with every option on screen at once.
+   *
+   * Right for three or four values, wrong for twelve: the whole gain is not
+   * having to open anything, and a column of twelve radios is longer than the
+   * menu it replaced. Deliberately not chosen automatically from the number of
+   * values - two models with five and six options would then draw differently
+   * for no reason a reader could see.
+   */
+  | 'radio'
 
 export interface FieldOverride {
   /**
@@ -138,6 +159,23 @@ export interface FieldOverride {
 
   /** Where it sits among the others. Lower comes first; unset comes last. */
   readonly order?: number
+
+  /**
+   * A line under the control, saying what the schema cannot.
+   *
+   * "Shown on the invoice." "Leave blank and one is generated from the title."
+   * "Customers never see this." A column's name and type say what it *is*; this
+   * is the only place to say what it is *for*, and the absence of anywhere to
+   * put that is why generated admins get a reputation for being guessable
+   * rather than usable.
+   *
+   * It describes the field rather than naming it, so it reaches the control as
+   * `aria-describedby` and is read after the label instead of becoming part of
+   * it. A validation message replaces it while one is showing: two descriptions
+   * on one control are announced one after the other, and the one that matters
+   * is the refusal.
+   */
+  readonly help?: string
 
   /**
    * How this column's values line up in the table.
@@ -281,7 +319,12 @@ export interface DetailSection {
 
   readonly fields: readonly string[]
 
-  /** Start folded. Only meaningful when the layout is `'sections'`. */
+  /**
+   * Start folded.
+   *
+   * Meaningful for `'sections'` and `'accordion'`. An accordion folds every
+   * group by default and opens the first; this overrides which.
+   */
   readonly collapsed?: boolean
 }
 
@@ -297,11 +340,21 @@ export interface DetailPresentation {
    * `'sections'` stacks the groups down the page, each with its heading.
    * `'tabs'` puts each group behind a tab. Defaults to `'sections'`.
    *
+   * 'accordion' folds every group, opening the first - for a record with ten
+   * groups where somebody wants one. It is the same content as 'sections',
+   * closed.
+   *
    * Tabs are better when the groups are unrelated and one of them is the one
    * people actually want; sections are better when somebody reads down the
-   * whole record. Neither hides anything the other shows.
+   * whole record; an accordion is better when there are too many groups for a
+   * row of tabs to fit. Nothing any of them does hides a field - a field in no
+   * section is still collected into a final group.
+   *
+   * On a form, a group holding the reason a save was refused opens itself
+   * whichever layout is chosen. A validation message nobody can see is a form
+   * that appears to have failed for no reason.
    */
-  readonly layout?: 'sections' | 'tabs'
+  readonly layout?: 'sections' | 'tabs' | 'accordion'
 
   readonly sections?: readonly DetailSection[]
 }

@@ -70,7 +70,9 @@ const models = {
 
       name: { order: 1 },
       email: { widget: 'email', order: 2 } as const,
-      role: { order: 3 },
+      // Two values, both on screen. A menu to open for a choice between two is
+      // a click that buys nothing.
+      role: { order: 3, widget: 'radio' } as const,
       bio: { widget: 'textarea', order: 4 } as const,
       // A string column that holds a storage key. Nothing else in the
       // schema changes, and with no `files` option the bytes go to the local
@@ -97,7 +99,14 @@ const models = {
     icon: 'user',
     fields: {
       website: { widget: 'url' } as const,
-      newsletter: { label: 'Subscribed to the newsletter' },
+      // A switch rather than a tick, because this really is a setting. The
+      // checkbox stays the default everywhere else: a toggle is the vocabulary
+      // of something that applies as it moves, and this form has a Save button.
+      newsletter: {
+        label: 'Subscribed to the newsletter',
+        widget: 'switch',
+        help: 'Marketing email only. Transactional mail is sent regardless.',
+      } as const,
     },
   },
 
@@ -119,7 +128,7 @@ const models = {
     fields: {
       // The detection rule guesses well and has no way to know that people
       // here say "SKU" rather than "sku".
-      sku: { label: 'SKU', order: 1 },
+      sku: { label: 'SKU', order: 1, help: 'Printed on the packing slip. Must be unique.' },
       name: { order: 2 },
       description: { widget: 'textarea', order: 3 } as const,
       price: { order: 4 },
@@ -144,7 +153,11 @@ const models = {
     order: 6,
     icon: 'receipt',
     fields: {
-      reference: { label: 'Reference', order: 1 },
+      reference: {
+        label: 'Reference',
+        order: 1,
+        help: 'What people say out loud. Leave it alone unless support asked you to.',
+      },
       status: { order: 2 },
       userId: { label: 'Customer', order: 3 },
       note: { widget: 'textarea', order: 5 } as const,
@@ -239,6 +252,23 @@ const models = {
     displayField: 'title',
     order: 10,
     icon: 'star',
+
+    /*
+     * An accordion: the same groups as 'sections', arriving folded with the
+     * first open. Right where there are more groups than a row of tabs fits,
+     * and where somebody usually wants one of them.
+     *
+     * It is not one-open-at-a-time, which is what the word usually implies.
+     * On a form that would close a group somebody had just typed into.
+     */
+    detail: {
+      layout: 'accordion',
+      sections: [
+        { heading: 'The review', fields: ['rating', 'title', 'body'] },
+        { heading: 'Who and what', fields: ['productId', 'userId'] },
+      ],
+    },
+
     fields: {
       rating: { label: 'Rating (1-5)', order: 1 },
       title: { order: 2 },

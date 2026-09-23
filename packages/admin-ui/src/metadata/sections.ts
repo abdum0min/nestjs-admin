@@ -27,7 +27,7 @@ export interface FieldGroup {
 
 export interface GroupedFields {
   /** `'flat'` is one group with no heading: what the screen has always shown. */
-  readonly layout: 'flat' | 'sections' | 'tabs'
+  readonly layout: 'flat' | 'sections' | 'tabs' | 'accordion'
   readonly groups: readonly FieldGroup[]
 }
 

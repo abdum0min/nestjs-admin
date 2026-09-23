@@ -46,6 +46,7 @@ interface had stopped changing shape, and a second adapter had proved the
 | 0.17.0  | The audit trail, with undo that refuses to overwrite somebody else          |
 | 0.18.0  | Custom pages: declared widgets, a browser module, or an embedded document   |
 | 0.19.0  | Semantic emphasis: badges, two new widgets, header links, a sidebar filter  |
+| 0.20.0  | Forms: unsaved changes kept, help text, switch, radio, accordion            |
 
 **1470+ tests, 67/67 packed-consumer checks, published as
 [`@nest-admin/nestjs`](https://www.npmjs.com/package/@nest-admin/nestjs).**
@@ -96,24 +97,25 @@ far side of it is no longer the consumer's problem to solve from scratch.
 
 ## Releases
 
-| Release | Name                                              | Why in this position                                                                           |
-| ------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 0.8.0   | Design system                                     | Everything after it is drawn with it. Doing it later means building the dashboard twice        |
-| 0.9.0   | Authentication                                    | The single largest adoption barrier, and it needs the design system for its login screen       |
-| 0.10.0  | Dashboard                                         | The landing page. Needs the design system; independent of auth                                 |
-| 0.11.0  | Second adapter, and the docs                      | The contract had one implementation and 1.0 freezes it; docs had drifted three releases behind |
-| 0.12.0  | Permissions, roles and scoping                    | Scoping touches every read path, so it is cheapest before more read paths exist                |
-| 0.13.0  | Files                                             | The most-asked-for gap, and mock images and import both sit on top of it                       |
-| 0.14.0  | Developer tools                                   | Mock data, and the empty-admin problem. Needs 0.13 for avatars and covers                      |
-| 0.14.1  | Diagnosis, and filling a form                     | Reads the same metadata the tools do; no generation of its own                                 |
-| 0.14.2  | Rich text                                         | A widget with a bundle cost, so it ships where that cost is visible                            |
-| 0.15.0  | Import and export                                 | Needed 0.13 for the upload half                                                                |
-| 0.16.0  | Customisation, part one                           | Deliberately after the functional set: you cannot design it before knowing what needs bending  |
-| 0.18.0  | Custom pages                                      | The last capability gap: a screen the schema does not imply                                    |
-| 0.19.0  | UI, part one: emphasis and the dashboard          | The generated screens were correct and unscannable; colour that means something fixes that     |
-| next    | UI, part two: forms and the editor; then the demo | Order decided by what the demo's first real users report, rather than guessed in advance       |
-| last    | Docs site, demo, publishing polish                | Once there is something worth showing                                                          |
-| 1.0.0   | API freeze                                        | Only after all of the above is stable                                                          |
+| Release | Name                                            | Why in this position                                                                           |
+| ------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 0.8.0   | Design system                                   | Everything after it is drawn with it. Doing it later means building the dashboard twice        |
+| 0.9.0   | Authentication                                  | The single largest adoption barrier, and it needs the design system for its login screen       |
+| 0.10.0  | Dashboard                                       | The landing page. Needs the design system; independent of auth                                 |
+| 0.11.0  | Second adapter, and the docs                    | The contract had one implementation and 1.0 freezes it; docs had drifted three releases behind |
+| 0.12.0  | Permissions, roles and scoping                  | Scoping touches every read path, so it is cheapest before more read paths exist                |
+| 0.13.0  | Files                                           | The most-asked-for gap, and mock images and import both sit on top of it                       |
+| 0.14.0  | Developer tools                                 | Mock data, and the empty-admin problem. Needs 0.13 for avatars and covers                      |
+| 0.14.1  | Diagnosis, and filling a form                   | Reads the same metadata the tools do; no generation of its own                                 |
+| 0.14.2  | Rich text                                       | A widget with a bundle cost, so it ships where that cost is visible                            |
+| 0.15.0  | Import and export                               | Needed 0.13 for the upload half                                                                |
+| 0.16.0  | Customisation, part one                         | Deliberately after the functional set: you cannot design it before knowing what needs bending  |
+| 0.18.0  | Custom pages                                    | The last capability gap: a screen the schema does not imply                                    |
+| 0.19.0  | UI, part one: emphasis and the dashboard        | The generated screens were correct and unscannable; colour that means something fixes that     |
+| 0.20.0  | UI, part two: the form                          | The screen people spend most of their day in, and the one that silently lost work              |
+| next    | The demo, then field permissions and the editor | Order decided by what the demo's first real users report, rather than guessed                  |
+| last    | Docs site, demo, publishing polish              | Once there is something worth showing                                                          |
+| 1.0.0   | API freeze                                      | Only after all of the above is stable                                                          |
 
 ---
 

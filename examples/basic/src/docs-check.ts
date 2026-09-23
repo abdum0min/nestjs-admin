@@ -207,6 +207,25 @@ const dashboard = [
   },
 ] as const satisfies AdminDashboard
 
+/* configuration.md - the controls and the help text a field can ask for */
+const formFields = {
+  Profile: {
+    fields: {
+      newsletter: { widget: 'switch', help: 'Marketing email only.' },
+    },
+  },
+  Order: {
+    detail: {
+      layout: 'accordion',
+      sections: [{ heading: 'The order', fields: ['reference', 'status'] }],
+    },
+    fields: {
+      status: { widget: 'radio' },
+      reference: { help: 'What people say out loud.' },
+    },
+  },
+} as const satisfies ModelOverrides
+
 /* configuration.md - the header and the account menu */
 const themeLinks = {
   links: [
@@ -249,4 +268,5 @@ export const documented = {
   dashboard,
   pages,
   themeLinks,
+  formFields,
 }

@@ -257,6 +257,13 @@ models: {
       passwordHash: { label: 'Password', widget: 'password', writeOnly: true },
       internalNote: { hidden: true },
       views: { readOnly: true },
+
+      // A line under the box, saying what the column's name cannot.
+      slug: { help: 'Leave blank and one is generated from the title.' },
+      // Every option on screen, for a choice between three or four.
+      role: { widget: 'radio' },
+      // A toggle rather than a tick, where the field really is a setting.
+      newsletter: { widget: 'switch' },
     },
   },
 }
@@ -272,6 +279,13 @@ The options divide on a line worth knowing:
 
 Anything in the first group treated as the second would be a security hole with
 a reassuring name.
+
+### What the form already does
+
+Nothing to configure, because none of it is a decision an application should
+have to make: **unsaved changes are not lost** (following a link asks first,
+closing the tab gets the browser's warning), **Ctrl+S saves**, and the first
+box on a *create* form has focus.
 
 Choosing which models appear at all:
 

@@ -124,7 +124,17 @@ export interface FieldDto {
    * cannot tell them apart.
    */
   readonly widget?:
-    'textarea' | 'password' | 'email' | 'url' | 'color' | 'json' | 'file' | 'image' | 'richtext'
+    | 'textarea'
+    | 'password'
+    | 'email'
+    | 'url'
+    | 'color'
+    | 'json'
+    | 'file'
+    | 'image'
+    | 'richtext'
+    | 'switch'
+    | 'radio'
 
   /**
    * What a file field accepts, and how large.
@@ -161,6 +171,15 @@ export interface FieldDto {
    * different thing entirely.
    */
   readonly writeOnly?: boolean
+
+  /**
+   * A line under the control, saying what the schema cannot.
+   *
+   * Purely presentational, and absent unless the application wrote one. It
+   * describes the field rather than naming it, so a client should attach it
+   * with `aria-describedby` rather than folding it into the label.
+   */
+  readonly help?: string
 
   /**
    * How this column lines up in a table, when the application said.
@@ -223,7 +242,7 @@ export interface DetailSectionDto {
 }
 
 export interface DetailDto {
-  readonly layout: 'sections' | 'tabs'
+  readonly layout: 'sections' | 'tabs' | 'accordion'
   readonly sections: readonly DetailSectionDto[]
 }
 
@@ -502,6 +521,7 @@ function toFieldDto(
       ? { maxSize: maxSizeFor(override, uploadCeiling) }
       : {}),
     ...(override?.placeholder !== undefined ? { placeholder: override.placeholder } : {}),
+    ...(override?.help !== undefined ? { help: override.help } : {}),
     ...(override?.align !== undefined ? { align: override.align } : {}),
     ...(override?.width !== undefined ? { width: override.width } : {}),
     ...(override?.badge !== undefined ? { badge: override.badge } : {}),
@@ -635,11 +655,35 @@ function detailOf(
     .filter((section) => section.fields.length > 0)
 
   const rest = model.fields.filter((field) => !claimed.has(field.name)).map((field) => field.name)
+  const layout = detail?.layout ?? 'sections'
+  const all = rest.length === 0 ? groups : [...groups, { heading: 'Other', fields: rest }]
 
-  return {
-    layout: detail?.layout ?? 'sections',
-    sections: rest.length === 0 ? groups : [...groups, { heading: 'Other', fields: rest }],
-  }
+  return { layout, sections: layout === 'accordion' ? folded(all) : all }
+}
+
+/**
+ * An accordion is sections that arrive folded, with the first one open.
+ *
+ * Resolved here rather than in the interface, so `collapsed` means one thing
+ * everywhere: "this group starts closed". The interface already draws a folded
+ * group and already forces one open when it holds a validation error, so an
+ * accordion needs no rendering of its own - which is the point. A second code
+ * path drawing nearly the same thing is how two layouts drift apart.
+ *
+ * **Not one-open-at-a-time**, which is what the word usually implies. On a
+ * record form that would be actively wrong: it would close a group somebody
+ * had just typed into, and people legitimately want two open to compare. What
+ * an accordion is for here is seeing the whole structure at once, and that is
+ * entirely about the starting state.
+ *
+ * A section that said `collapsed` explicitly keeps what it said, including the
+ * first one - the application naming a state is a stronger statement than this
+ * default.
+ */
+function folded(sections: readonly DetailSectionDto[]): readonly DetailSectionDto[] {
+  return sections.map((section, index) =>
+    section.collapsed !== undefined ? section : { ...section, collapsed: index > 0 },
+  )
 }
 
 /**
